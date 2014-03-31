@@ -29,7 +29,7 @@ function parentList(divValue, reqOptions)
 	self.uid = "plist" + uFlexID++;
 
 	self.objectSize = reqOptions.objectSize;
-	console.log(reqOptions.maxItemCount);
+	// console.log(reqOptions.maxItemCount);
 	//we auto determin
 	self.autoDetermineMax = reqOptions.autoDetermineMax == undefined ? true : reqOptions.autoDetermineMax;
 
@@ -58,8 +58,7 @@ function parentList(divValue, reqOptions)
 	if(self.autoDetermineMax)
 	{
 		self.maxItemCount = itemsPerColumn();
-		console.log("Max items: ", self.maxItemCount);
-
+		// console.log("Max items: ", self.maxItemCount);
 	}
 
 	resize.bind(outerContainer, function()
@@ -69,7 +68,7 @@ function parentList(divValue, reqOptions)
 		if(self.autoDetermineMax)
 			self.maxItemCount = itemsPerColumn();
 
-		console.log("Size change deteced, max items: ", self.maxItemCount);
+		// console.log("Size change deteced, max items: ", self.maxItemCount);
 
 
 		if(activeElements > self.maxItemCount)
@@ -92,25 +91,27 @@ function parentList(divValue, reqOptions)
 	var activeElements = 0;
 	
 	var htmlObjects = {};
+	var dataObjects = {};
 
 	//internal create the parent
-	function internalCreate(i)
+	function internalCreate(i, data)
 	{
-		var el = createElement();
+		var el = createElement(i);
 		htmlObjects[i] = el;
+		dataObjects[i] = data;
 		activeElements++;
-		self.emit('elementCreated', i, el);
+		self.emit('elementCreated', data, i, el);
 		return el;
 	}
 
 	//really simple, just append to our container a new element
-	self.addElement = function()
+	self.addElement = function(data)
 	{
 		var newID = nextItem++;
 
-		var el = internalCreate(newID);
+		var el = internalCreate(newID, data);
 
-		console.log("activeElements: ", activeElements, " count: ", self.maxItemCount)
+		// console.log("activeElements: ", activeElements, " count: ", self.maxItemCount)
 			//need to remove the lowest element
 		if(activeElements > self.maxItemCount)
 			self.removeOldest();
@@ -135,11 +136,12 @@ function parentList(divValue, reqOptions)
 
 	self.removeElement = function(id)
 	{
-		console.log("Removing: ", id);
+		// console.log("Removing: ", id);
 		//get the object from our list of objects
 		var el = htmlObjects[id];
+		var data = dataObjects[id];
 
-		self.emit('elementRemoved', id);
+		self.emit('elementRemoved', data, id);
 
 		//minus an element
 		activeElements--;
@@ -148,6 +150,7 @@ function parentList(divValue, reqOptions)
 		outerContainer.removeChild(el);
 
 		delete htmlObjects[id];
+		delete dataObjects[id];
 	}
 
 	self.removeRandom = function()

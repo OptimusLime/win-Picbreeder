@@ -2,7 +2,9 @@
   "name": "win-Picbreeder",
   "version": "0.0.1",
   "local": [
-    "flexstatic", "flexparents"
+    "flexstatic",
+    "flexparents",
+    "flexIEC"
   ],
   "paths": [
     "libs"
@@ -22,7 +24,12 @@
     "techjacker/q": "*",
     "optimuslime/cppnjs": "*",
     "optimuslime/neatjs": "*",
-    "optimuslime/el.js": "*"
+    "optimuslime/el.js": "*",
+    "component/indexof": "*",
+    "component/classes": "*",
+    "component/event": "*",
+    "component/delegate": "*",
+    "component/events": "*"
   },
   "remotes": []
 }

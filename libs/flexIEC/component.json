@@ -1,13 +1,20 @@
 {
-  "name": "flexstatic",
+  "name": "flexIEC",
   "description": "Mobile friendly infinite expanding grid slider. For use with things like interactive evolution. Based on swiper library.",
   "version": "0.0.1",
-  "keywords": ["flexbox", "flexstatic"],
+  "local" : ["flexstatic", "flexparents"],
   "dependencies": {
+    "component/events" : "*",
+    "component/classes" : "*",
+    "ramitos/resize" :"*",
+    "optimuslime/el.js" :"*",
     "component/emitter" : "*"
   },
   "scripts": [
     "main.js"
+  ],
+  "images" : [
+    "images/loading.gif"
   ],
   "main": "main.js",
   "styles": [

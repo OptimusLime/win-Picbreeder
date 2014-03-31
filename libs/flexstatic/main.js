@@ -57,13 +57,13 @@ function flexstatic(divValue, reqOptions)
 
 	var itemsPerRow = function()
 	{
-		console.log("Outer: ", outerContainer.offsetWidth, " objects: " , (self.objectSize.width + 2*(self.objectSize.rowMargin || 0 + self.borderSize)));
-		return Math.floor(outerContainer.offsetWidth/(self.objectSize.width + 2*(self.objectSize.rowMargin || 0 + self.borderSize)));
+		console.log("Outer: ", outerContainer.offsetWidth, " objects: " , (self.objectSize.width + 2*(self.objectSize.rowMargin || 0 )));
+		return Math.floor(outerContainer.offsetWidth/(self.objectSize.width + 2*(self.objectSize.rowMargin || 0)));
 	}
 
 	var itemsPerColumn = function()
 	{
-		return Math.floor(outerContainer.offsetHeight/(self.objectSize.height + 2*(self.objectSize.columnMargin || 0 + self.borderSize)));
+		return Math.floor(outerContainer.offsetHeight/(self.objectSize.height + 2*(self.objectSize.columnMargin || 0)));
 	}
 
 	var maxItemsPerPage = function()
@@ -110,7 +110,7 @@ function flexstatic(divValue, reqOptions)
 
 	function internalCreate(i)
 	{
-		var el = createElement();
+		var el = createElement(i);
 		htmlObjects[i] = el;
 		itemCount++;
 		self.emit('elementCreated', i, el);
@@ -167,7 +167,7 @@ function flexstatic(divValue, reqOptions)
 				flexInner.appendChild(el);	
 		}
 
-		removeExcessChildren();
+		self.removeExcessChildren();
 	}
 
 	self.nextPage = function()
@@ -211,7 +211,7 @@ function flexstatic(divValue, reqOptions)
 				flexInner.appendChild(el);	
 		}
 
-		removeExcessChildren();
+		self.removeExcessChildren();
 	}
 
 	var objectIDToUID = function(idCount)
