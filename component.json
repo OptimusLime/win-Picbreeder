@@ -1,0 +1,28 @@
+{
+  "name": "win-Picbreeder",
+  "version": "0.0.1",
+  "local": [
+    "flexstatic", "flexparents"
+  ],
+  "paths": [
+    "libs"
+  ],
+  "scripts": [
+    "win-Picbreeder.js"
+  ],
+  "main": "win-Picbreeder.js",
+  "dependencies": {
+    "optimuslime/win-backbone": "*",
+    "optimuslime/win-schema": "*",
+    "optimuslime/win-gen": "*",
+    "optimuslime/win-utils": "*",
+    "optimuslime/traverse": "*",
+    "component/emitter": "*",
+    "geraintluff/tv4": "*",
+    "techjacker/q": "*",
+    "optimuslime/cppnjs": "*",
+    "optimuslime/neatjs": "*",
+    "optimuslime/el.js": "*"
+  },
+  "remotes": []
+}

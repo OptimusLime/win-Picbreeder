@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset=utf-8 />
+	<title></title>
+	<link rel="stylesheet" type="text/css" media="screen" href="/build/build.css" />
+	<script type="text/javascript" src="/build/build.js"></script>
+
+</head>
+<body class="flexcenter">
+	<div id="buttons" style="display: inline-block;">
+		<div id="addChild" style="display: inline-block; margin: 5px;">Add Child</div>
+		<div id="removeChild" style="display: inline-block; margin: 5px;">Remove Random Child</div>
+	</div>
+
+	<div id="flexstatic" style="height:90%;"> </div>
+
+	<!-- Now we start messing with the flex object -->
+	<script type="text/javascript">
+
+
+		window.onload = function() {
+
+
+			var flex = require('flexparents');
+
+			var div = document.getElementById("flexstatic");
+			
+			var flexOptions =  
+			{
+				objectSize: {width: 150, height: 150, columnMargin: 4},
+				maxItemCount: 5
+				// mode: 'vertical' ,
+			};
+
+			var nf = flex(div, flexOptions);
+
+			var obj = {};
+
+			//when an object is created, we are informed, and have the option to add our information 
+			//in this case we're just adding test insides
+			nf.on('elementCreated', function(eID, eDiv)
+			{
+				obj[eID] = eDiv;
+				console.log("Created: ", eID);
+				// element.className += "grid-cell";
+				eDiv.innerHTML = "<div>"+eID+"</div>";
+			});
+
+
+			nf.on('elementRemoved', function(eID)
+			{
+				console.log("Removing: ", eID);
+				// element.className += "grid-cell";
+				// eDiv.innerHTML = "<div>Vis: "+eID+"</div>";
+			});
+
+			var removeRandom = function()
+			{
+				var keys = Object.keys(obj);
+				var rmIx = Math.floor(Math.random()*keys.length);
+
+				//jusst remove something random -- for testing purposes
+				nf.removeElement(keys[rmIx]);
+			}
+
+			 document.getElementById('addChild').addEventListener('click', function (event) {
+			    nf.addElement();
+			 });
+
+ 			document.getElementById('removeChild').addEventListener('click', function (event) {
+			    removeRandom();
+			 });
+
+			// var slide = nf.addObject("<div class=\"flexvcenter\" style=\"border: 1px solid black; height:100%;\">Empty mofo1</div>");
+			// var slide = nf.addObject("<div class=\"flexvcenter\" style=\"border: 1px solid black; height:100%;\">Empty mofo2</div>");
+			// var slide = nf.addObject("<div class=\"flexvcenter\" style=\"border: 1px solid black; height:100%;\">Empty mofo3</div>");
+			// nf.swiper.swipeTo(0);
+			// nf.addObject("<div class=\"\" style=\"border: 1px solid black; width=100%; height=100%;\">Empty mofo2</div>");
+			// nf.addObject("<div class=\"\" style=\"border: 1px solid black; \">Empty mofo3</div>");
+
+
+		}
+
+		
+
+
+
+	</script>
+
+
+
+
+</body>
+</html>

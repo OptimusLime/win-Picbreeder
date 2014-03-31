@@ -1,0 +1,49 @@
+/* apply a natural box layout model to all elements */
+*, *:before, *:after {
+  -moz-box-sizing: border-box; -webkit-box-sizing: border-box; box-sizing: border-box;
+ }
+ 
+html
+{
+	height:100%;
+}
+body
+{
+	margin:0;
+	line-height:1.5; 
+	position:relative;
+	height:100%;
+}
+
+.border
+{
+	border: 1px solid black;
+}
+
+.fstat-container
+{
+	width:100%;
+	height:100%;
+	text-align:center;
+}
+
+.fstat-slide
+{
+	font-size:42px; 
+	margin-bottom:0;
+	line-height:45px;
+}
+
+.flexvcenter {
+	display: -webkit-flex;
+	-webkit-flex-direction: row;
+	-webkit-flex-wrap: wrap;
+	/*display: flex;*/
+	align-items: center;
+	justify-content: center;
+}
+
+.grid-cell {
+  flex: 1;
+  align-self: center;
+}
