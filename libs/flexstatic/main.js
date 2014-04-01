@@ -31,6 +31,9 @@ function flexstatic(divValue, reqOptions)
 
 	reqOptions.extraHeightPerObject = reqOptions.extraHeightPerObject || 0;
 
+	//for external ids, where should we start -- not necessarily 0!
+	self.startIx = reqOptions.startIx || 0;
+
 	//add a certain amount to our height object to compensate for any additional padding
 	self.objectSize.height = self.objectSize.height + reqOptions.extraHeightPerObject;
 
@@ -57,7 +60,7 @@ function flexstatic(divValue, reqOptions)
 
 	var itemsPerRow = function()
 	{
-		console.log("Outer: ", outerContainer.offsetWidth, " objects: " , (self.objectSize.width + 2*(self.objectSize.rowMargin || 0 )));
+		// console.log("Outer: ", outerContainer.offsetWidth, " objects: " , (self.objectSize.width + 2*(self.objectSize.rowMargin || 0 )));
 		return Math.floor(outerContainer.offsetWidth/(self.objectSize.width + 2*(self.objectSize.rowMargin || 0)));
 	}
 
@@ -82,7 +85,7 @@ function flexstatic(divValue, reqOptions)
 	var init = false;
 	self.initialize = function()
 	{
-		console.log("Begin init!");
+		// console.log("Begin init!");
 		if(init)
 			return;
 
@@ -108,12 +111,17 @@ function flexstatic(divValue, reqOptions)
 		}
 	}
 
+	function externalID(i)
+	{
+		return i + self.startIx;
+	}
+
 	function internalCreate(i)
 	{
 		var el = createElement(i);
 		htmlObjects[i] = el;
 		itemCount++;
-		self.emit('elementCreated', i, el);
+		self.emit('elementCreated', externalID(i), el);
 		return el;
 	}
 
@@ -142,7 +150,7 @@ function flexstatic(divValue, reqOptions)
 		//hide the current elements
 		for(var i= itemStart; i < itemStart + itemsOnScreen; i++)
 		{
-			self.emit('elementHidden', i, htmlObjects[i]);
+			self.emit('elementHidden', externalID(i), htmlObjects[i]);
 		}
 
 		//we can't go below 0!
@@ -158,7 +166,7 @@ function flexstatic(divValue, reqOptions)
 		for(var i=itemStart; i < itemStart + movement; i++)
 		{
 			var el = htmlObjects[i];
-			self.emit('elementVisible', i);
+			self.emit('elementVisible', externalID(i));
 
 			if(flexInner.children.length > i - itemStart)
 				//replace the children of our container
@@ -180,7 +188,7 @@ function flexstatic(divValue, reqOptions)
 		//hide the current elements
 		for(var i= itemStart; i < itemStart + itemsOnScreen; i++)
 		{
-			self.emit('elementHidden', i, htmlObjects[i]);
+			self.emit('elementHidden', externalID(i), htmlObjects[i]);
 		}
 
 		//now let's move to the next page
@@ -197,7 +205,7 @@ function flexstatic(divValue, reqOptions)
 			//we already made this object
 			if(el)
 			{
-				self.emit('elementVisible', i, el);
+				self.emit('elementVisible', externalID(i), el);
 			}
 			else
 			{
@@ -216,13 +224,7 @@ function flexstatic(divValue, reqOptions)
 
 	var objectIDToUID = function(idCount)
 	{
-		return self.uid + "-object-" + idCount;
-	}
-
-	var getElement = function(ix)
-	{
-		var objectUID = objectIDToUID(ix);
-		return htmlObjects[objectUID];
+		return self.uid + "-object-" + externalID(idCount);
 	}
 
 	//create an element from scratch (using the given identifier)

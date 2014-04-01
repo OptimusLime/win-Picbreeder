@@ -1,0 +1,14 @@
+{
+  "name": "win-setup",
+  "description": "Handles setting up win for this experiments",
+  "version": "0.0.1",
+  "dependencies": {
+    "optimuslime/win-backbone" : "*",
+    "techjacker/q" : "*"
+  },
+  "scripts": [
+    "win-setup.js"
+  ],
+  "main": "win-setup.js",
+  "license": ["MIT"]
+}

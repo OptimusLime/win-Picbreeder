@@ -1,0 +1,13 @@
+{
+  "name": "cppn-additions",
+  "description": "Handles adding picbreeder functions to CPPN objects",
+  "version": "0.0.1",
+  "dependencies": {
+    "optimuslime/cppnjs" : "*"
+  },
+  "scripts": [
+    "cppn-additions.js"
+  ],
+  "main": "cppn-additions.js",
+  "license": ["MIT"]
+}

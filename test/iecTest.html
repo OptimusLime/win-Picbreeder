@@ -24,82 +24,169 @@
 
 		window.onload = function() {
 
-			var winbackbone = require('win-backbone');
+		
+			var seed1 = require('win-Picbreeder/seeds/seed1.js');
 
+			var seeds = [seed1];
 
-			var flex = require('flexIEC');
-			var div = document.getElementById("flex");
-			
-			var parentSize = {width: 175, height: 175, columnMargin: 4}, 
-				evoSize = {width: 200, height: 200, rowMargin: 4, columnMargin: 4};
+			var winsetup = require('win-setup');
 
-			var flexOptions =  
+	    	var moduleJSON = 
 			{
-				parentOptions : {
-					objectSize: parentSize
-				},
-				evoOptions : 
-				{
-					objectSize: evoSize
-				}
-				// mode: 'vertical' ,
+				"cppn-add" : require('cppn-additions'),
+				"pbEncoding" : require('pbEncoding'),
+				"win-flexIEC" : require("win-flexIEC"),
+				"win-iec" : require("win-iec"),
+				"win-gen" : require("win-gen"),
+				"win-schema" : require("win-schema"),
+				"win-neat" : require("win-neat")
 			};
 
-			var nf = new flex(div, flexOptions);
+			var testingLogLevel = 10;
 
-			//a parent was selected by flex
-			nf.on('parentSelected', function(eID, eDiv, finished)
+			var configurations = 
 			{
-				setTimeout(function()
-				{	
-					//individual being created
-					eDiv.innerHTML = "<div> parent: "+eID+"</div>";
-					finished();
-				}, Math.floor(Math.random()*500 + 500));
-			});
+				"global" : {
+				},
+				"win-neat" : {
+					logLevel : testingLogLevel
+				},
+				"win-iec" : {
+	                genomeType : "picbreeder",
+	                //these options aren't relevant -- might change in the future -- these are for win-neat module
+					options : {
+						initialMutationCount : 0, 
+						postMutationCount : 0
+					}
+					,logLevel : testingLogLevel
+				},
+				"win-gen" : {
+					"encodings" : [
+						"picbreeder",
+						"NEATGenotype"
+					]
+					,validateParents : true
+					,validateOffspring : true
+					,logLevel : testingLogLevel
+				},
+				"win-schema" : {
+					multipleErrors : true
+					// ,logLevel : testingLogLevel
+				}
+			};
 
-			//parent is no longer rocking it. Sorry to say. 
-			nf.on('parentUnselected', function(eID)
+			var events = ["ui:initializeDisplay", "ui:ready"];
+
+			winsetup(events, moduleJSON, configurations, function(err, backObject)
 			{
-				console.log("Parent removed: ", eID);
+				if(err)
+				{
+					console.error(err);
+					return;
+				}
+				//setup sends back this stuff:
+				// {logger: backLog, emitter: backEmit, backbone: backbone, qCall: qBackboneResponse};
+				var backbone = backbone;
+				var backLog = backObject.logger;
+				var backEmit = backObject.emitter;
+				var qCallBackbone = backObject.qCall;
+
+				var div = document.getElementById("flex");
+				var parentSize = {width: 175, height: 175, columnMargin: 4}, 
+				evoSize = {width: 200, height: 200, rowMargin: 4, columnMargin: 4};
+
+				var flexOptions =  
+				{
+					parentOptions : {
+						objectSize: parentSize
+					},
+					evoOptions : 
+					{
+						objectSize: evoSize
+					}
+					// mode: 'vertical' ,
+				};
+
+
+				var uID;
+				//for now we pass seed information to init display -- later, we'll move this to a more appropriate place 
+				//a module should have control over getting seeds (they are constant for a domain and hosted on the server)
+				qCallBackbone("ui:initializeDisplay", seeds, div, flexOptions)
+					.then(function(uiInfo)
+					{
+						//flex if we want to tap into any specific events
+						var flex = uiInfo.ui;
+
+						//save our ui identifier for future ui calls
+						uID = uiInfo.uID;
+
+						//emitter lets us know the important stuff
+						var uiEmitter = uiInfo.emitter;
+
+						//parentSelected
+						//parentUnselected
+						//individualCreated
+						uiEmitter.on('parentSelected', function(eID, eDiv, parent, finished)
+						{
+							eDiv.innerHTML = "<div> parent: "+eID+"</div>";
+							if(finished)
+								finished();
+						})
+						uiEmitter.on('createIndividual', function(eID, eDiv, individual, finished)
+						{
+							//individual being created
+							eDiv.innerHTML = "<div>"+eID+"</div>";
+
+							//all done!
+							if(finished)
+								finished();
+						});
+
+						//don't do nuffin, it's out of our control
+						uiEmitter.on('parentUnselected', function(eID)
+						{
+							backLog("UI tells us parent unselected: ", eID);
+						});
+					})
+					.then(function()
+					{
+						return qCallBackbone("ui:ready", uID);
+					})
+					.then(function()
+					{
+						//now we see what happened!
+						backLog("Finished ui ready state!");
+
+					}, function(err)
+					{
+						console.error(err);
+					})
+
 			});
+      
 
+			// var removeRandom = function()
+			// {
+			// 	var keys = Object.keys(obj);
+			// 	var rmIx = Math.floor(Math.random()*keys.length);
 
-			nf.on('createIndividual', function(eID, eDiv, finished)
-			{
-				//let it be known that we are done
-				setTimeout(function()
-				{	
-					//individual being created
-					eDiv.innerHTML = "<div>"+eID+"</div>";
-					finished();
-				}, Math.floor(Math.random()*2000 + 1000));
-			});
+			// 	//jusst remove something random -- for testing purposes
+			// 	nf.parentFlex.removeElement(keys[rmIx]);
+			// }
 
-			nf.ready();
+			// document.getElementById('addPage').addEventListener('click', function (event) {
+			//     nf.evoFlex.nextPage();
+			// });
+			// document.getElementById('backPage').addEventListener('click', function (event) {
+			//     nf.evoFlex.previousPage();
+			// });
+			//  document.getElementById('addChild').addEventListener('click', function (event) {
+			//     nf.parentFlex.addElement();
+			//  });
 
-			var removeRandom = function()
-			{
-				var keys = Object.keys(obj);
-				var rmIx = Math.floor(Math.random()*keys.length);
-
-				//jusst remove something random -- for testing purposes
-				nf.parentFlex.removeElement(keys[rmIx]);
-			}
-
-			document.getElementById('addPage').addEventListener('click', function (event) {
-			    nf.evoFlex.nextPage();
-			});
-			document.getElementById('backPage').addEventListener('click', function (event) {
-			    nf.evoFlex.previousPage();
-			});
-			 document.getElementById('addChild').addEventListener('click', function (event) {
-			    nf.parentFlex.addElement();
-			 });
-
- 			document.getElementById('removeChild').addEventListener('click', function (event) {
-			    removeRandom();
-			 });
+ 		// 	document.getElementById('removeChild').addEventListener('click', function (event) {
+			//     removeRandom();
+			//  });
 
 			// var slide = nf.addObject("<div class=\"flexvcenter\" style=\"border: 1px solid black; height:100%;\">Empty mofo1</div>");
 			// var slide = nf.addObject("<div class=\"flexvcenter\" style=\"border: 1px solid black; height:100%;\">Empty mofo2</div>");

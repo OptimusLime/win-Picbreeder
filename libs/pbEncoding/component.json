@@ -1,0 +1,13 @@
+{
+  "name": "pbEncoding",
+  "description": "Handles setting up picbreeder encoding",
+  "version": "0.0.1",
+  "dependencies": {
+  },
+  "scripts": [
+    "picbreeder-encoding.js",
+    "picbreederSchema.js"
+  ],
+  "main": "picbreeder-encoding.js",
+  "license": ["MIT"]
+}

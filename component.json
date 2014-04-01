@@ -2,6 +2,10 @@
   "name": "win-Picbreeder",
   "version": "0.0.1",
   "local": [
+    "cppn-additions",
+    "win-setup",
+    "pbEncoding",
+    "win-flexIEC",
     "flexstatic",
     "flexparents",
     "flexIEC"
@@ -10,26 +14,20 @@
     "libs"
   ],
   "scripts": [
-    "win-Picbreeder.js"
+    "win-Picbreeder.js",
+    "seeds/seed1.js"
+  ],
+ "remotes": [
+    "https://raw.github.com",
+    "https://raw.githubusercontent.com"
   ],
   "main": "win-Picbreeder.js",
   "dependencies": {
+  	"optimuslime/win-iec" : "*",
+  	"optimuslime/win-neat" : "*",
     "optimuslime/win-backbone": "*",
     "optimuslime/win-schema": "*",
     "optimuslime/win-gen": "*",
-    "optimuslime/win-utils": "*",
-    "optimuslime/traverse": "*",
-    "component/emitter": "*",
-    "geraintluff/tv4": "*",
-    "techjacker/q": "*",
-    "optimuslime/cppnjs": "*",
-    "optimuslime/neatjs": "*",
-    "optimuslime/el.js": "*",
-    "component/indexof": "*",
-    "component/classes": "*",
-    "component/event": "*",
-    "component/delegate": "*",
-    "component/events": "*"
-  },
-  "remotes": []
+    "optimuslime/win-utils": "*"
+  }
 }

@@ -26,6 +26,9 @@ function flexIEC(divValue, reqOptions)
 	//deep clone the required options object
 	reqOptions = JSON.parse(JSON.stringify(reqOptions));
 
+	//someobody needs to tell us where to start the count 
+	reqOptions.evoOptions.startIx = reqOptions.startIx || reqOptions.evoOptions.startIx || 0;
+
 	self.bottomElementSize = reqOptions.bottomElementSize || 47;
 
 	//add emitter properties to this object
@@ -126,10 +129,16 @@ function flexIEC(divValue, reqOptions)
 	self.parentDeleted = function(evoID, pID)
 	{
 		var el = fullObjects[evoID];
-		var cl = classes(el);
 
-		if(cl.has('like'))
-			cl.toggle('like'); 
+		console.log("Deleted parent: ", evoID, el);
+
+		if(el)
+		{
+			var cl = classes(el);
+
+			if(cl.has('like'))
+				cl.toggle('like'); 
+		}
 
 		//delete parent using element info
 		delete parentObjects[evoID];
@@ -149,10 +158,13 @@ function flexIEC(divValue, reqOptions)
 	self.parentCreated = function(evoID, parID, eDiv)
 	{
 		var el = fullObjects[evoID];
-		var cl = classes(el);
+		if(el)
+		{
+			var cl = classes(el);
 
-		if(!cl.has('like'))
-			cl.toggle('like'); 
+			if(!cl.has('like'))
+				cl.toggle('like'); 
+		}
 
 		//when a parent is created, we make note
 		parentObjects[evoID] = {pID: parID, el: eDiv};
