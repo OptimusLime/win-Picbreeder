@@ -133,6 +133,17 @@ function flexIEC(divValue, reqOptions)
 
 		//delete parent using element info
 		delete parentObjects[evoID];
+
+		//let it be known wassup
+		self.emit("parentUnselected", evoID);
+	}
+
+	var pSelected = function(evoID)
+	{
+		return function()
+		{
+			//don't really do anything after selecting parents
+		};
 	}
 
 	self.parentCreated = function(evoID, parID, eDiv)
@@ -146,9 +157,8 @@ function flexIEC(divValue, reqOptions)
 		//when a parent is created, we make note
 		parentObjects[evoID] = {pID: parID, el: eDiv};
 
-		console.log("Making parents, saving friends");
-
-		eDiv.innerHTML = "<div>parent: "+ evoID +"</div>"
+		//make it known that this parent was selected for real -- we'll handle the UI
+		self.emit("parentSelected", evoID, eDiv, pSelected(evoID));
 	}
 
 	self.likeElement = function(e)
@@ -162,11 +172,11 @@ function flexIEC(divValue, reqOptions)
 		//already a parent, toggle -- remove parent
 		if(parentObjects[elementID])
 		{
-			console.log("Start delete parent: ", elementID)
+			// console.log("Start delete parent: ", elementID)
 			self.deleteParent(elementID);
 		}
 		else{
-			console.log("Start make parent: ", elementID)
+			// console.log("Start make parent: ", elementID)
 			self.createParent(elementID);
 		}
 

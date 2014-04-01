@@ -24,8 +24,10 @@
 
 		window.onload = function() {
 
-			var flex = require('flexIEC');
+			var winbackbone = require('win-backbone');
 
+
+			var flex = require('flexIEC');
 			var div = document.getElementById("flex");
 			
 			var parentSize = {width: 175, height: 175, columnMargin: 4}, 
@@ -45,24 +47,22 @@
 
 			var nf = new flex(div, flexOptions);
 
-			// var obj = {};
+			//a parent was selected by flex
+			nf.on('parentSelected', function(eID, eDiv, finished)
+			{
+				setTimeout(function()
+				{	
+					//individual being created
+					eDiv.innerHTML = "<div> parent: "+eID+"</div>";
+					finished();
+				}, Math.floor(Math.random()*500 + 500));
+			});
 
-			//when an object is created, we are informed, and have the option to add our information 
-			//in this case we're just adding test insides
-			// nf.parentFlex.on('elementCreated', function(eID, eDiv)
-			// {
-			// 	obj[eID] = eDiv;
-			// 	console.log("Created: ", eID);
-			// 	// element.className += "grid-cell";
-			// 	eDiv.innerHTML = "<div>"+eID+"</div>";
-			// });
-
-			// nf.parentFlex.on('elementRemoved', function(eID)
-			// {
-			// 	console.log("Removing: ", eID);
-			// 	// element.className += "grid-cell";
-			// 	// eDiv.innerHTML = "<div>Vis: "+eID+"</div>";
-			// });
+			//parent is no longer rocking it. Sorry to say. 
+			nf.on('parentUnselected', function(eID)
+			{
+				console.log("Parent removed: ", eID);
+			});
 
 
 			nf.on('createIndividual', function(eID, eDiv, finished)
@@ -75,8 +75,6 @@
 					finished();
 				}, Math.floor(Math.random()*2000 + 1000));
 			});
-
-
 
 			nf.ready();
 
