@@ -96,6 +96,7 @@ function parentList(divValue, reqOptions)
 	//internal create the parent
 	function internalCreate(i, data)
 	{
+		// console.log("\t\thapkjsdflkjsdflkjsdlfkj: calling create: ", i, " d: ", data)
 		var el = createElement(i);
 		htmlObjects[i] = el;
 		dataObjects[i] = data;
@@ -103,6 +104,8 @@ function parentList(divValue, reqOptions)
 		self.emit('elementCreated', data, i, el);
 		return el;
 	}
+
+	self.activeParents = function(){return activeElements;};
 
 	//really simple, just append to our container a new element
 	self.addElement = function(data)
@@ -141,16 +144,18 @@ function parentList(divValue, reqOptions)
 		var el = htmlObjects[id];
 		var data = dataObjects[id];
 
-		self.emit('elementRemoved', data, id);
-
 		//minus an element
 		activeElements--;
+
+		//let it be known, it's over! We're about to remove the parent
+		self.emit('elementRemoved', data, id);
 
 		//remove the object!
 		outerContainer.removeChild(el);
 
 		delete htmlObjects[id];
 		delete dataObjects[id];
+
 	}
 
 	self.removeRandom = function()

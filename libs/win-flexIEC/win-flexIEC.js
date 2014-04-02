@@ -54,6 +54,13 @@ function winflex(backbone, globalConfig, localConfig)
 
 	var uiObjects = {};
 
+	self.chooseRandomSeed = function(seedMap)
+	{
+		var seedKeys = Object.keys(seedMap);
+		var rIx = Math.floor(Math.random()*seedKeys.length);
+		return seedKeys[rIx];
+	}
+
 	//initialize 
 	self.initializeDiv = function(seeds, div, flexOptions, done)
 	{
@@ -65,6 +72,9 @@ function winflex(backbone, globalConfig, localConfig)
 			done("Must send at least 1 seed to initialization -- for now");
 			return;
 		}
+
+		if(seeds.length > 1)
+			self.log("Undefined behavior with more than one seed in this UI object. You were warned, sorry :/")
 		//not getting stuck with an undefined issue
 		flexOptions = flexOptions || {};
 
@@ -115,6 +125,12 @@ function winflex(backbone, globalConfig, localConfig)
 			 	//now we use this info and pass it along for other ui business we don't care about
 			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
 			 	uiEmitter.emit('parentUnselected', eID);
+
+		 		self.log("act pars: ",nf.activeParents());
+			 	//are we empty? fall back to the chosen seed please!
+			 	if(nf.activeParents() == 0)
+			 	 	nf.createParent(self.chooseRandomSeed(seedMap));
+
 			 });
 		});
 
@@ -124,12 +140,15 @@ function winflex(backbone, globalConfig, localConfig)
 			//let it be known that we are looking for a sweet payday -- them kids derr
 			 self.backEmit("evolution:getOrCreateOffspring", [eID], function(err, allIndividuals)
 			 {
+			 	// console.error("shitidjfdijfdf");
 			 	//we got the juice!
 			 	var individual = allIndividuals[eID];
 
+			 	self.log("Create ind. create returned: ", allIndividuals);
+
 			 	//now we use this info and pass it along for other ui business we don't care about
 			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
-			 	uiEmitter.emit('individualCreated', eID, eDiv, individual);
+			 	uiEmitter.emit('individualCreated', eID, eDiv, individual, finished);
 			 });
 		});
 
@@ -160,9 +179,8 @@ function winflex(backbone, globalConfig, localConfig)
 
 		//pull a random seed to set as the single parent (that's just our choice)
 		//we could pull 2 if they existed, but we don't
-		var seedKeys = Object.keys(uio.seeds);
-		var rIx = Math.floor(Math.random()*seedKeys.length);
-		var parentSeedID = seedKeys[rIx];
+		
+		var parentSeedID = self.chooseRandomSeed(uio.seeds);
 
 		//auto select parent -- this will cause changes to evolution
 		nf.createParent(parentSeedID);

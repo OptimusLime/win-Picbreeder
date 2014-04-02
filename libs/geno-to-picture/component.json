@@ -1,0 +1,17 @@
+{
+  "name": "geno-to-picture",
+  "description": "Handles turning artifact into a picture",
+  "version": "0.0.1",
+  "dependencies": {
+    "optimuslime/win-neat" : "*",
+    "optimuslime/neatjs" : "*",
+    "optimuslime/cppnjs" : "*"
+  },
+  "scripts": [
+    "geno-to-picture.js",
+    "generateBitmap.js",
+    "base64.js"
+  ],
+  "main": "geno-to-picture.js",
+  "license": ["MIT"]
+}

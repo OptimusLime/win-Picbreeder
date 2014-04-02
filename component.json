@@ -2,6 +2,7 @@
   "name": "win-Picbreeder",
   "version": "0.0.1",
   "local": [
+    "geno-to-picture",
     "cppn-additions",
     "win-setup",
     "pbEncoding",

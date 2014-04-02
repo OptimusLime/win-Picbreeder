@@ -31,6 +31,9 @@ function flexIEC(divValue, reqOptions)
 
 	self.bottomElementSize = reqOptions.bottomElementSize || 47;
 
+	//need to add some space to our objects
+	reqOptions.evoOptions.extraHeightPerObject = self.bottomElementSize;
+
 	//add emitter properties to this object
 	Emitter(self);
 
@@ -130,7 +133,7 @@ function flexIEC(divValue, reqOptions)
 	{
 		var el = fullObjects[evoID];
 
-		console.log("Deleted parent: ", evoID, el);
+		// console.log("Deleted parent: ", evoID, el);
 
 		if(el)
 		{
@@ -257,6 +260,8 @@ function flexIEC(divValue, reqOptions)
 
 	//create the evolution grid -- self initializes
 	self.evoFlex = new flexstatic(evoFlexDiv, reqOptions.evoOptions || {});
+
+	self.activeParents = function(){return self.parentFlex.activeParents();};
 
 	self.individualLoaded = function(eID)
 	{

@@ -24,7 +24,8 @@
 
 		window.onload = function() {
 
-		
+			var genoToPicture = require('geno-to-picture');
+
 			var seed1 = require('win-Picbreeder/seeds/seed1.js');
 
 			var seeds = [seed1];
@@ -49,15 +50,19 @@
 				"global" : {
 				},
 				"win-neat" : {
+					options : {
+						initialMutationCount : 5, 
+						postMutationCount : 5
+					},
+					logLevel : testingLogLevel
+				},
+				"win-flexIEC" : {
 					logLevel : testingLogLevel
 				},
 				"win-iec" : {
-	                genomeType : "picbreeder",
+	                genomeType : "picbreeder"
 	                //these options aren't relevant -- might change in the future -- these are for win-neat module
-					options : {
-						initialMutationCount : 0, 
-						postMutationCount : 0
-					}
+					
 					,logLevel : testingLogLevel
 				},
 				"win-gen" : {
@@ -67,7 +72,7 @@
 					]
 					,validateParents : true
 					,validateOffspring : true
-					,logLevel : testingLogLevel
+					// ,logLevel : testingLogLevel
 				},
 				"win-schema" : {
 					multipleErrors : true
@@ -92,8 +97,11 @@
 				var qCallBackbone = backObject.qCall;
 
 				var div = document.getElementById("flex");
-				var parentSize = {width: 175, height: 175, columnMargin: 4}, 
-				evoSize = {width: 200, height: 200, rowMargin: 4, columnMargin: 4};
+
+				var objSize = {width: 175, height: 175};
+
+				var parentSize = {width: objSize.width, height: objSize.height, columnMargin: 4}, 
+				evoSize = {width: objSize.width, height: objSize.height, rowMargin: 4, columnMargin: 4};
 
 				var flexOptions =  
 				{
@@ -106,6 +114,21 @@
 					}
 					// mode: 'vertical' ,
 				};
+
+				var evoIDToData = {};
+
+				function getOrCreateData(eID, individual)
+				{
+					var dataURL = evoIDToData[eID];
+					if(!dataURL)
+					{
+						dataURL = genoToPicture(objSize, individual.genome);
+
+						//save this info for next time
+						evoIDToData[eID] = dataURL;
+					}
+					return dataURL;
+				}
 
 
 				var uID;
@@ -128,14 +151,29 @@
 						//individualCreated
 						uiEmitter.on('parentSelected', function(eID, eDiv, parent, finished)
 						{
-							eDiv.innerHTML = "<div> parent: "+eID+"</div>";
+							backLog("final: p select div: ", eID);
+
+							var dataURL = getOrCreateData(eID, parent);
+
+							//individual being created
+							eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
+
 							if(finished)
 								finished();
 						})
-						uiEmitter.on('createIndividual', function(eID, eDiv, individual, finished)
+						uiEmitter.on('individualCreated', function(eID, eDiv, individual, finished)
 						{
+
+							
+							var dataURL = getOrCreateData(eID, individual);
+
 							//individual being created
-							eDiv.innerHTML = "<div>"+eID+"</div>";
+							eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
+
+
+
+							// backLog("final: p createive indiv: ", eID, " div: ", eDiv, " indvi: ", individual, " fins: ", finished);
+							backLog("Individual: ", individual);
 
 							//all done!
 							if(finished)
