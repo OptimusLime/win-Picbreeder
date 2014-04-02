@@ -12,7 +12,7 @@
 		<div id="addChild" style="display: inline-block; margin: 5px;">Add Child</div>
 		<div id="removeChild" style="display: inline-block; margin: 5px;">Remove Random Child</div>
 
-		<div id="addPage" style="display: inline-block; margin: 5px;">Add Page</div>
+		<div id="addPage" style="display: inline-block; margin: 5px;">Next Page</div>
 		<div id="backPage" style="display: inline-block; margin: 5px;">Back a Page</div>
 	</div>
 
@@ -131,14 +131,14 @@
 				}
 
 
-				var uID;
+				var uID, flex;
 				//for now we pass seed information to init display -- later, we'll move this to a more appropriate place 
 				//a module should have control over getting seeds (they are constant for a domain and hosted on the server)
 				qCallBackbone("ui:initializeDisplay", seeds, div, flexOptions)
 					.then(function(uiInfo)
 					{
 						//flex if we want to tap into any specific events
-						var flex = uiInfo.ui;
+						flex = uiInfo.ui;
 
 						//save our ui identifier for future ui calls
 						uID = uiInfo.uID;
@@ -200,6 +200,15 @@
 						console.error(err);
 					})
 
+
+				document.getElementById('addPage').addEventListener('click', function (event) {
+					// backLog("Flex: ", flex);
+				    flex.evoFlex.nextPage();
+				});
+				document.getElementById('backPage').addEventListener('click', function (event) {
+				    flex.evoFlex.previousPage();
+				});
+
 			});
       
 
@@ -212,12 +221,6 @@
 			// 	nf.parentFlex.removeElement(keys[rmIx]);
 			// }
 
-			// document.getElementById('addPage').addEventListener('click', function (event) {
-			//     nf.evoFlex.nextPage();
-			// });
-			// document.getElementById('backPage').addEventListener('click', function (event) {
-			//     nf.evoFlex.previousPage();
-			// });
 			//  document.getElementById('addChild').addEventListener('click', function (event) {
 			//     nf.parentFlex.addElement();
 			//  });
