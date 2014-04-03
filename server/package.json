@@ -1,0 +1,9 @@
+{
+    "name": "ui-example",
+    "description": "Simple example for accessing win and interacting",
+    "version": "0.0.1",
+    "private": true,
+    "dependencies": {
+    	"win-save" : "0.0.x"
+    }
+}

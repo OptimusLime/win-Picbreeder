@@ -35,6 +35,7 @@ function winflex(backbone, globalConfig, localConfig)
 			"evolution:loadSeeds",
 			"evolution:getOrCreateOffspring",
 			"evolution:selectParents",
+			"evolution:publishArtifact",
 			"evolution:unselectParents"
 			//in the future we will also need to save objects according to our save tendencies
 		];
@@ -150,6 +151,39 @@ function winflex(backbone, globalConfig, localConfig)
 			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
 			 	uiEmitter.emit('individualCreated', eID, eDiv, individual, finished);
 			 });
+		});
+
+		nf.on('publishArtifact', function(eID, meta, finished)
+		{
+			//let it be known that we are looking for a sweet payday -- them kids derr
+			 self.backEmit("evolution:publishArtifact", eID, meta, function(err)
+			 {
+			 	if(err)
+			 	{
+			 		uiEmitter.emit('publishError', eID, err);
+			 	}
+			 	else
+			 	{
+			 		uiEmitter.emit('publishSuccess', eID);
+			 	}
+
+			 	//now we are done publishing
+			 	finished();
+
+			 });
+		});
+
+		//might be published-- we are looking at the modal window
+		nf.on('publishShown', function(eID, eDiv, finished)
+		{
+			//we simply send back the indentifier, and where to put your display in the html object
+		 	uiEmitter.emit('publishShown', eID, eDiv, finished);
+		});
+
+		//we hid the object -- maybe animation needs to stop or something, let it be known
+		nf.on('publishHidden', function(eID)
+		{
+			uiEmitter.emit('publishHidden', eID);
 		});
 
 		//this is a temporary measure for now

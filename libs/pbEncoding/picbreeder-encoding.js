@@ -14,7 +14,7 @@ function pbEncoding(backbone, globalConfig, localConfig)
 	self.winFunction = "encoding";
 
     //for convenience, this is our artifact type
-	self.encodingName = "picbreeder";
+	self.encodingName = "picArtifact";
 
 	self.log = backbone.getLogger(self);
 	//only vital stuff goes out for normal logs
@@ -88,7 +88,7 @@ function pbEncoding(backbone, globalConfig, localConfig)
 
 	self.initialize = function(done)
     {
-    	self.log("Init win-iesor encoding");
+    	self.log("Init win-iesor encoding: ", picbreederSchema);
 
 		//how we talk to the backbone by emitting events
     	var emitter = backbone.getEmitter(self);

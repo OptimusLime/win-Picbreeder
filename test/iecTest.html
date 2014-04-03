@@ -26,6 +26,9 @@
 
 			var genoToPicture = require('geno-to-picture');
 
+			//for now, must match the win-save name 
+			var picArtName = "picArtifact";
+
 			var seed1 = require('win-Picbreeder/seeds/seed1.js');
 
 			var seeds = [seed1];
@@ -37,6 +40,7 @@
 				"cppn-add" : require('cppn-additions'),
 				"pbEncoding" : require('pbEncoding'),
 				"win-flexIEC" : require("win-flexIEC"),
+				"win-pub" : require("win-publish"),
 				"win-iec" : require("win-iec"),
 				"win-gen" : require("win-gen"),
 				"win-schema" : require("win-schema"),
@@ -48,6 +52,8 @@
 			var configurations = 
 			{
 				"global" : {
+					server : "http://localhost",
+					port: 3000
 				},
 				"win-neat" : {
 					options : {
@@ -59,20 +65,26 @@
 				"win-flexIEC" : {
 					logLevel : testingLogLevel
 				},
+				"win-publish" : {
+					logLevel : testingLogLevel
+				},
+				"pbEncoding" : {
+					logLevel : testingLogLevel
+				},
 				"win-iec" : {
-	                genomeType : "picbreeder"
+	                genomeType : picArtName
 	                //these options aren't relevant -- might change in the future -- these are for win-neat module
 					
 					,logLevel : testingLogLevel
 				},
 				"win-gen" : {
 					"encodings" : [
-						"picbreeder",
+						picArtName,
 						"NEATGenotype"
 					]
 					,validateParents : true
 					,validateOffspring : true
-					// ,logLevel : testingLogLevel
+					,logLevel : testingLogLevel
 				},
 				"win-schema" : {
 					multipleErrors : true
@@ -119,6 +131,7 @@
 
 				function getOrCreateData(eID, individual)
 				{
+					//return;
 					var dataURL = evoIDToData[eID];
 					if(!dataURL)
 					{
@@ -178,6 +191,15 @@
 							//all done!
 							if(finished)
 								finished();
+						});
+
+						//that's all folks!
+						uiEmitter.on('publishShown', function(eID, eDiv)
+						{
+							var dataURL = getOrCreateData(eID);
+
+							//individual being created
+							eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
 						});
 
 						//don't do nuffin, it's out of our control

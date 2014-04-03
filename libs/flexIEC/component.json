@@ -2,7 +2,7 @@
   "name": "flexIEC",
   "description": "Mobile friendly infinite expanding grid slider. For use with things like interactive evolution. Based on swiper library.",
   "version": "0.0.1",
-  "local" : ["flexstatic", "flexparents"],
+  "local" : ["flexstatic", "flexparents", "publishUI"],
   "dependencies": {
     "component/events" : "*",
     "component/classes" : "*",

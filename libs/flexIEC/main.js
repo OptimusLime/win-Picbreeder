@@ -4,6 +4,8 @@ var resize = require('resize');
 var classes = require('classes');
 var events = require('events');
 
+var publish = require('publishUI');
+
 //
 var element = require('el.js');
 
@@ -33,6 +35,8 @@ function flexIEC(divValue, reqOptions)
 
 	//need to add some space to our objects
 	reqOptions.evoOptions.extraHeightPerObject = self.bottomElementSize;
+
+	reqOptions.publishOptions = reqOptions.publishOptions || {objectSize: reqOptions.evoOptions.objectSize};
 
 	//add emitter properties to this object
 	Emitter(self);
@@ -204,7 +208,10 @@ function flexIEC(divValue, reqOptions)
 		//either you  or your parent have an ID -- pull that id info
 		var tID = e.target.id || e.target.parentElement.id;
 
-		console.log("Pub: ", e.target.id.replace(/-publish/g, ""));
+		var elementID = tID.replace(/-publish/g, "");
+
+		//launch a publish attempt using this ID
+		self.publish.launchPublishModal(elementID);
 	}
 
 	self.createLoadingWrapper = function(eID)
@@ -250,6 +257,8 @@ function flexIEC(divValue, reqOptions)
 	container.appendChild(row);
 
 	outerContainer.appendChild(container);
+
+
 
 	//create our flex parent
 	self.parentFlex = new flexparents(parentFlexDiv, reqOptions.parentOptions || {});
@@ -319,19 +328,35 @@ function flexIEC(divValue, reqOptions)
 	});
 
 
-
-
-
-
 	//signify that it's time to init everything
 	self.ready = function()
 	{
 		self.evoFlex.initialize();
 	}
 
+	//deal with publishing	-- add in our publishing object according to publishUI setup
+	self.publish = publish(reqOptions.publishOptions);
 
+	//this is the real deal! We have what we need to publish
+	self.publish.on('publishArtifact', function(eID, meta, finished)
+	{
+		//we now pass this on to those above us for proper publishing behavior
+		self.emit('publishArtifact', eID, meta, finished);
+	});
 
+	self.publish.on('publishShown', function(eID, eDiv, finished){
 
+		//we have space in eDiv for our objects (according to size already determined)
+		//we have nothing to add to this info
+		self.emit('publishShown', eID, eDiv, finished);
+	});
+
+	self.publish.on('publishHidden', function(eID, eDiv, finished){
+
+		//we have space in eDiv for our objects (according to size already determined)
+		//we have nothing to add to this info
+		self.emit('publishHidden', eID);
+	});
 
 
 

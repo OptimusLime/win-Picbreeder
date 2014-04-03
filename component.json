@@ -24,8 +24,9 @@
   ],
   "main": "win-Picbreeder.js",
   "dependencies": {
-  	"optimuslime/win-iec" : "*",
-  	"optimuslime/win-neat" : "*",
+    "optimuslime/win-iec" : "*",
+    "optimuslime/win-publish" : "*",
+    "optimuslime/win-neat" : "*",
     "optimuslime/win-backbone": "*",
     "optimuslime/win-schema": "*",
     "optimuslime/win-gen": "*",

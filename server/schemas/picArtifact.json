@@ -1,0 +1,8 @@
+{
+    "genome":
+        {"type": "String", "ref" : "NEATGenotype"},
+
+    "meta":
+        {"imageTitle": "String",
+        "imageTags": ["String"]}
+}

@@ -1,11 +1,6 @@
-module.exports = {
-    "wid" : "0",
-    "dbType" : "picArtifact",
-    "parents" : [],
+{
+    "seedID" : "1",
     "genome": {
-        "wid" : "1",
-        "dbType": "NEATGenotype",
-        "parents" : [],
         "nodes" : [{
             "gid" : "0",
             "activationFunction" : "pbLinear",

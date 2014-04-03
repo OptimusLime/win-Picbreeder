@@ -1,0 +1,22 @@
+{
+  "name": "publishUI",
+  "version": "0.0.1",
+  "scripts": [
+    "modal.js"
+  ],
+  "styles": [
+    "modal.css"
+  ],
+ "remotes": [
+    "https://raw.github.com",
+    "https://raw.githubusercontent.com"
+  ],
+  "main": "modal.js",
+  "dependencies": {
+    "component/pillbox" : "*",
+    "optimuslime/el.js": "*",
+    "component/classes": "*",
+    "component/emitter": "*",
+    "segmentio/modal": "*"
+  }
+}

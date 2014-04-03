@@ -9,10 +9,11 @@ module.exports = {
     "genome": { 
         "$ref" : "NEATGenotype"
     }
-    //don't know how to do environment yet
-    // ,"meta": {
-    //     "type" : "String"
-    // }
+    //some meta info about this object being stored
+    ,"meta": {
+        "imageTitle": "string",
+        "imageTags": {type: "array", items: {type: "string"}}
+    }
 };
 
 
