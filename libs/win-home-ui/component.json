@@ -1,0 +1,18 @@
+{
+  "name": "win-home-ui",
+  "description": "The launch screen for any win module that chooses it. Like Picbreeder homepage.",
+  "version": "0.0.1",
+  "dependencies": {
+    "optimuslime/el.js" :"*",
+    "optimuslime/win-query" :"*",
+    "component/emitter" : "*"
+  },
+  "scripts": [
+    "main.js"
+  ],
+  "main": "main.js",
+  "styles": [
+    "css/main.css"
+  ],
+  "license": ["MIT"]
+}

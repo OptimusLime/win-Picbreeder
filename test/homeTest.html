@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset=utf-8 />
+	<title></title>
+	<link rel="stylesheet" type="text/css" media="screen" href="/build/build.css" />
+	<script type="text/javascript" src="/build/build.js"></script>
+
+</head>
+<body class="flexcenter">
+	<!-- <div id="buttons" style="display: inline-block;">
+		<div id="addChild" style="display: inline-block; margin: 5px;">Add Child</div>
+		<div id="removeChild" style="display: inline-block; margin: 5px;">Remove Random Child</div>
+
+		<div id="addPage" style="display: inline-block; margin: 5px;">Next Page</div>
+		<div id="backPage" style="display: inline-block; margin: 5px;">Back a Page</div>
+	</div> -->
+
+	<div id="home" style="height:100%;"> </div>
+
+	<!-- Now we start messing with the flex object -->
+	<script type="text/javascript">
+
+
+		window.onload = function() {
+
+			//how we turn a genotype into a picture
+			var genoToPicture = require('geno-to-picture');
+
+			//for now, must match the win-save name 
+			var picArtName = "picArtifact";
+			var winsetup = require('win-setup');
+
+	    	var moduleJSON = 
+			{
+				"cppn-add" : require('cppn-additions'),
+				"win-query" : require("win-query"),
+				"win-home-ui" : require("win-home-ui"),
+				//winschema is required for win-neat -- which is required for the geno-to-picture helpers
+				"win-schema" : require("win-schema"),
+				"win-neat" : require("win-neat")
+			};
+
+			var testingLogLevel = 10;
+
+			var configurations = 
+			{
+				"global" : {
+					server : "http://localhost",
+					port: 3000
+				},
+				"win-query" : {
+					logLevel : testingLogLevel
+				},
+				"win-neat" : {
+					options : {
+						initialMutationCount : 5, 
+						postMutationCount : 5
+					},
+					logLevel : testingLogLevel
+				}
+			};
+
+			var events = ["ui:home-initializeDisplay", "ui:home-ready"];
+
+			winsetup(events, moduleJSON, configurations, function(err, backObject)
+			{
+				if(err)
+				{
+					console.error(err);
+					return;
+				}
+				//setup sends back this stuff:
+				// {logger: backLog, emitter: backEmit, backbone: backbone, qCall: qBackboneResponse};
+				var backbone = backbone;
+				var backLog = backObject.logger;
+				var backEmit = backObject.emitter;
+				var qCallBackbone = backObject.qCall;
+
+				var div = document.getElementById("home");
+
+				var objSize = {width: 175, height: 175};
+
+				var flexOptions =  
+				{
+					title: "win-Picbreeder"
+					// mode: 'vertical' ,
+				};
+
+				
+				var evoIDToData = {};
+
+				function getOrCreateData(eID, individual)
+				{
+					//return;
+					var dataURL = evoIDToData[eID];
+					if(!dataURL)
+					{
+						dataURL = genoToPicture(objSize, individual.genome);
+
+						//save this info for next time
+						evoIDToData[eID] = dataURL;
+					}
+					return dataURL;
+				}
+
+
+				var uID, flex;
+				//for now we pass seed information to init display -- later, we'll move this to a more appropriate place 
+				//a module should have control over getting seeds (they are constant for a domain and hosted on the server)
+				qCallBackbone("ui:home-initializeDisplay", div, flexOptions)
+					.then(function(uiInfo)
+					{
+						//flex if we want to tap into any specific events
+						flex = uiInfo.ui;
+
+						//save our ui identifier for future ui calls
+						uID = uiInfo.uID;
+
+						//emitter lets us know the important stuff
+						var uiEmitter = uiInfo.emitter;
+
+						//parentSelected
+						//parentUnselected
+						//individualCreated
+						uiEmitter.on('elementCreated', function(wid, artifact, eDiv, finished)
+						{
+							
+							var dataURL = getOrCreateData(wid, artifact);
+
+							//individual being created
+							eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
+
+
+							// backLog("final: p createive indiv: ", eID, " div: ", eDiv, " indvi: ", individual, " fins: ", finished);
+							backLog("Individual: ", artifact);
+
+							//all done!
+							if(finished)
+								finished();
+						});
+					})
+					.then(function()
+					{
+						var catOptions = {
+							objectSize: objSize
+						}
+
+						return qCallBackbone("ui:home-ready", uID, catOptions);
+					})
+					.then(function()
+					{
+						//now we see what happened!
+						backLog("Finished ui ready state!");
+
+					}, function(err)
+					{
+						console.error(err);
+					})
+
+
+				// document.getElementById('addPage').addEventListener('click', function (event) {
+				// 	// backLog("Flex: ", flex);
+				//     flex.evoFlex.nextPage();
+				// });
+				// document.getElementById('backPage').addEventListener('click', function (event) {
+				//     flex.evoFlex.previousPage();
+				// });
+
+			});
+      
+
+			// var removeRandom = function()
+			// {
+			// 	var keys = Object.keys(obj);
+			// 	var rmIx = Math.floor(Math.random()*keys.length);
+
+			// 	//jusst remove something random -- for testing purposes
+			// 	nf.parentFlex.removeElement(keys[rmIx]);
+			// }
+
+			//  document.getElementById('addChild').addEventListener('click', function (event) {
+			//     nf.parentFlex.addElement();
+			//  });
+
+ 		// 	document.getElementById('removeChild').addEventListener('click', function (event) {
+			//     removeRandom();
+			//  });
+
+			// var slide = nf.addObject("<div class=\"flexvcenter\" style=\"border: 1px solid black; height:100%;\">Empty mofo1</div>");
+			// var slide = nf.addObject("<div class=\"flexvcenter\" style=\"border: 1px solid black; height:100%;\">Empty mofo2</div>");
+			// var slide = nf.addObject("<div class=\"flexvcenter\" style=\"border: 1px solid black; height:100%;\">Empty mofo3</div>");
+			// nf.swiper.swipeTo(0);
+			// nf.addObject("<div class=\"\" style=\"border: 1px solid black; width=100%; height=100%;\">Empty mofo2</div>");
+			// nf.addObject("<div class=\"\" style=\"border: 1px solid black; \">Empty mofo3</div>");
+
+
+		}
+
+		
+
+
+
+	</script>
+
+
+
+
+</body>
+</html>

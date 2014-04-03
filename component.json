@@ -2,6 +2,7 @@
   "name": "win-Picbreeder",
   "version": "0.0.1",
   "local": [
+    "win-home-ui",
     "geno-to-picture",
     "cppn-additions",
     "win-setup",
@@ -25,6 +26,7 @@
   "main": "win-Picbreeder.js",
   "dependencies": {
     "optimuslime/win-iec" : "*",
+    "optimuslime/win-query" : "*",
     "optimuslime/win-publish" : "*",
     "optimuslime/win-neat" : "*",
     "optimuslime/win-backbone": "*",
