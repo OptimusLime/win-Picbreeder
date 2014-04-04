@@ -24,6 +24,7 @@
 
 		window.onload = function() {
 
+
 			//how we turn a genotype into a picture
 			var genoToPicture = require('geno-to-picture');
 
@@ -43,12 +44,15 @@
 
 			var testingLogLevel = 10;
 
+			var globalConfig = {
+				staticServer:  "http://localhost:8000",
+				server : "http://localhost",
+				port: 3000
+			};
+
 			var configurations = 
 			{
-				"global" : {
-					server : "http://localhost",
-					port: 3000
-				},
+				"global" : globalConfig,
 				"win-query" : {
 					logLevel : testingLogLevel
 				},
@@ -60,6 +64,8 @@
 					logLevel : testingLogLevel
 				}
 			};
+
+
 
 			var events = ["ui:home-initializeDisplay", "ui:home-ready"];
 
@@ -139,6 +145,19 @@
 							if(finished)
 								finished();
 						});
+
+						uiEmitter.on('artifactBranch', function(wid, artifact)
+						{
+							backLog("Branch artifact: ", wid, "art: ", artifact);
+
+							var branchLocation = globalConfig.staticServer + "/iecTest.html?branch=" + wid;
+							window.location.href = branchLocation;
+
+						})
+						uiEmitter.on('artifactAncestors', function(wid, artifact)
+						{
+							backLog("See ancestors: ", wid, " art: ", artifact);
+						})
 					})
 					.then(function()
 					{

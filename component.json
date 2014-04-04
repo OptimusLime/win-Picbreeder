@@ -25,6 +25,7 @@
   ],
   "main": "win-Picbreeder.js",
   "dependencies": {
+    "optimuslime/traverse" : "*",
     "optimuslime/win-iec" : "*",
     "optimuslime/win-query" : "*",
     "optimuslime/win-publish" : "*",

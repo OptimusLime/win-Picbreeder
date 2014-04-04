@@ -51,7 +51,11 @@ function winhome(backbone, globalConfig, localConfig)
 
 		var title = options.title || "WIN Domain (customize with title option)"; 
 
-		var tEl = element('h1', {style: "font-size: 4em;"}, title);
+		var th2 = document.createElement('h1');
+		th2.innerHTML = title;
+
+		var tEl = element('div', {style: "font-size: 2em;"}, th2);
+
 		homeHolder.appendChild(tEl);
 		
 		var uID = emitterIDs++;
@@ -63,22 +67,41 @@ function winhome(backbone, globalConfig, localConfig)
 
 		div.appendChild(homeHolder);
 
+
 		//all done making the display -- added a title and some stuff dooooooop
 		finished(undefined, {ui: homeHolder, emitter: uie, uID: uID});
 		
 	}
 
-	self.createElement = function(wid, category, size)
+	self.createElement = function(wid, category, options)
 	{
-		var widthAndHeight = "width: " + size.width + "px; height: " + size.height + "px;"; 
+
+		var size = options.objectSize || {width: 150, height: 150};
+
+		var addWidth = options.additionalElementWidth || 0;
+		var addHeight = options.additionalElementHeight || 50;
+
+		var trueElementSize = "width: " + (size.width) + "px; height: " + (size.height) + "px;"; 
+		var fullWidthAndHeight = "width: " + (size.width + addWidth) + "px; height: " + (size.height + addHeight) + "px;"; 
 		var id = category + "-" + wid;
 
 		//for now, everything has a border! 
-		var simpleElement = element('li', {id:id, style: widthAndHeight, class: "border"});
+
+		//now we add some buttons
+		var aImg = element('div', {style: trueElementSize, class: "border"});
+		var evoBut = element('div', {style: "", class: "homeElementButton border"}, "Branch");
+		var history = element('div', {style: "", class: "homeElementButton border"}, "Ancestors");
+
+		//this is where the artifact stuff goes
+		var aElement = element('div', {style: fullWidthAndHeight, class: "border"}, [aImg, evoBut, history]); 
+
+		var simpleElement = element('div', {id:id, class: "home"}, [aElement]);
+
+
 
 		//we also need to add on some extra space for buttons buttons buttons ! need to branch and stuff
 
-		return {full: simpleElement, artifactElement: simpleElement};
+		return {full: simpleElement, artifactElement: aImg, branch: evoBut, ancestors: history};
 	}
 
 	self.emitElementCreation = function(emit, wid, artifact, eDiv)
@@ -87,6 +110,22 @@ function winhome(backbone, globalConfig, localConfig)
 		emit.emit("elementCreated", wid, artifact, eDiv, function()
 		{
 			//maybe we do somehitng her in the future -- nuffin' for now gov'nor
+		});
+	}
+
+	self.clickBranchButton  = function(emit, wid, artifact, eDiv)
+	{
+		eDiv.addEventListener('click', function()
+		{
+			emit.emit("artifactBranch", wid, artifact, eDiv);
+		});
+	}
+
+	self.clickAncestorsButton  = function(emit, wid, artifact, eDiv)
+	{
+		eDiv.addEventListener('click', function()
+		{
+			emit.emit("artifactAncestors", wid, artifact, eDiv);
 		});
 	}
 
@@ -110,7 +149,8 @@ function winhome(backbone, globalConfig, localConfig)
 		var itemStart = options.itemStart || 0;
 		var itemsToDisplay = options.itemsToDisplay || 10;
 
-		var objSize = options.objectSize || {width: 150, height: 150};
+
+
 
 		//then we make a query request
 		self.backEmit("query:getHomeQuery", itemStart, itemsToDisplay, function(err, categories)
@@ -130,7 +170,9 @@ function winhome(backbone, globalConfig, localConfig)
 				//set up the category title section
 				var elWrapper = element('ul#' + cat + "-" + uID, {class: "thumbwrap"});
 
-				var catTitle = element('h2', {}, [cat, elWrapper]);
+				var catTitle = document.createElement('h2');
+					catTitle.innerHTML = cat;
+				var catTitle = element('div', {}, [catTitle, elWrapper]);
 
 				home.appendChild(catTitle);
 
@@ -140,13 +182,17 @@ function winhome(backbone, globalConfig, localConfig)
 				for(var i=0; i < arts.length; i++)
 				{
 					var artifact = arts[i];
+					var wid = artifact.wid;
 
-					var elObj = self.createElement(artifact.wid, cat, objSize);
+					var elObj = self.createElement(wid, cat, options);
 
 					//add this object to our other elements in the category list
 					elWrapper.appendChild(elObj.full);
 
-					self.emitElementCreation(emit, artifact.wid, artifact, elObj.artifactElement);
+					self.clickBranchButton(emit, wid, artifact, elObj.branch);
+					self.clickAncestorsButton(emit, wid, artifact, elObj.ancestors);
+
+					self.emitElementCreation(emit, wid, artifact, elObj.artifactElement);
 				}
 			}
 			if(finished)

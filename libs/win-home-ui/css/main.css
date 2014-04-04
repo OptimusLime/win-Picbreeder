@@ -7,3 +7,13 @@
 {
 	border: 1px solid black;
 }
+
+div.home 
+{
+	margin: 10px;
+}
+
+.homeElementButton
+{
+	display: inline-block;
+}
