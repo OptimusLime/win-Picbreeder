@@ -26,6 +26,7 @@
   "main": "win-Picbreeder.js",
   "dependencies": {
     "optimuslime/traverse" : "*",
+    "optimuslime/el.js" : "*",
     "optimuslime/win-iec" : "*",
     "optimuslime/win-query" : "*",
     "optimuslime/win-publish" : "*",
@@ -33,6 +34,8 @@
     "optimuslime/win-backbone": "*",
     "optimuslime/win-schema": "*",
     "optimuslime/win-gen": "*",
+    "optimuslime/win-data": "*",
+    "optimuslime/win-phylogeny": "*",
     "optimuslime/win-utils": "*"
   }
 }

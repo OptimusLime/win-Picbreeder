@@ -21,6 +21,20 @@
 	<!-- Now we start messing with the flex object -->
 	<script type="text/javascript">
 
+	//this will automatically decode query string in to urlParams argument!
+        var urlParams;
+        (window.onpopstate = function () {
+            var match,
+                    pl     = /\+/g,  // Regex for replacing addition symbol with a space
+                    search = /([^&=]+)=?([^&]*)/g,
+                    decode = function (s) { return decodeURIComponent(s.replace(pl, " ")); },
+                    query  = window.location.search.substring(1);
+
+            urlParams = {};
+            while (match = search.exec(query))
+                urlParams[decode(match[1])] = decode(match[2]);
+        })();
+
 
 		window.onload = function() {
 
@@ -161,7 +175,12 @@
 					})
 					.then(function()
 					{
+						var is = parseInt( urlParams["start"] || 0);
+						
+						console.log("Start: " , is);
 						var catOptions = {
+							itemsToDisplay : 100,
+							itemStart : is,
 							objectSize: objSize
 						}
 

@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset=utf-8 />
+	<title></title>
+	<script type="text/javascript" src="/build/build.js"></script>
+    
+    <!-- // <script type="text/javascript" src="http://cdnjs.cloudflare.com/ajax/libs/d3/2.10.0/d3.v2.min.js"></script> -->
+   
+    <!-- <script type="text/javascript" src=""></script> -->
+    <!-- // <script type="text/javascript" src="http://mbostock.github.io/d3/talk/20110921/d3/d3.js"></script> -->
+    <!-- // <script type="text/javascript" src="http://mbostock.github.io/d3/talk/20110921/d3/d3.geom.js"></script> -->
+    <!-- // <script type="text/javascript" src="http://mbostock.github.io/d3/talk/20110921/d3/d3.layout.js"></script> -->
+    <!-- // <script type="text/javascript" src="d3/d3.geom.js"></script> -->
+    <!-- // <script type="text/javascript" src="d3/d3.layout.js"></script> -->
+
+	<script src="http://cdnjs.cloudflare.com/ajax/libs/prettify/188.0.0/prettify.js"></script>
+	<script src="/js/vkbeautify.beta.js"></script>
+
+    <!-- <link type="text/css" rel="stylesheet" href="http://mbostock.github.io/d3/talk/20110921/style.css"/> -->
+    <style>
+
+    body, html
+    {
+    	width:100%;
+    	height:100%;
+    }
+
+	svg {
+	  border: 1px solid #999;
+	  overflow: hidden;
+	}
+
+	text {
+	  font-weight: 300;
+	  font-family: "Helvetica Neue", Helvetica, Arial, sans-serf;
+	  font-size: 14px;
+	}
+
+	.node rect {
+	  stroke: #333;
+	  stroke-width: 2px;
+	  fill: none;
+	}
+
+	.edgeLabel rect {
+	  fill: #fff;
+	}
+
+	.edgePath path {
+	  stroke: #333;
+	  stroke-width: 1.5px;
+	  fill: none;
+	}
+
+	h1, h2 {
+	  color: #333;
+	}
+
+	textarea {
+	  width: 800px;
+	}
+
+	label {
+	  margin-top: 1em;
+	  display: block;
+	}
+
+	.error {
+	  color: red;
+	}
+	</style>
+</head>
+<body class="flexcenter">
+
+	<input id="iTitle" placeholder="SVG File Name"></input>
+	<button id="bSvgSave">Save SVG to File</button>
+
+	 <!-- <div id="d3Phylogeny" style="height: 100%;"></div> -->
+     <!-- <div id="header">phylogeny</div> -->
+
+	<svg id="d3Phylogeny" width=800 height=600>
+  		<g transform="translate(20, 20)"/>
+	</svg>
+
+	<script src="http://d3js.org/d3.v3.min.js"></script>
+	<script src="/js/dagre-d3.min.js"></script>
+	<script src="/js/graphlib-dot.min.js"></script>
+	<!-- // <script type="text/javascript" src="http://cpettitt.github.io/project/dagre-d3/latest/dagre-d3.min.js"></script> -->
+
+	<!-- Now we start messing with the flex object -->
+	<script type="text/javascript">
+
+		var matchRectangles = {};
+
+		var artifacts, getOrCreateData, styleElement;
+
+
+		var cleanName = function(name) {
+		    name = name.replace(/\s+/gi, '-'); // Replace white space with dash
+		    return name.replace(/[^a-zA-Z0-9\-]/gi, ''); // Strip any special charactere
+		};
+
+		function saveSVG()
+		{
+			if(!artifacts)
+				return;
+
+			//try to save the graph to file
+			//get our d3/dagre object
+			var svg = document.querySelector("#d3Phylogeny");
+
+			//last thing to do is copy the appropriate objects fro artifacts
+			for(var wid in artifacts)
+			{
+				var matchObject = matchRectangles[wid];
+
+				var image = matchObject.image;
+				var rect = matchObject.rect;
+				//cached this info
+				copyRectangle(wid, image, rect);
+
+				// var remChild = rect.parentNode.children[2];
+
+				var rectParent = rect.parentNode;
+				rectParent.removeChild(rectParent.lastChild);
+				rectParent.removeChild(rectParent.lastChild);
+
+				// rectParent.removeChild(rect);
+
+				// var imageParent = image.parentNode;
+				// //drop the image
+				// imageParent.removeChild(image);
+
+				//now dump the rect
+				// rect.parentNode.removeChild(rect);
+			}
+
+
+			// svg('style')
+			// styleElement.textContent = "\<!CDATA[[\n" + styleElement.textContent + "]]\>";
+
+			// Extract the data as SVG text string
+			var svg_xml = (new XMLSerializer).serializeToString(svg);
+
+			//Optional: prettify the XML with proper indentations
+			svg_xml = vkbeautify.xml(svg_xml);
+
+			//now we have the svg_xml -- let's download it
+			a = document.createElement('a');
+
+			var title = document.getElementById("iTitle").value || "phylogeny";
+
+			title = cleanName(title);
+
+			// console.log("Potential save name: ", title);
+			// console.log(svg_xml);
+
+			//use regex to find our damn img objects, and close them!
+			svg_xml = svg_xml.replace(/(<img[^>]*?>)/gi, '$1</img>');
+			svg_xml = svg_xml.replace(/(<image[^>]*?>)/gi, '$1</image>');
+			svg_xml = svg_xml.replace(/(<style[^>]*?>)/gi, '$1\<![CDATA[\n');
+			svg_xml = svg_xml.replace(/(<\/style[^>]*?>)/gi, ']]>$1');
+
+			// console.log(svg_xml);
+			// svg_xml = svg_xml.replace(/]?>[\s\S]?<\/div>/gi, "")
+
+
+			a.download = title + ".svg";
+			a.type = 'image/svg+xml';
+			blob = new Blob([svg_xml], {"type": "image/svg+xml"});
+			a.href = (window.URL || webkitURL).createObjectURL(blob);
+			a.click();
+
+			//i screwed things up, just redraw please
+			// tryDraw();
+			// console.log(a);
+
+		}
+
+		document.getElementById("bSvgSave").addEventListener('click', function()
+		{
+			saveSVG();	
+		})
+			
+		function copyRectangle(wid, image, rect)
+		{
+			var dataURL = getOrCreateData(wid);
+			image.setAttribute("width", rect.getAttribute("width"));
+			image.setAttribute("height", rect.getAttribute("height"));
+			image.setAttribute("x", rect.getAttribute("x"));
+			image.setAttribute("y", rect.getAttribute("y"));
+			image.setAttribute("rx", rect.getAttribute("rx"));
+			image.setAttribute("ry", rect.getAttribute("ry"));
+			image.setAttribute("xlink:href", dataURL);
+		}
+
+
+		var inputGraph = {value:""};
+
+		// var graphLink = d3.select("#d3Phylogeny");
+		var oldInputGraphValue;
+
+		//whatever, gonna get rid of this soon
+		var debugAlignment;
+
+		/* Example */
+		// digraph {
+		//     /* Note: HTML labels do not work in IE, which lacks support for &lt;foreignObject&gt; tags. */
+		//     A [label="<div style='padding: 10px;'>A <span style='font-size:32px'>Big</span> <span style='color:red;'>HTML</span> Source!</div>"];
+		//     C;
+		//     E [label="A sink"];
+		//     A -&gt; B -&gt; C;
+		//     B -&gt; D -&gt; E;
+		//     C -&gt; E;
+		//     A -&gt; D [label="<div>A multi-rank <span style='color:blue;'>HTML</span> edge!</div>"];
+		// }
+
+		function tryDraw() {
+
+		  var result;
+		  if (oldInputGraphValue !== inputGraph.value) {
+
+		    oldInputGraphValue = inputGraph.value;
+		    try {
+		      result = graphlibDot.parse(inputGraph.value);
+		    } catch (e) {
+		      // inputGraph.setAttribute("class", "error");
+		      console.error("Graph error: ",e);
+		      throw e;
+		    }
+			console.log("Trying to draw: ", inputGraph.value);
+			console.log("Result: ", result);
+		    //now we result stuff
+		    if (result) {
+
+		      // Cleanup old graph
+		      var svg = d3.select("svg");
+
+		      var renderer = new dagreD3.Renderer();
+
+		      // Handle debugAlignment
+		      renderer.postLayout(function(graph) {
+		        if (debugAlignment) {
+		          // First find necessary delta...
+		          var minX = Math.min.apply(null, graph.nodes().map(function(u) {
+		            var value = graph.node(u);
+		            return value[debugAlignment] - value.width / 2;
+		          }));
+
+		          // Update node positions
+		          graph.eachNode(function(u, value) {
+		            value.x = value[debugAlignment] - minX;
+		          });
+
+		          // Update edge positions
+		          graph.eachEdge(function(e, u, v, value) {
+		            value.points.forEach(function(p) {
+		              p.x = p[debugAlignment] - minX;
+		            });
+		          });
+		        }
+		      });
+
+		      // Uncomment the following line to get straight edges
+		      //renderer.edgeInterpolate('linear');
+
+		      // Custom transition function
+		      function transition(selection) {
+		        return selection.transition().duration(500);
+		      }
+
+		      renderer.transition(transition);
+
+		      var layout = renderer.run(result, svg.select("g"));
+		      transition(d3.select("svg"))
+		        .attr("width", layout.graph().width + 40)
+		        .attr("height", layout.graph().height + 40)
+		      d3.select("svg")
+		        .call(d3.behavior.zoom().on("zoom", function() {
+		          var ev = d3.event;
+		          svg.select("g")
+		            .attr("transform", "translate(" + ev.translate + ") scale(" + ev.scale + ")");
+		        }));
+		    }
+		  }
+		}
+
+
+		window.onload = function() {
+
+			// d3.select(self.frameElement).style("height", height + "px");
+
+			//how we turn a genotype into a picture
+			var genoToPicture = require('geno-to-picture');
+
+			//for now, must match the win-save name 
+			var picArtName = "picArtifact";
+			var winsetup = require('win-setup');
+			var element = require('el.js');
+
+	    	var moduleJSON = 
+			{
+				"cppn-add" : require('cppn-additions'),
+				"win-phylogeny" : require("win-phylogeny"),
+				//win-data required for win-phylogeny
+				"win-data" : require("win-data"),
+				//winschema is required for win-neat -- which is required for the geno-to-picture helpers
+				"win-schema" : require("win-schema"),
+				"win-neat" : require("win-neat")
+			};
+
+			var testingLogLevel = 10;
+
+			var globalConfig = {
+				staticServer:  "http://localhost:8000",
+				server : "http://localhost",
+				port: 3000
+			};
+
+			var configurations = 
+			{
+				"global" : globalConfig,
+				"win-data" : {
+					logLevel : testingLogLevel
+				},
+				"win-phylogeny" : {
+					logLevel : testingLogLevel
+				},
+				"win-neat" : {
+					logLevel : testingLogLevel
+				}
+			};
+
+			var events = ["phylogeny:fullTreeOfArtifacts"];
+
+			winsetup(events, moduleJSON, configurations, function(err, backObject)
+			{
+				if(err)
+				{
+					console.error(err);
+					return;
+				}
+				//setup sends back this stuff:
+				// {logger: backLog, emitter: backEmit, backbone: backbone, qCall: qBackboneResponse};
+				var backbone = backbone;
+				var backLog = backObject.logger;
+				var backEmit = backObject.emitter;
+				var qCallBackbone = backObject.qCall;
+
+				var div = document.getElementById("d3Phylogeny");
+
+				var objSize = {width: 128, height: 128};
+
+				var elementStyle = "width: " + objSize.width + "px; height: " + objSize.height + "px;";
+
+				var evoIDToData = {};
+
+				var singledata;
+				getOrCreateData = function(eID, individual)
+				{
+					// if(!singledata)
+					// {
+					// 	singledata = genoToPicture(objSize, individual.genome);
+					// }
+					// return singledata;
+					//return;
+					var dataURL = evoIDToData[eID];
+					if(!dataURL)
+					{
+						dataURL = genoToPicture(objSize, individual.genome);
+
+						//save this info for next time
+						evoIDToData[eID] = dataURL;
+					}
+					return dataURL;
+				}
+
+
+				// //individual being created
+				// eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
+
+				var uID, flex;
+
+				backLog("Finished Module Init! Ready for win communications");
+
+		    	//now we call asking for loading of seeds -- synchronous -- happens immediately (no callback)
+		        backEmit("phylogeny:fullTreeOfArtifacts", function(err, treeFunction)
+	        	{	
+	        		if(err)
+	        		{
+	        			console.error(err);
+	        			return;
+	        		}
+	        		//we got the tree info, this is dangerous, so we have an extra step for getting full artifacts
+	        		//no mis-writing code that fetches a full database
+	        		treeFunction(picArtName, "allplease", function(err, phyloTree)
+	        		{
+	        			if(err)
+	        				console.error(err);
+	        			else{
+	        				
+	        				//all done for now, need to display
+
+	        				var fullNames = phyloTree.nameTree;
+
+	        				artifacts = phyloTree.artifacts;
+	        				
+	        				var artifactLinks = phyloTree.links;
+
+	        				backLog("Tree names: ", fullNames);
+	        				backLog("Tree artifacts: ", artifacts);
+	        				backLog("Tree artifactLinks: ", artifactLinks);
+
+	        				var fullNodes = [];
+	        				var nodes = {};
+
+	        				var nameToWid = {};
+
+	        				for(var wid in fullNames)
+	        					nameToWid[fullNames[wid]] = wid;
+
+	        			
+	        				var buildGraph = "digraph {";
+
+	        				var gID = 0;
+	        				var graphNames = {};
+
+	        				for(var wid in fullNames)
+	        				{
+	        					var name = fullNames[wid];
+	        					var graphID = gID++;
+
+	        					graphNames[name] = {wid: wid, graphID: graphID};
+	        					var line = (graphID + ' [label=\"<div id=\'' + wid + '\' class=\'normal'  +  '\' style=\'' + elementStyle + " margin: 10px;" + '\' />\"];');
+	        					console.log("Line: ", line)
+	        					buildGraph += line;
+	        				}
+
+    						//now we need to deal with edges
+							//grab all our links
+	        				for(var i=0; i < artifactLinks.length; i++)
+	        				{
+	        					var aLink = artifactLinks[i];
+	        					//from the links we can figure out all our nodes and labels
+	        					buildGraph += (graphNames[aLink.source].graphID + " -> " + graphNames[aLink.target].graphID + ";");
+	        				}
+
+	        				buildGraph += "}";
+	        				inputGraph.value = buildGraph;
+	        				tryDraw();
+
+							var svg = document.querySelector("#d3Phylogeny");
+
+							svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+							svg.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+
+							var styleString = ".node rect { fill: none;}\n";// <![CDATA[\n";
+
+							styleString += "text \
+										  font-weight: 300;\
+										  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serf;\
+										  font-size: 14px;\
+										}\n\
+										\
+										.node rect {\
+										  stroke: #333;\
+										  stroke-width: 2px;\
+										  fill: none;\
+										}\n\
+										\
+										.edgeLabel rect {\
+										  fill: #fff;\
+										}\n\
+										\
+										.edgePath path {\
+										  stroke: #333;\
+										  stroke-width: 1.5px;\
+										  fill: none;\
+										}\n";
+
+							// var quit = false;
+
+
+	        				//now lets draw in the div objects
+	        				for(var wid in artifacts)
+	        				{
+	        					var imgHolder = document.querySelector('#' + wid);
+
+	        					//woah this is nuts
+	        					var rHolder = imgHolder.parentNode.parentNode.parentNode.parentNode;//.firstChild;
+
+	        					console.log(rect);
+
+	        					// <image width="100" height="100" xlink:href="data:image/png;base64,...">
+
+	        					// var dataURL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==";
+	        					
+        						var dataURL = getOrCreateData(wid, artifacts[wid]);
+
+
+	        					//lets add an object to rect 
+	        					var image = document.createElement('image');
+
+	        					var rect = rHolder.firstChild;
+
+        						copyRectangle(wid, image, rect);
+	        					
+	        					rHolder.insertBefore(image, rect);
+
+        						matchRectangles[wid] = {rect: rect, image: image};
+
+	        					// styleString += ".node rect" //+ wid 
+	        					// 	+ "\n{\n" 
+	        					// 	+ " fill: #332; \n"
+	        					// 	+ "background-image: url(" 
+	        					// 		// + dataURL
+	        					// 		+ "\"https://www.google.com/images/srpr/logo11w.png"
+	        					// 		+ "\"); \n}\n";
+								// break;
+	        					// var img = document.createElement('img');
+	        					// imgHolder.src = dataURL;
+	        					imgHolder.innerHTML = "<img src=\"" + dataURL + "\" ></img>";
+	        					// img.src = dataURL;
+	        					// imgHolder.appendChild(img);
+	        				}
+
+	        				// styleString += "]]";
+
+	        				//grab styling
+							styleElement = document.createElementNS("http://www.w3.org/2000/svg", "style");
+							styleElement.textContent = styleString; // add whatever you need here
+							svg.insertBefore(styleElement, svg.firstChild);
+
+	        			}
+
+
+
+	        			
+	        		});
+	        	});
+		    });
+		}
+
+
+
+	
+	</script>
+
+
+
+
+</body>
+</html>

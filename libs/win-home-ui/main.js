@@ -149,11 +149,11 @@ function winhome(backbone, globalConfig, localConfig)
 		var itemStart = options.itemStart || 0;
 		var itemsToDisplay = options.itemsToDisplay || 10;
 
-
+		self.log("Item query - start: ", itemStart, " end: ", (itemStart + itemsToDisplay));
 
 
 		//then we make a query request
-		self.backEmit("query:getHomeQuery", itemStart, itemsToDisplay, function(err, categories)
+		self.backEmit("query:getHomeQuery", itemStart, (itemStart + itemsToDisplay), function(err, categories)
 		{
 			//all the categories returned from the home query, and associated objects
 			if(err)

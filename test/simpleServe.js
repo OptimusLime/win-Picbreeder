@@ -3,6 +3,8 @@ var express = require('express');
 var app = express();
 
 app.use("/build", express.static( __dirname + "/../build"));
+app.use("/js", express.static( __dirname + "/../libs"));
+
 app.use(express.static(__dirname));
 
 

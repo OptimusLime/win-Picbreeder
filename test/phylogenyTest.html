@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset=utf-8 />
+	<title></title>
+	<script type="text/javascript" src="/build/build.js"></script>
+    
+
+    <!-- // <script type="text/javascript" src="http://cdnjs.cloudflare.com/ajax/libs/d3/2.10.0/d3.v2.min.js"></script> -->
+   
+    <!-- <script type="text/javascript" src=""></script> -->
+    <!-- // <script type="text/javascript" src="http://mbostock.github.io/d3/talk/20110921/d3/d3.js"></script> -->
+    <!-- // <script type="text/javascript" src="http://mbostock.github.io/d3/talk/20110921/d3/d3.geom.js"></script> -->
+    <!-- // <script type="text/javascript" src="http://mbostock.github.io/d3/talk/20110921/d3/d3.layout.js"></script> -->
+    <!-- // <script type="text/javascript" src="d3/d3.geom.js"></script> -->
+    <!-- // <script type="text/javascript" src="d3/d3.layout.js"></script> -->
+
+    <!-- <link type="text/css" rel="stylesheet" href="http://mbostock.github.io/d3/talk/20110921/style.css"/> -->
+    <style>
+
+    body, html
+    {
+    	width:100%;
+    	height:100%;
+    }
+
+	.node circle {
+	  fill: #fff;
+	  stroke: blue;
+	  stroke-width: 1.5px;
+	}
+
+
+	.node rect {
+	  fill: #fff;
+	  stroke: blue;
+	  stroke-width: 1.5px;
+	}
+
+	.node {
+	  font: 10px sans-serif;
+	}
+
+	.link {
+	  fill: none;
+	  stroke: #ccc;
+	  stroke-width: 1.5px;
+	}
+
+	</style>
+</head>
+<body class="flexcenter">
+
+	 <div id="d3Phylogeny" style="height: 100%;"></div>
+     <div id="header">phylogeny</div>
+	<script src="http://d3js.org/d3.v3.min.js"></script>
+
+	<!-- Now we start messing with the flex object -->
+	<script type="text/javascript">
+//must know the children
+	        				// for(var l=0; l < artifactLinks.length; l++)
+	        				// {
+	        				// 	var pLink = artifactLinks[l];
+
+	        				// 	var src = pLink.source;
+	        				// 	var tgt = pLink.target;
+
+	        				// 	//this is the link between a parent and child
+	        				// 	var pNode = nodes[src];
+
+	        				// 	//the parent node
+	        				// 	if(!pNode)
+	        				// 	{
+	        				// 		//create it if it doesn't exist
+	        				// 		pNode = simpleNode(src);
+	        				// 		//note the object -- map from wid to objects
+	        				// 		nodes[src] = pNode;
+
+	        				// 		//save in full nodes
+	        				// 		fullNodes.push(pNode);
+	        				// 	}
+
+	        				// 	var childNode = nodes[tgt];
+
+	        				// 	if(!childNode)
+	        				// 	{
+	        				// 		//create node object
+	        				// 		childNode = simpleNode(tgt);
+	        				// 		nodes[tgt] = childNode;
+
+	        				// 		//save to full nodes
+	        				// 		fullNodes.push(childNode);
+	        				// 	}
+
+	        				// 	var childMap = pNode.childrenMap;
+
+	        				// 	if(!childMap[tgt])
+	        				// 	{
+	        				// 		//guaranteed to exist -- push it it
+	        				// 		pNode.children.push(childNode);
+	        				// 		childMap[tgt] = true;
+	        				// 	}
+	        				// }
+
+
+		window.onload = function() {
+
+			// d3.select(self.frameElement).style("height", height + "px");
+
+			//how we turn a genotype into a picture
+			var genoToPicture = require('geno-to-picture');
+
+			//for now, must match the win-save name 
+			var picArtName = "picArtifact";
+			var winsetup = require('win-setup');
+			var element = require('el.js');
+
+	    	var moduleJSON = 
+			{
+				"cppn-add" : require('cppn-additions'),
+				"win-phylogeny" : require("win-phylogeny"),
+				//win-data required for win-phylogeny
+				"win-data" : require("win-data"),
+				//winschema is required for win-neat -- which is required for the geno-to-picture helpers
+				"win-schema" : require("win-schema"),
+				"win-neat" : require("win-neat")
+			};
+
+			var testingLogLevel = 10;
+
+			var globalConfig = {
+				staticServer:  "http://localhost:8000",
+				server : "http://localhost",
+				port: 3000
+			};
+
+			var configurations = 
+			{
+				"global" : globalConfig,
+				"win-data" : {
+					logLevel : testingLogLevel
+				},
+				"win-phylogeny" : {
+					logLevel : testingLogLevel
+				},
+				"win-neat" : {
+					logLevel : testingLogLevel
+				}
+			};
+
+			var events = ["phylogeny:fullTreeOfArtifacts"];
+
+			winsetup(events, moduleJSON, configurations, function(err, backObject)
+			{
+				if(err)
+				{
+					console.error(err);
+					return;
+				}
+				//setup sends back this stuff:
+				// {logger: backLog, emitter: backEmit, backbone: backbone, qCall: qBackboneResponse};
+				var backbone = backbone;
+				var backLog = backObject.logger;
+				var backEmit = backObject.emitter;
+				var qCallBackbone = backObject.qCall;
+
+				var div = document.getElementById("d3Phylogeny");
+
+				var objSize = {width: 175, height: 175};
+
+				var flexOptions =  
+				{
+					title: "win-Picbreeder"
+					// mode: 'vertical' ,
+				};
+
+				var evoIDToData = {};
+				function getOrCreateData(eID, individual)
+				{
+					//return;
+					var dataURL = evoIDToData[eID];
+					if(!dataURL)
+					{
+						dataURL = genoToPicture(objSize, individual.genome);
+
+						//save this info for next time
+						evoIDToData[eID] = dataURL;
+					}
+					return dataURL;
+				}
+
+
+				// //individual being created
+				// eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
+
+				var uID, flex;
+
+				backLog("Finished Module Init! Ready for win communications");
+
+		    	//now we call asking for loading of seeds -- synchronous -- happens immediately (no callback)
+		        backEmit("phylogeny:fullTreeOfArtifacts", function(err, treeFunction)
+	        	{	
+	        		if(err)
+	        		{
+	        			console.error(err);
+	        			return;
+	        		}
+	        		//we got the tree info, this is dangerous, so we have an extra step for getting full artifacts
+	        		//no mis-writing code that fetches a full database
+	        		treeFunction(picArtName, "allplease", function(err, phyloTree)
+	        		{
+	        			if(err)
+	        				console.error(err);
+	        			else{
+	        				
+	        				//all done for now, need to display
+
+	        				var fullNames = phyloTree.nameTree;
+	        				var artifacts = phyloTree.artifacts;
+	        				var artifactLinks = phyloTree.links;
+
+	        				backLog("Tree names: ", fullNames);
+	        				backLog("Tree artifacts: ", artifacts);
+	        				backLog("Tree artifactLinks: ", artifactLinks);
+
+	        				var fullNodes = [];
+	        				var nodes = {};
+
+	        				var nameToWid = {};
+
+	        				for(var wid in fullNames)
+	        					nameToWid[fullNames[wid]] = wid;
+
+	        				//now we have wid -> name and name -> wid
+
+	        				function simpleNode(id)
+	        				{
+	        					return  {name: id, childrenMap:{}, children: [], size:10};
+	        				}
+
+	        				var root = {name: "root", children: []};
+
+	        				var rootCount = 0;
+	        				var maxLayer = 0;
+
+	        				var maxChildren = 1;
+
+	        				//look throught the names for all the clues we need
+	        				for(var wid in fullNames)
+	        				{
+	        					//this is the full name
+	        					var name = fullNames[wid];
+
+	        					//here we can pull the parents from the layer
+	        					var layerAndParents = name.split("_p_");
+	        					var layerName = layerAndParents[0];
+
+	        					//grab the layer
+	        					var layer = parseInt(layerName.split('-')[0]);
+	        					maxLayer = Math.max(layer,maxLayer);
+
+	        					var cNode = nodes[layerName];
+
+	        					if(!cNode)
+	        					{
+	        						cNode = simpleNode(layerName);
+	        						nodes[layerName] = cNode;
+	        						fullNodes.push(cNode);
+	        					}
+
+	        					//now check the parents -- add ourselves as child 
+	        					var allParents = layerAndParents[1];
+
+	        					if(!allParents){
+	        						//we're a root object
+	        						root.children.push(cNode);
+	        						rootCount++;
+	        					}
+        						else	
+	        					{
+	        						var parents = allParents.split('_');
+
+	        						for(var i=0; i < parents.length; i++)
+	        						{	
+	        							var parName = parents[i];
+
+	        							//we have the parent name, grab a potential node
+	        							var pNode = nodes[parName];
+
+										if(!pNode)
+										{
+			        						pNode = simpleNode(parName);
+			        						nodes[parName] = pNode;
+			        						fullNodes.push(pNode);
+		        						}
+
+		        						if(!pNode.childrenMap[layerName])
+		        						{
+		        							//keep track of all children nodes
+		        							pNode.children.push(cNode);
+		        							maxChildren = Math.max(pNode.children.length, maxChildren);
+		        							pNode.childrenMap[layerName] = true;
+		        						}
+	        						}
+	        					}
+	        				}
+
+	        				backLog("Try build nodes; ", root);
+
+							var width = maxChildren*objSize.width + maxLayer*objSize.width,
+							    height = maxLayer*400;
+
+							var tree = d3.layout.tree();
+
+							var linearX = d3.scale.linear()
+								.domain([0, width])
+								.range([0, width]);
+
+
+							var linearY = d3.scale.linear()
+								.domain([height, 0])
+								.range([height, 0]);
+
+
+							tree
+							    .size([width - 100, height - 250]);
+							    console.log("A tree????? : ", tree);
+
+
+							var svg = d3.select("#d3Phylogeny").append("svg")
+							    .attr("width", width)
+							    .attr("height", height)
+							  .append("g")
+							    .attr("transform", "translate(40,0)");
+
+
+
+							var diagonal = d3.svg.diagonal()
+								// .projection(function(d){
+								// 	if(d.childrenMap)
+								// 		return [d.x + objSize.width/2, d.y - objSize.height/2];
+								// 	else{
+								// 		console.log("Oproj : ", d);
+
+								// 		return [d.x, d.y];// - objSize.height/4];
+								// 	}
+								// })
+								// .source(function(d){})
+							    // .projection(function(d) { return [d.x, d.y]; });
+
+	        				var rootObject = rootCount == 1 ? root.children[0] : root;
+
+	        				var d3Nodes = tree.nodes(rootObject),
+      							d3Links = tree.links(d3Nodes);
+
+
+	        				 var link = svg.selectAll("path.link")
+							      .data(d3Links)
+							    .enter().append("path")
+							      .attr("class", "link")
+							      .attr("d", diagonal);
+
+							  var node = svg.selectAll("g.node")
+							      .data(d3Nodes)
+							    .enter().append("g")
+							      .attr("class", "node")
+							      .attr("transform", function(d) { 
+							      	// console.log("Y: ", d.y, " transform: ", linearY(d.y)); 
+							      	return "translate(" + (linearX(d.x) - objSize.width/2) + "," + linearY(d.y) + ")"; 
+							      })
+
+							  node.append("rect")
+							  	// .attr("x", function(d){ console.log("X: ", d); return d.x; })
+							  	.attr("width", objSize.width)
+							  	.attr("height", objSize.height)
+							      // .attr("r", 4.5);
+
+							  node.append("text")
+							      .attr("dx", function(d) { return d.children ? -8 : 8; })
+							      .attr("dy", 3)
+							      .attr("text-anchor", function(d) { return d.children ? "end" : "start"; })
+							      .text(function(d) { return d.name; });
+
+	        				for(var wid in fullNames)
+	        				{
+	        					var fullName = fullNames[wid]; 
+
+
+	        					var aObj = artifacts[wid];	
+
+	        					// var img = element('img', {id: fullName, src: getOrCreateData(wid, aObj)})
+	        					
+	        					//simple add for now!
+	        					// div.appendChild(img);
+	        				}
+	        			}
+	        		});
+	        	});
+		    });
+		}
+
+
+
+	
+	</script>
+
+
+
+
+</body>
+</html>
