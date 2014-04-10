@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset=utf-8 />
+	<title></title>
+	<link rel="stylesheet" type="text/css" media="screen" href="/build/build.css" />
+	<script type="text/javascript" src="/build/build.js"></script>
+
+</head>
+<body class="flexcenter">
+	<div id="buttons" style="display: inline-block;">
+		<div id="addChild" style="display: inline-block; margin: 5px;">Add Child</div>
+		<div id="removeChild" style="display: inline-block; margin: 5px;">Remove Random Child</div>
+
+		<div id="addPage" style="display: inline-block; margin: 5px;">Next Page</div>
+		<div id="backPage" style="display: inline-block; margin: 5px;">Back a Page</div>
+	</div>
+
+	<div id="flex" style="height:90%;"> </div>
+
+	<!-- Now we start messing with the flex object -->
+	<script type="text/javascript">
+
+ 		//this will automatically decode query string in to urlParams argument!
+        var urlParams;
+        (window.onpopstate = function () {
+            var match,
+                    pl     = /\+/g,  // Regex for replacing addition symbol with a space
+                    search = /([^&=]+)=?([^&]*)/g,
+                    decode = function (s) { return decodeURIComponent(s.replace(pl, " ")); },
+                    query  = window.location.search.substring(1);
+
+            urlParams = {};
+            while (match = search.exec(query))
+                urlParams[decode(match[1])] = decode(match[2]);
+        })();
+
+
+		window.onload = function() {
+
+			var genoToPicture = require('geno-to-picture');
+
+			//for now, must match the win-save name 
+			var picArtName = "picArtifact";
+
+
+			var traverse = require('optimuslime-traverse');
+
+			var winsetup = require('win-setup');
+
+	    	var moduleJSON = 
+			{
+				"cppn-add" : require('cppn-additions'),
+				"pbEncoding" : require('pbEncoding'),
+				"win-flexIEC" : require("win-flexIEC"),
+				"win-query" : require("win-query"),
+				"win-pub" : require("win-publish"),
+				"win-iec" : require("win-iec"),
+				"win-gen" : require("win-gen"),
+				"win-schema" : require("win-schema"),
+				"win-neat" : require("win-neat")
+			};
+
+			var testingLogLevel = 10;
+
+			var configurations = 
+			{
+				"global" : {
+					server : "http://localhost",
+					port: 3000
+				},
+				"win-neat" : {
+					options : {
+						initialMutationCount : 5, 
+						postMutationCount : 5
+					},
+					logLevel : testingLogLevel
+				},
+				"win-flexIEC" : {
+					logLevel : testingLogLevel
+				},
+				"win-publish" : {
+					logLevel : testingLogLevel
+				},
+				"pbEncoding" : {
+					logLevel : testingLogLevel
+				},
+				"win-iec" : {
+	                genomeType : picArtName
+	                //these options aren't relevant -- might change in the future -- these are for win-neat module
+					
+					,logLevel : testingLogLevel
+				},
+				"win-gen" : {
+					"encodings" : [
+						picArtName,
+						"NEATGenotype"
+					]
+					,validateParents : true
+					,validateOffspring : true
+					,logLevel : testingLogLevel
+				},
+				"win-schema" : {
+					multipleErrors : true
+					// ,logLevel : testingLogLevel
+				}
+			};
+
+
+			var events = ["ui:initializeDisplay", "ui:ready", "query:getArtifacts", "query:getSeeds"];
+
+			winsetup(events, moduleJSON, configurations, function(err, backObject)
+			{
+				if(err)
+				{
+					console.error(err);
+					return;
+				}
+				//setup sends back this stuff:
+				// {logger: backLog, emitter: backEmit, backbone: backbone, qCall: qBackboneResponse};
+				var backbone = backbone;
+				var backLog = backObject.logger;
+				var backEmit = backObject.emitter;
+				var qCallBackbone = backObject.qCall;
+
+
+				//before we setup the ui, we need to make a query -- either for a seed or for a 
+
+				// var seed1 = require('win-Picbreeder/seeds/seed1.js');
+
+				var seeds = [];//[seed1];
+				var maxSeeds = 1;
+				var eventQuery;
+				var p1, p2;
+
+				var isBranch = false;
+
+				if(urlParams["branch"])
+				{
+					isBranch = true;
+					//we know what wid we're looking for
+					eventQuery = "query:getArtifacts";
+					p1 = picArtName;
+					p2 = urlParams["branch"];
+				}
+				else
+				{
+					eventQuery = "query:getSeeds";
+					p1 = picArtName;
+					p2 = maxSeeds;
+				}
+
+				backEmit(eventQuery, p1, p2, function(err, res)
+				{
+					//if we're a branch, we pull parents from teh response
+					//otherwise, we pull parents from the seed response
+
+					// seeds = res;
+
+					seeds = [];
+					for(var key in res){
+
+						var s = res[key];
+						traverse(s).forEach(function(node)
+						{
+							//if we have a key = "_id" get rid of it
+							if(this.key == "_id" || this.key == "__v" || this.key == "creation")
+								this.remove();
+						})
+
+						seeds.push(s);
+					}
+
+					backLog.log("Sseeds", seeds);
+
+					var div = document.getElementById("flex");
+
+					var objSize = {width: 175, height: 175};
+
+					var parentSize = {width: objSize.width, height: objSize.height, columnMargin: 4}, 
+					evoSize = {width: objSize.width, height: objSize.height, rowMargin: 4, columnMargin: 4};
+
+					var flexOptions =  
+					{
+						parentOptions : {
+							objectSize: parentSize
+						},
+						evoOptions : 
+						{
+							objectSize: evoSize
+						}
+						// mode: 'vertical' ,
+					};
+
+					var evoIDToData = {};
+
+					function getOrCreateData(eID, individual)
+					{
+						//return;
+						var dataURL = evoIDToData[eID];
+						if(!dataURL)
+						{
+							dataURL = genoToPicture(objSize, individual.genome);
+
+							//save this info for next time
+							evoIDToData[eID] = dataURL;
+						}
+						return dataURL;
+					}
+
+
+					var uID, flex;
+					//for now we pass seed information to init display -- later, we'll move this to a more appropriate place 
+					//a module should have control over getting seeds (they are constant for a domain and hosted on the server)
+					qCallBackbone("ui:initializeDisplay", seeds, div, flexOptions)
+						.then(function(uiInfo)
+						{
+							//flex if we want to tap into any specific events
+							flex = uiInfo.ui;
+
+							//save our ui identifier for future ui calls
+							uID = uiInfo.uID;
+
+							//emitter lets us know the important stuff
+							var uiEmitter = uiInfo.emitter;
+
+							//parentSelected
+							//parentUnselected
+							//individualCreated
+							uiEmitter.on('parentSelected', function(eID, eDiv, parent, finished)
+							{
+								backLog("final: p select div: ", eID);
+
+								var dataURL = getOrCreateData(eID, parent);
+
+								//individual being created
+								eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
+
+								if(finished)
+									finished();
+							})
+							uiEmitter.on('individualCreated', function(eID, eDiv, individual, finished)
+							{
+
+								
+								var dataURL = getOrCreateData(eID, individual);
+
+								//individual being created
+								eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
+
+
+
+								// backLog("final: p createive indiv: ", eID, " div: ", eDiv, " indvi: ", individual, " fins: ", finished);
+								backLog("Individual: ", individual);
+
+								//all done!
+								if(finished)
+									finished();
+							});
+
+							//that's all folks!
+							uiEmitter.on('publishShown', function(eID, eDiv)
+							{
+								var dataURL = getOrCreateData(eID);
+
+								//individual being created
+								eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
+							});
+
+							//don't do nuffin, it's out of our control
+							uiEmitter.on('parentUnselected', function(eID)
+							{
+								backLog("UI tells us parent unselected: ", eID);
+							});
+						})
+						.then(function()
+						{
+							return qCallBackbone("ui:ready", uID);
+						})
+						.then(function()
+						{
+							//now we see what happened!
+							backLog("Finished ui ready state!");
+
+						}, function(err)
+						{
+							console.error(err);
+						})
+
+
+					document.getElementById('addPage').addEventListener('click', function (event) {
+						// backLog("Flex: ", flex);
+					    flex.evoFlex.nextPage();
+					});
+					document.getElementById('backPage').addEventListener('click', function (event) {
+					    flex.evoFlex.previousPage();
+					});
+
+
+				})
+
+			});
+      
+
+			// var removeRandom = function()
+			// {
+			// 	var keys = Object.keys(obj);
+			// 	var rmIx = Math.floor(Math.random()*keys.length);
+
+			// 	//jusst remove something random -- for testing purposes
+			// 	nf.parentFlex.removeElement(keys[rmIx]);
+			// }
+
+			//  document.getElementById('addChild').addEventListener('click', function (event) {
+			//     nf.parentFlex.addElement();
+			//  });
+
+ 		// 	document.getElementById('removeChild').addEventListener('click', function (event) {
+			//     removeRandom();
+			//  });
+
+			// var slide = nf.addObject("<div class=\"flexvcenter\" style=\"border: 1px solid black; height:100%;\">Empty mofo1</div>");
+			// var slide = nf.addObject("<div class=\"flexvcenter\" style=\"border: 1px solid black; height:100%;\">Empty mofo2</div>");
+			// var slide = nf.addObject("<div class=\"flexvcenter\" style=\"border: 1px solid black; height:100%;\">Empty mofo3</div>");
+			// nf.swiper.swipeTo(0);
+			// nf.addObject("<div class=\"\" style=\"border: 1px solid black; width=100%; height=100%;\">Empty mofo2</div>");
+			// nf.addObject("<div class=\"\" style=\"border: 1px solid black; \">Empty mofo3</div>");
+
+
+		}
+
+		
+
+
+
+	</script>
+
+
+
+
+</body>
+</html>

@@ -47,7 +47,7 @@ function winhome(backbone, globalConfig, localConfig)
 		else //make sure it exists
 			options = options || {};
 
-		var homeHolder = element('div.winhome');
+		var homeHolder = element('div.winhome.og-grid');
 
 		var title = options.title || "WIN Domain (customize with title option)"; 
 
@@ -89,13 +89,17 @@ function winhome(backbone, globalConfig, localConfig)
 
 		//now we add some buttons
 		var aImg = element('div', {style: trueElementSize, class: "border"});
-		var evoBut = element('div', {style: "", class: "homeElementButton border"}, "Branch");
-		var history = element('div', {style: "", class: "homeElementButton border"}, "Ancestors");
+		var evoBut = element('div', {style: "", class: "homeElementButton"}, "Branch");
+		// var history = element('div', {style: "", class: "homeElementButton border"}, "Ancestors");
 
 		//this is where the artifact stuff goes
-		var aElement = element('div', {style: fullWidthAndHeight, class: "border"}, [aImg, evoBut, history]); 
+		var aElement = element('a', {style: fullWidthAndHeight, class: "border"}, 
+			[aImg, 
+			evoBut
+			// , history
+			]); 
 
-		var simpleElement = element('div', {id:id, class: "home"}, [aElement]);
+		var simpleElement = element('li', {id:id, class: "home"}, [aElement]);
 
 
 
@@ -164,11 +168,13 @@ function winhome(backbone, globalConfig, localConfig)
 
 			console.log("Ready home query ret: ", categories);
 
+			var singleCatID;
 
 			for(var cat in categories)
 			{
+				singleCatID = cat + "-" + uID ;
 				//set up the category title section
-				var elWrapper = element('ul#' + cat + "-" + uID, {class: "thumbwrap"});
+				var elWrapper = element('ul#' + singleCatID + ".og-grid", {class: "thumbwrap"});
 
 				var catTitle = document.createElement('h2');
 					catTitle.innerHTML = cat;
@@ -190,11 +196,18 @@ function winhome(backbone, globalConfig, localConfig)
 					elWrapper.appendChild(elObj.full);
 
 					self.clickBranchButton(emit, wid, artifact, elObj.branch);
-					self.clickAncestorsButton(emit, wid, artifact, elObj.ancestors);
+					// self.clickAncestorsButton(emit, wid, artifact, elObj.ancestors);
 
 					self.emitElementCreation(emit, wid, artifact, elObj.artifactElement);
 				}
 			}
+
+			//only 1 grid right now
+			// var Grid = require('thumbnail-grid');
+
+			// var grid = new Grid(document.getElementById(singleCatID));
+			// grid.init();
+
 			if(finished)
 				finished();
 
