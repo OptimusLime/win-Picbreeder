@@ -1,14 +1,16 @@
 var express = require('express');
 
-
+var path = require('path');
 module.exports = pbServer;
 
 function pbServer()
 {
 	var app = express();
 
-	app.use("/build", express.static( __dirname + "/../build"));
-	app.use("/js", express.static( __dirname + "/../libs"));
+	console.log("Build located: ", path.resolve(__dirname, "../build"));
+
+	app.use("/build", express.static(path.resolve(__dirname, "../build")));
+	app.use("/js", express.static(path.resolve(__dirname, "../libs")));
 
 	app.get("/", function(req,res)
 	{
