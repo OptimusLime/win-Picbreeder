@@ -7106,7 +7106,7 @@ function winquery(backbone, globalConfig, localConfig)
 
   var baseWIN = function()
   {
-    return self.hostname + ":" + self.port + "/api";
+    return self.hostname + (self.port ?  ":" + self.port : "") + "/api";
   }
 
   self.getWIN = function(apiPath, queryObjects, resFunction)
