@@ -7289,7 +7289,7 @@ function winpublish(backbone, globalConfig, localConfig)
 
 	//we have logger and emitter, set up some of our functions
 
-	if(!globalConfig.server || !globalConfig.port)
+	if(!globalConfig.server)
 		throw new Error("Global configuration requires server location and port")
 
 	self.hostname = globalConfig.server;
@@ -7314,7 +7314,7 @@ function winpublish(backbone, globalConfig, localConfig)
 
 	var baseWIN = function()
 	{
-		return self.hostname + ":" + self.port + "/api";
+		return self.hostname + (self.port ? ":" + self.port : "") + "/api";
 	}
 
 	self.getWIN = function(apiPath, data, resFunction)
