@@ -7098,7 +7098,7 @@ function winquery(backbone, globalConfig, localConfig)
 
   //we have logger and emitter, set up some of our functions
 
-  if(!globalConfig.server || !globalConfig.port)
+  if(!globalConfig.server)// || !globalConfig.port)
     throw new Error("Global configuration requires server location and port")
 
   self.hostname = globalConfig.server;
