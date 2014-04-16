@@ -20438,9 +20438,12 @@ function winhome(backbone, globalConfig, localConfig)
 
 			tEl.appendChild(phyloLink);
 		}
+
+		var loading = element('div', "(images loading...)");
 		
 
 		homeHolder.appendChild(tEl);
+		homeHolder.appendChild(loading);
 		
 		var uID = emitterIDs++;
 		var uie = {uID: uID};
