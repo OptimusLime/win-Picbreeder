@@ -3,7 +3,21 @@
   -moz-box-sizing: border-box; -webkit-box-sizing: border-box; box-sizing: border-box;
  }
 
-
+.phyloLink
+{
+	display: inline-block;
+	font-weight: 700;
+	/*font-size: 16px;*/
+	/*color: #333;*/
+	text-decoration: none;
+	color: #900;
+	/*text-transform: uppercase;*/
+	/*letter-spacing: 2px;*/
+	padding: 10px 20px;
+	border: 3px solid #900;
+	margin: 10px 0 0;
+	outline: none;
+}
 
 .border
 {

@@ -64,7 +64,7 @@ function winhome(backbone, globalConfig, localConfig)
 		//if specified, link out to a new site!
 		if(phyloTitle){
 			var phyloLink = document.createElement('h3');
-			var link = element('a', {href: phyloTitle}, 'Click here to browse full phylogeny');
+			var link = element('a', {href: phyloTitle, class: "phyloLink"}, 'Browse full phylogeny here');
 			phyloLink.appendChild(link)
 
 			tEl.appendChild(phyloLink);
