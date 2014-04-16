@@ -51,10 +51,25 @@ function winhome(backbone, globalConfig, localConfig)
 
 		var title = options.title || "WIN Domain (customize with title option)"; 
 
+
 		var th2 = document.createElement('h1');
 		th2.innerHTML = title;
 
+	
+
 		var tEl = element('div', {style: "font-size: 2em;"}, th2);
+		
+		var phyloTitle = options.phylogenyLocation;
+
+		//if specified, link out to a new site!
+		if(phyloTitle){
+			var phyloLink = document.createElement('h3');
+			var link = element('a', {href: phyloTitle}, 'Click here to browse full phylogeny');
+			phyloLink.appendChild(link)
+
+			tEl.appendChild(phyloLink);
+		}
+		
 
 		homeHolder.appendChild(tEl);
 		
