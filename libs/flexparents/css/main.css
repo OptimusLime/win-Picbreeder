@@ -32,6 +32,7 @@
 	-webkit-flex-direction: column;
 	-moz-box-flex-direction: column;
 	/*-webkit-flex-wrap: wrap;*/
+	flex-direction: column;
 	display: flex;
 	align-items: center;
 	justify-content: center;

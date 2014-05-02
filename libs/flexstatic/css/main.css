@@ -40,6 +40,8 @@ body
 	-webkit-flex-wrap: wrap;
 	-moz-box-flex-direction: row;
 	-moz-box-flex-wrap: wrap;
+	flex-direction: row;
+	flex-wrap: row;
 	/*display: flex;*/
 	align-items: center;
 	justify-content: center;

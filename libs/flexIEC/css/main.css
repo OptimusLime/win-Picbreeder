@@ -57,6 +57,7 @@
 	/*display: -moz-box-flex;*/
 	-webkit-flex-direction: column;
 	-moz-box-flex-direction: column;
+	flex-direction: column;
 	/*-webkit-flex-wrap: wrap;*/
 	display: flex;
 	align-items: center;
