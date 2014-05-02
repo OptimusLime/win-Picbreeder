@@ -336,6 +336,8 @@ body
 	display: -webkit-flex;
 	-webkit-flex-direction: row;
 	-webkit-flex-wrap: wrap;
+	-moz-box-flex-direction: row;
+	-moz-box-flex-wrap: wrap;
 	/*display: flex;*/
 	align-items: center;
 	justify-content: center;
@@ -378,6 +380,7 @@ body
 .parentflex {
 	display: -webkit-flex;
 	-webkit-flex-direction: column;
+	-moz-box-flex-direction: column;
 	/*-webkit-flex-wrap: wrap;*/
 	display: flex;
 	align-items: center;
@@ -687,6 +690,7 @@ input
 }
 .innerObject
 {
+	-moz-box-flex: 1 1 auto;
 	-webkit-flex: 1 1 auto;
     /*overflow-y: auto;*/
     min-height: 0px;
@@ -723,8 +727,10 @@ input
 }
 
 .iecFlex {
-	display: -webkit-flex;
+	/*display: -webkit-flex;*/
+	/*display: -moz-box-flex;*/
 	-webkit-flex-direction: column;
+	-moz-box-flex-direction: column;
 	/*-webkit-flex-wrap: wrap;*/
 	display: flex;
 	align-items: center;
@@ -740,6 +746,7 @@ input
 {
 	display: -webkit-flex;
     -webkit-flex-direction: column;
+    -moz-box-flex-direction: column;
     height: 100%;
 }
 .flexIEC 

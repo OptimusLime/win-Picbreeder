@@ -38,6 +38,8 @@ body
 	display: -webkit-flex;
 	-webkit-flex-direction: row;
 	-webkit-flex-wrap: wrap;
+	-moz-box-flex-direction: row;
+	-moz-box-flex-wrap: wrap;
 	/*display: flex;*/
 	align-items: center;
 	justify-content: center;

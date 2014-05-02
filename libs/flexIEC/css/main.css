@@ -16,6 +16,7 @@
 }
 .innerObject
 {
+	-moz-box-flex: 1 1 auto;
 	-webkit-flex: 1 1 auto;
     /*overflow-y: auto;*/
     min-height: 0px;
@@ -52,8 +53,10 @@
 }
 
 .iecFlex {
-	display: -webkit-flex;
+	/*display: -webkit-flex;*/
+	/*display: -moz-box-flex;*/
 	-webkit-flex-direction: column;
+	-moz-box-flex-direction: column;
 	/*-webkit-flex-wrap: wrap;*/
 	display: flex;
 	align-items: center;
@@ -69,6 +72,7 @@
 {
 	display: -webkit-flex;
     -webkit-flex-direction: column;
+    -moz-box-flex-direction: column;
     height: 100%;
 }
 .flexIEC 

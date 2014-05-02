@@ -30,6 +30,7 @@
 .parentflex {
 	display: -webkit-flex;
 	-webkit-flex-direction: column;
+	-moz-box-flex-direction: column;
 	/*-webkit-flex-wrap: wrap;*/
 	display: flex;
 	align-items: center;
