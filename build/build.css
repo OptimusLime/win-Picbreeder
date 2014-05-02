@@ -751,6 +751,7 @@ input
 	display: -webkit-flex;
     -webkit-flex-direction: column;
     -moz-box-flex-direction: column;
+    flex-direction: column;
     height: 100%;
 }
 .flexIEC 
