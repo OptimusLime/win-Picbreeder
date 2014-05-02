@@ -42,7 +42,7 @@ body
 	-moz-box-flex-wrap: wrap;
 	flex-direction: row;
 	flex-wrap: wrap;
-	/*display: flex;*/
+	display: flex;
 	align-items: center;
 	justify-content: center;
 }
