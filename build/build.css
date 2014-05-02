@@ -339,7 +339,7 @@ body
 	-moz-box-flex-direction: row;
 	-moz-box-flex-wrap: wrap;
 	flex-direction: row;
-	flex-wrap: row;
+	flex-wrap: wrap;
 	/*display: flex;*/
 	align-items: center;
 	justify-content: center;
