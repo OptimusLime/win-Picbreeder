@@ -185,14 +185,17 @@
 			
 		function copyRectangle(wid, image, rect)
 		{
-			var dataURL = getOrCreateData(wid);
-			image.setAttribute("width", rect.getAttribute("width"));
-			image.setAttribute("height", rect.getAttribute("height"));
-			image.setAttribute("x", rect.getAttribute("x"));
-			image.setAttribute("y", rect.getAttribute("y"));
-			image.setAttribute("rx", rect.getAttribute("rx"));
-			image.setAttribute("ry", rect.getAttribute("ry"));
-			image.setAttribute("xlink:href", dataURL);
+			getOrCreateData(wid, function(dataURL)
+			{
+				image.setAttribute("width", rect.getAttribute("width"));
+				image.setAttribute("height", rect.getAttribute("height"));
+				image.setAttribute("x", rect.getAttribute("x"));
+				image.setAttribute("y", rect.getAttribute("y"));
+				image.setAttribute("rx", rect.getAttribute("rx"));
+				image.setAttribute("ry", rect.getAttribute("ry"));
+				image.setAttribute("xlink:href", dataURL);
+			});
+			
 		}
 
 
@@ -294,6 +297,13 @@
 			//how we turn a genotype into a picture
 			var genoToPicture = require('geno-to-picture');
 
+			var WorkerQueue = require('webworker-queue');
+
+			var totalWorkers = 8;
+			var queue = new WorkerQueue("/js/cppnWorkerActivation.js", totalWorkers);
+			var winneat = require('win-neat');
+
+
 			//for now, must match the win-save name 
 			var picArtName = "picArtifact";
 			var winsetup = require('win-setup');
@@ -358,23 +368,57 @@
 				var evoIDToData = {};
 
 				var singledata;
-				getOrCreateData = function(eID, individual)
+
+				getOrCreateData = function(eID, individual, finished)
 				{
-					// if(!singledata)
-					// {
-					// 	singledata = genoToPicture(objSize, individual.genome);
-					// }
-					// return singledata;
+					//we only sent in an ID and a callback -- no individual
+					if(typeof individual == "function")
+					{
+						finished = individual;
+						individual = undefined;
+					}
 					//return;
 					var dataURL = evoIDToData[eID];
 					if(!dataURL)
 					{
-						dataURL = genoToPicture(objSize, individual.genome);
+						//get our genome
+						var ng = winneat.genotypeFromJSON(individual.genome);
 
-						//save this info for next time
-						evoIDToData[eID] = dataURL;
+						//cppn decodeing
+						var cppn = ng.networkDecode();
+
+						//turn it into a function
+    					var functionObject = cppn.createPureCPPNFunctions();
+
+    					//job description huzzah
+						var jobData = {
+							wid: individual.wid,
+							width: objSize.width, 
+							height: objSize.height,
+							nodeOrder: functionObject.nodeOrder, 
+							stringFunctions: functionObject.stringFunctions,
+							biasCount: 1, //one bias node in neat genome -- ddoy
+							outputCount: ng.outputNodeCount //output count
+						};
+
+
+						// onmessage({data: jobData});
+
+						//queue up this task with our webworkers, and get a callback with the dataURL
+						queue.queueJob(jobData, function(dataObject)
+						{
+							//save this info for next time
+							evoIDToData[eID] = dataObject.dataURL;
+
+							//all done
+							finished(dataObject.dataURL);
+						});
 					}
-					return dataURL;
+					else
+					{
+						//all done!
+						finished(dataURL);
+					}
 				}
 
 
@@ -483,33 +527,54 @@
 							// var quit = false;
 
 
+							function wrapGetDataCall(wid, artifact, imgHolder)
+							{
+								getOrCreateData(wid, artifact, function(dataURL)
+								{
+									//set the inner image
+									imgHolder.innerHTML = "<img src=\"" + dataURL + "\" ></img>";
+
+									//woah this is nuts
+	        						var rHolder = imgHolder.parentNode.parentNode.parentNode.parentNode;
+
+	        						var image = document.createElement('image');
+		        					var rect = rHolder.firstChild;
+
+	        						copyRectangle(wid, image, rect);
+		        					
+		        					rHolder.insertBefore(image, rect);
+
+	        						matchRectangles[wid] = {rect: rect, image: image};
+
+								});
+							}
+
 	        				//now lets draw in the div objects
 	        				for(var wid in artifacts)
 	        				{
 	        					var imgHolder = document.querySelector('#' + wid);
+        						wrapGetDataCall(wid, artifacts[wid], imgHolder);
 
-	        					//woah this is nuts
-	        					var rHolder = imgHolder.parentNode.parentNode.parentNode.parentNode;//.firstChild;
+	        					// //woah this is nuts
+	        					// var rHolder = imgHolder.parentNode.parentNode.parentNode.parentNode;//.firstChild;
 
-	        					console.log(rect);
+	        					// console.log(rect);
 
-	        					// <image width="100" height="100" xlink:href="data:image/png;base64,...">
+	        					// // <image width="100" height="100" xlink:href="data:image/png;base64,...">
 
-	        					// var dataURL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==";
+	        					// // var dataURL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==";
+
+	        					// //lets add an object to rect 
+	        					// var image = document.createElement('image');
+	        					// var rect = rHolder.firstChild;
+
+        						// copyRectangle(wid, image, rect);
 	        					
-        						var dataURL = getOrCreateData(wid, artifacts[wid]);
+	        					// rHolder.insertBefore(image, rect);
 
+        						// matchRectangles[wid] = {rect: rect, image: image};
 
-	        					//lets add an object to rect 
-	        					var image = document.createElement('image');
-
-	        					var rect = rHolder.firstChild;
-
-        						copyRectangle(wid, image, rect);
-	        					
-	        					rHolder.insertBefore(image, rect);
-
-        						matchRectangles[wid] = {rect: rect, image: image};
+        						//this will handle creating the inner imagery
 
 	        					// styleString += ".node rect" //+ wid 
 	        					// 	+ "\n{\n" 
@@ -521,7 +586,7 @@
 								// break;
 	        					// var img = document.createElement('img');
 	        					// imgHolder.src = dataURL;
-	        					imgHolder.innerHTML = "<img src=\"" + dataURL + "\" ></img>";
+	        					
 	        					// img.src = dataURL;
 	        					// imgHolder.appendChild(img);
 	        				}
