@@ -6,6 +6,9 @@
 	<link rel="stylesheet" type="text/css" media="screen" href="/apps/win-Picbreeder/build/build.css" />
 	<script type="text/javascript" src="/apps/win-Picbreeder/build/build.js"></script>
 	<script type="text/javascript" src="/apps/win-Picbreeder/js/modernizr.custom.js"></script>
+	
+	<script type="text/javascript" src="/apps/win-Picbreeder/js/cppnWorkerActivation.js"></script>
+
 
 </head>
 <body class="flexcenter">
@@ -40,12 +43,21 @@
 		window.onload = function() {
 
 
+			//grab our webworker, we should start 7 workers
+			var WorkerQueue = require('webworker-queue');
+
+			var totalWorkers = 8;
+			var queue = new WorkerQueue("/js/cppnWorkerActivation.js", totalWorkers);
+
 			//how we turn a genotype into a picture
 			var genoToPicture = require('geno-to-picture');
 
 			//for now, must match the win-save name 
 			var picArtName = "picArtifact";
 			var winsetup = require('win-setup');
+
+			var winneat = require('win-neat');
+
 
 	    	var moduleJSON = 
 			{
@@ -54,7 +66,7 @@
 				"win-home-ui" : require("win-home-ui"),
 				//winschema is required for win-neat -- which is required for the geno-to-picture helpers
 				"win-schema" : require("win-schema"),
-				"win-neat" : require("win-neat")
+				"win-neat" : winneat
 			};
 
 			var testingLogLevel = 10;
@@ -112,18 +124,49 @@
 				
 				var evoIDToData = {};
 
-				function getOrCreateData(eID, individual)
+				function getOrCreateData(eID, individual, finished)
 				{
 					//return;
 					var dataURL = evoIDToData[eID];
 					if(!dataURL)
 					{
-						dataURL = genoToPicture(objSize, individual.genome);
+						//get our genome
+						var ng = winneat.genotypeFromJSON(individual.genome);
 
-						//save this info for next time
-						evoIDToData[eID] = dataURL;
+						//cppn decodeing
+						var cppn = ng.networkDecode();
+
+						//turn it into a function
+    					var functionObject = cppn.createPureCPPNFunctions();
+
+    					//job description huzzah
+						var jobData = {
+							wid: individual.wid,
+							width: objSize.width, 
+							height: objSize.height,
+							nodeOrder: functionObject.nodeOrder, 
+							stringFunctions: functionObject.stringFunctions,
+							biasCount: 1, //one bias node in neat genome -- ddoy
+							outputCount: ng.outputNodeCount //output count
+						};
+
+
+						// onmessage({data: jobData});
+
+						//queue up this task with our webworkers, and get a callback with the dataURL
+						queue.queueJob(jobData, function(dataObject)
+						{
+							//save this info for next time
+							evoIDToData[eID] = dataObject.dataURL;
+
+							//all done
+							finished(dataObject.dataURL);
+
+						});
 					}
-					return dataURL;
+
+					//all done!
+					finished(dataURL);
 				}
 
 
@@ -148,18 +191,20 @@
 						uiEmitter.on('elementCreated', function(wid, artifact, eDiv, finished)
 						{
 							
-							var dataURL = getOrCreateData(wid, artifact);
+							getOrCreateData(wid, artifact, function(dataURL)
+							{
+								//individual being created
+								eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
 
-							//individual being created
-							eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
+								// backLog("final: p createive indiv: ", eID, " div: ", eDiv, " indvi: ", individual, " fins: ", finished);
+								backLog("Individual: ", artifact);
 
+								//all done!
+								if(finished)
+									finished();
 
-							// backLog("final: p createive indiv: ", eID, " div: ", eDiv, " indvi: ", individual, " fins: ", finished);
-							backLog("Individual: ", artifact);
-
-							//all done!
-							if(finished)
-								finished();
+							});
+							
 						});
 
 						uiEmitter.on('artifactBranch', function(wid, artifact)

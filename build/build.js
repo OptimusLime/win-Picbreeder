@@ -199,6 +199,280 @@ require.relative = function(parent) {
 
   return localRequire;
 };
+require.register("component-emitter/index.js", function(exports, require, module){
+
+/**
+ * Expose `Emitter`.
+ */
+
+module.exports = Emitter;
+
+/**
+ * Initialize a new `Emitter`.
+ *
+ * @api public
+ */
+
+function Emitter(obj) {
+  if (obj) return mixin(obj);
+};
+
+/**
+ * Mixin the emitter properties.
+ *
+ * @param {Object} obj
+ * @return {Object}
+ * @api private
+ */
+
+function mixin(obj) {
+  for (var key in Emitter.prototype) {
+    obj[key] = Emitter.prototype[key];
+  }
+  return obj;
+}
+
+/**
+ * Listen on the given `event` with `fn`.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.on =
+Emitter.prototype.addEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+  (this._callbacks[event] = this._callbacks[event] || [])
+    .push(fn);
+  return this;
+};
+
+/**
+ * Adds an `event` listener that will be invoked a single
+ * time then automatically removed.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.once = function(event, fn){
+  var self = this;
+  this._callbacks = this._callbacks || {};
+
+  function on() {
+    self.off(event, on);
+    fn.apply(this, arguments);
+  }
+
+  on.fn = fn;
+  this.on(event, on);
+  return this;
+};
+
+/**
+ * Remove the given callback for `event` or all
+ * registered callbacks.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.off =
+Emitter.prototype.removeListener =
+Emitter.prototype.removeAllListeners =
+Emitter.prototype.removeEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+
+  // all
+  if (0 == arguments.length) {
+    this._callbacks = {};
+    return this;
+  }
+
+  // specific event
+  var callbacks = this._callbacks[event];
+  if (!callbacks) return this;
+
+  // remove all handlers
+  if (1 == arguments.length) {
+    delete this._callbacks[event];
+    return this;
+  }
+
+  // remove specific handler
+  var cb;
+  for (var i = 0; i < callbacks.length; i++) {
+    cb = callbacks[i];
+    if (cb === fn || cb.fn === fn) {
+      callbacks.splice(i, 1);
+      break;
+    }
+  }
+  return this;
+};
+
+/**
+ * Emit `event` with the given args.
+ *
+ * @param {String} event
+ * @param {Mixed} ...
+ * @return {Emitter}
+ */
+
+Emitter.prototype.emit = function(event){
+  this._callbacks = this._callbacks || {};
+  var args = [].slice.call(arguments, 1)
+    , callbacks = this._callbacks[event];
+
+  if (callbacks) {
+    callbacks = callbacks.slice(0);
+    for (var i = 0, len = callbacks.length; i < len; ++i) {
+      callbacks[i].apply(this, args);
+    }
+  }
+
+  return this;
+};
+
+/**
+ * Return array of callbacks for `event`.
+ *
+ * @param {String} event
+ * @return {Array}
+ * @api public
+ */
+
+Emitter.prototype.listeners = function(event){
+  this._callbacks = this._callbacks || {};
+  return this._callbacks[event] || [];
+};
+
+/**
+ * Check if this emitter has `event` handlers.
+ *
+ * @param {String} event
+ * @return {Boolean}
+ * @api public
+ */
+
+Emitter.prototype.hasListeners = function(event){
+  return !! this.listeners(event).length;
+};
+
+});
+require.register("component-worker/index.js", function(exports, require, module){
+
+/**
+ * Module dependencies.
+ */
+
+var Emitter = require('emitter');
+var WebWorker = window.Worker;
+
+/**
+ * Expose `Worker`.
+ */
+
+module.exports = Worker;
+
+/**
+ * Initialize a new `Worker` with `script`.
+ *
+ * @param {String} script
+ * @api public
+ */
+
+function Worker(script) {
+  var self = this;
+  this.ids = 0;
+  this.script = script;
+  this.worker = new WebWorker(script);
+  this.worker.addEventListener('message', this.onmessage.bind(this));
+  this.worker.addEventListener('error', this.onerror.bind(this));
+}
+
+/**
+ * Mixin emitter.
+ */
+
+Emitter(Worker.prototype);
+
+/**
+ * Handle messages.
+ */
+
+Worker.prototype.onmessage = function(e){
+  this.emit('message', e.data, e);
+};
+
+/**
+ * Handle errors.
+ */
+
+Worker.prototype.onerror = function(e){
+  var err = new Error(e.message);
+  err.event = e;
+  this.emit('error', err);
+};
+
+/**
+ * Terminate the worker.
+ */
+
+Worker.prototype.close = function(){
+  this.worker.terminate();
+};
+
+/**
+ * Send a `msg` with optional callback `fn`.
+ *
+ * TODO: allow passing of transferrables
+ *
+ * @param {Mixed} msg
+ * @param {Function} [fn]
+ * @api public
+ */
+
+Worker.prototype.send = function(msg, fn){
+  if (fn) this.request(msg, fn);
+  this.worker.postMessage(msg);
+};
+
+/**
+ * Send a `msg` as a request with `fn`.
+ *
+ * @param {Mixed} msg
+ * @param {Function} fn
+ * @param {Array} [transferables]
+ * @api public
+ */
+
+Worker.prototype.request = function(msg, fn, transferables){
+  var self = this;
+  var id = ++this.ids;
+
+  // req
+  msg.id = id;
+  this.worker.postMessage(msg, transferables);
+
+  // rep
+  this.on('message', onmessage);
+
+  function onmessage(msg) {
+    if (id != msg.id) return;
+    self.off('message', onmessage);
+    delete msg.id;
+    fn(msg);
+  }
+};
+
+});
 require.register("desandro-eventie/eventie.js", function(exports, require, module){
 /*!
  * eventie v1.0.5
@@ -761,7 +1035,7 @@ require.register("wolfy87-eventemitter/EventEmitter.js", function(exports, requi
 });
 require.register("desandro-imagesloaded/imagesloaded.js", function(exports, require, module){
 /*!
- * imagesLoaded v3.1.4
+ * imagesLoaded v3.1.6
  * JavaScript is all like "You images are done yet or what?"
  * MIT License
  */
@@ -899,6 +1173,11 @@ function makeArray( obj ) {
         this.addImage( elem );
       }
       // find children
+      // no non-element nodes, #143
+      var nodeType = elem.nodeType;
+      if ( !nodeType || !( nodeType === 1 || nodeType === 9 || nodeType === 11 ) ) {
+        continue;
+      }
       var childElems = elem.querySelectorAll('img');
       // concat childElems to filterFound array
       for ( var j=0, jLen = childElems.length; j < jLen; j++ ) {
@@ -3202,14 +3481,6 @@ function array(obj, fn, ctx) {
 }
 
 });
-require.register("visionmedia-debug/index.js", function(exports, require, module){
-if ('undefined' == typeof window) {
-  module.exports = require('./lib/debug');
-} else {
-  module.exports = require('./debug');
-}
-
-});
 require.register("visionmedia-debug/debug.js", function(exports, require, module){
 
 /**
@@ -4185,173 +4456,6 @@ function computed(el, prop, precomputed) {
   // IE returns zIndex value as an integer.
   return undefined === ret ? ret : ret + '';
 }
-
-});
-require.register("component-emitter/index.js", function(exports, require, module){
-
-/**
- * Expose `Emitter`.
- */
-
-module.exports = Emitter;
-
-/**
- * Initialize a new `Emitter`.
- *
- * @api public
- */
-
-function Emitter(obj) {
-  if (obj) return mixin(obj);
-};
-
-/**
- * Mixin the emitter properties.
- *
- * @param {Object} obj
- * @return {Object}
- * @api private
- */
-
-function mixin(obj) {
-  for (var key in Emitter.prototype) {
-    obj[key] = Emitter.prototype[key];
-  }
-  return obj;
-}
-
-/**
- * Listen on the given `event` with `fn`.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.on =
-Emitter.prototype.addEventListener = function(event, fn){
-  this._callbacks = this._callbacks || {};
-  (this._callbacks[event] = this._callbacks[event] || [])
-    .push(fn);
-  return this;
-};
-
-/**
- * Adds an `event` listener that will be invoked a single
- * time then automatically removed.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.once = function(event, fn){
-  var self = this;
-  this._callbacks = this._callbacks || {};
-
-  function on() {
-    self.off(event, on);
-    fn.apply(this, arguments);
-  }
-
-  on.fn = fn;
-  this.on(event, on);
-  return this;
-};
-
-/**
- * Remove the given callback for `event` or all
- * registered callbacks.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.off =
-Emitter.prototype.removeListener =
-Emitter.prototype.removeAllListeners =
-Emitter.prototype.removeEventListener = function(event, fn){
-  this._callbacks = this._callbacks || {};
-
-  // all
-  if (0 == arguments.length) {
-    this._callbacks = {};
-    return this;
-  }
-
-  // specific event
-  var callbacks = this._callbacks[event];
-  if (!callbacks) return this;
-
-  // remove all handlers
-  if (1 == arguments.length) {
-    delete this._callbacks[event];
-    return this;
-  }
-
-  // remove specific handler
-  var cb;
-  for (var i = 0; i < callbacks.length; i++) {
-    cb = callbacks[i];
-    if (cb === fn || cb.fn === fn) {
-      callbacks.splice(i, 1);
-      break;
-    }
-  }
-  return this;
-};
-
-/**
- * Emit `event` with the given args.
- *
- * @param {String} event
- * @param {Mixed} ...
- * @return {Emitter}
- */
-
-Emitter.prototype.emit = function(event){
-  this._callbacks = this._callbacks || {};
-  var args = [].slice.call(arguments, 1)
-    , callbacks = this._callbacks[event];
-
-  if (callbacks) {
-    callbacks = callbacks.slice(0);
-    for (var i = 0, len = callbacks.length; i < len; ++i) {
-      callbacks[i].apply(this, args);
-    }
-  }
-
-  return this;
-};
-
-/**
- * Return array of callbacks for `event`.
- *
- * @param {String} event
- * @return {Array}
- * @api public
- */
-
-Emitter.prototype.listeners = function(event){
-  this._callbacks = this._callbacks || {};
-  return this._callbacks[event] || [];
-};
-
-/**
- * Check if this emitter has `event` handlers.
- *
- * @param {String} event
- * @return {Boolean}
- * @api public
- */
-
-Emitter.prototype.hasListeners = function(event){
-  return !! this.listeners(event).length;
-};
 
 });
 require.register("component-indexof/index.js", function(exports, require, module){
@@ -6484,13 +6588,13 @@ Response.prototype.setStatusProperties = function(status){
 Response.prototype.toError = function(){
   var req = this.req;
   var method = req.method;
-  var path = req.path;
+  var url = req.url;
 
-  var msg = 'cannot ' + method + ' ' + path + ' (' + this.status + ')';
+  var msg = 'cannot ' + method + ' ' + url + ' (' + this.status + ')';
   var err = new Error(msg);
   err.status = this.status;
   err.method = method;
-  err.path = path;
+  err.url = url;
 
   return err;
 };
@@ -6713,6 +6817,51 @@ Request.prototype.query = function(val){
 };
 
 /**
+ * Write the field `name` and `val` for "multipart/form-data"
+ * request bodies.
+ *
+ * ``` js
+ * request.post('/upload')
+ *   .field('foo', 'bar')
+ *   .end(callback);
+ * ```
+ *
+ * @param {String} name
+ * @param {String|Blob|File} val
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.field = function(name, val){
+  if (!this._formData) this._formData = new FormData();
+  this._formData.append(name, val);
+  return this;
+};
+
+/**
+ * Queue the given `file` as an attachment to the specified `field`,
+ * with optional `filename`.
+ *
+ * ``` js
+ * request.post('/upload')
+ *   .attach(new Blob(['<a id="a"><b id="b">hey!</b></a>'], { type: "text/html"}))
+ *   .end(callback);
+ * ```
+ *
+ * @param {String} field
+ * @param {Blob|File} file
+ * @param {String} filename
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.attach = function(field, file, filename){
+  if (!this._formData) this._formData = new FormData();
+  this._formData.append(field, file, filename);
+  return this;
+};
+
+/**
  * Send `data`, defaulting the `.type()` to "json" when
  * an object is given.
  *
@@ -6862,7 +7011,7 @@ Request.prototype.end = function(fn){
   var xhr = this.xhr = getXHR();
   var query = this._query.join('&');
   var timeout = this._timeout;
-  var data = this._data;
+  var data = this._formData || this._data;
 
   // store callback
   this._callback = fn || noop;
@@ -16005,8 +16154,18 @@ This code is released into the "public domain" by its author(s).  Anybody may us
 
 If you find a bug or make an improvement, it would be courteous to let the author know, but it is not compulsory.
 */
-(function (global) {
-'use strict';
+(function (global, factory) {
+  if (typeof define === 'function' && define.amd) {
+    // AMD. Register as an anonymous module.
+    define([], factory);
+  } else if (typeof module !== 'undefined' && module.exports){
+    // CommonJS. Define export.
+    module.exports = factory();
+  } else {
+    // Browser globals
+    global.tv4 = factory();
+  }
+}(this, function () {
 
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys?redirectlocale=en-US&redirectslug=JavaScript%2FReference%2FGlobal_Objects%2FObject%2Fkeys
 if (!Object.keys) {
@@ -16448,6 +16607,9 @@ ValidatorContext.prototype.validateFormat = function (data, schema) {
 };
 ValidatorContext.prototype.validateDefinedKeywords = function (data, schema) {
 	for (var key in this.definedKeywords) {
+		if (typeof schema[key] === 'undefined') {
+			continue;
+		}
 		var validationFunctions = this.definedKeywords[key];
 		for (var i = 0; i < validationFunctions.length; i++) {
 			var func = validationFunctions[i];
@@ -17368,15 +17530,9 @@ tv4.addLanguage('en-gb', ErrorMessagesDefault);
 //legacy property
 tv4.tv4 = tv4;
 
-if (typeof module !== 'undefined' && module.exports){
-	module.exports = tv4;
-}
-else {
-	global.tv4 = tv4;
-}
+return tv4; // used by _header.js to globalise.
 
-})(this);
-
+}));
 });
 require.register("optimuslime-win-schema/lib/addSchema.js", function(exports, require, module){
 //pull in traverse object for this guy
@@ -20606,6 +20762,158 @@ function winhome(backbone, globalConfig, localConfig)
 
 
 
+
+});
+require.register("webworker-queue/webworker-queue.js", function(exports, require, module){
+
+var WebWorkerClass = require('worker');
+
+module.exports = webworkerqueue;
+
+function webworkerqueue(scriptName, workerCount)
+{ 
+    var self = this;
+
+    self.nextWorker = 0;
+    
+    //queue to pull from 
+    self.taskQueue = [];
+    self.taskCallbacks = {};
+
+    //store the web workers
+    self.workers = [];
+
+    //how many workers available
+    self.availableWorkers = workerCount;
+
+    //note who is in use
+    self.inUseWorkers = {};
+    
+    //and the full count of workers
+    self.totalWorkers = workerCount;
+
+    for(var i=0; i < workerCount; i++){
+
+        var webworker = new WebWorkerClass(scriptName);
+
+        //create a new worker id (simply the index will do)
+        var workerID = i;
+
+        //label our workers
+        webworker.workerID = workerID;
+
+        //create a webworker message callback unique for this worker
+        //webworker in this case is not a raw webworker, but an emitter object -- so we attach to the message object
+        webworker.on('message', uniqueWorkerCallback(workerID));
+
+        //store the worker inside here
+        self.workers.push(webworker);
+    }
+
+
+    function uniqueWorkerCallback(workerID)
+    {
+        return function(data){
+            //simply pass on the message with the tagged worker
+            workerMessage(workerID, data);
+        }
+    }
+
+    function getNextAvailableWorker()
+    {
+        //none available, return null
+        if(self.availableWorkers == 0)
+            return;
+
+        //otherwise, we know someone is available
+        setNextAvailableIx();
+
+        //grab the next worker available
+        var worker = self.workers[self.nextWorker];
+
+        //note that it's now in use
+        self.inUseWorkers[self.nextWorker] = true;
+
+        //less workers available
+        self.availableWorkers--;
+
+        //send back the worker
+        return worker;
+    }
+
+    function setNextAvailableIx()
+    {
+        for(var i=0; i < self.totalWorkers; i++)
+        {
+            //check if it's in use
+            if(!self.inUseWorkers[i])
+            {
+                self.nextWorker = i;
+                break;
+            }
+        }
+    }
+
+    //this function takes a workerID and a data object -- called from the worker
+    function workerMessage(workerID, data)
+    {
+        //we got our message, we pass it for callback
+
+        //we know what workerID, so pull the associated callback
+        var cb = self.taskCallbacks[workerID];
+
+        //now remove all things associated with the task
+        delete self.taskCallbacks[workerID];
+
+        //free the worker
+        delete self.inUseWorkers[workerID];
+
+        //now on the market :)
+        self.availableWorkers++;
+
+        //prepare the callback -- if it exists
+        if(cb)
+        {
+            //send the data back, pure and simple
+            cb(data);
+        }
+
+        //now, do we have any queue events waiting?
+        if(self.taskQueue.length > 0)
+        {
+            //now we need to process the task
+            var taskObject = self.taskQueue.shift();
+
+            //okay, queue it up! -- this should work immediately becuase we just freed a worker
+            self.queueJob(taskObject.data, taskObject.callback);
+        }
+    }
+
+
+    self.queueJob = function(data, callback)
+    {
+
+        //if we have any available workers, just assign it directly, with a callback stored
+        var worker = getNextAvailableWorker();
+
+        if(worker)
+        {
+            //we have a worker to issue commands to now
+            //this is the callback we engage once the message comes back
+            self.taskCallbacks[worker.workerID] = callback;
+
+            //send the data now, thanks -- we'll handle callback in workerMessage function
+            worker.send(data);
+        }
+        else
+        {   
+            //otherwise, we need to add the item to the queue
+            self.taskQueue.push({data: data, callback: callback});
+            //the queue is cleared when the other workers return from their functions
+        }
+    }
+
+}
 
 });
 require.register("geno-to-picture/geno-to-picture.js", function(exports, require, module){
@@ -24692,6 +25000,8 @@ module.exports = {
 
 
 
+
+
 require.register("segmentio-overlay/lib/index.html", function(exports, require, module){
 module.exports = '<div class="Overlay hidden"></div>';
 });
@@ -24704,6 +25014,12 @@ module.exports = '<div class="Overlay hidden"></div>';
 require.register("segmentio-modal/lib/index.html", function(exports, require, module){
 module.exports = '<div class="Modal hidden" effect="toggle"></div>';
 });
+require.alias("component-worker/index.js", "win-Picbreeder/deps/worker/index.js");
+require.alias("component-worker/index.js", "win-Picbreeder/deps/worker/index.js");
+require.alias("component-worker/index.js", "worker/index.js");
+require.alias("component-emitter/index.js", "component-worker/deps/emitter/index.js");
+
+require.alias("component-worker/index.js", "component-worker/index.js");
 require.alias("optimuslime-thumbnail-grid/lib/xThumb.js", "win-Picbreeder/deps/thumbnail-grid/lib/xThumb.js");
 require.alias("optimuslime-thumbnail-grid/lib/xThumb.js", "win-Picbreeder/deps/thumbnail-grid/index.js");
 require.alias("optimuslime-thumbnail-grid/lib/xThumb.js", "thumbnail-grid/index.js");
@@ -24738,9 +25054,9 @@ require.alias("component-props/index.js", "component-to-function/deps/props/inde
 
 require.alias("component-type/index.js", "component-each/deps/type/index.js");
 
-require.alias("visionmedia-debug/index.js", "component-css/deps/debug/index.js");
 require.alias("visionmedia-debug/debug.js", "component-css/deps/debug/debug.js");
-
+require.alias("visionmedia-debug/debug.js", "component-css/deps/debug/index.js");
+require.alias("visionmedia-debug/debug.js", "visionmedia-debug/index.js");
 require.alias("ianstormtaylor-to-camel-case/index.js", "component-css/deps/to-camel-case/index.js");
 require.alias("ianstormtaylor-to-space-case/index.js", "ianstormtaylor-to-camel-case/deps/to-space-case/index.js");
 require.alias("ianstormtaylor-to-no-case/index.js", "ianstormtaylor-to-space-case/deps/to-no-case/index.js");
@@ -24830,9 +25146,9 @@ require.alias("component-props/index.js", "component-to-function/deps/props/inde
 
 require.alias("component-type/index.js", "component-each/deps/type/index.js");
 
-require.alias("visionmedia-debug/index.js", "component-css/deps/debug/index.js");
 require.alias("visionmedia-debug/debug.js", "component-css/deps/debug/debug.js");
-
+require.alias("visionmedia-debug/debug.js", "component-css/deps/debug/index.js");
+require.alias("visionmedia-debug/debug.js", "visionmedia-debug/index.js");
 require.alias("ianstormtaylor-to-camel-case/index.js", "component-css/deps/to-camel-case/index.js");
 require.alias("ianstormtaylor-to-space-case/index.js", "ianstormtaylor-to-camel-case/deps/to-space-case/index.js");
 require.alias("ianstormtaylor-to-no-case/index.js", "ianstormtaylor-to-space-case/deps/to-no-case/index.js");
@@ -25039,9 +25355,9 @@ require.alias("component-props/index.js", "component-to-function/deps/props/inde
 
 require.alias("component-type/index.js", "component-each/deps/type/index.js");
 
-require.alias("visionmedia-debug/index.js", "component-css/deps/debug/index.js");
 require.alias("visionmedia-debug/debug.js", "component-css/deps/debug/debug.js");
-
+require.alias("visionmedia-debug/debug.js", "component-css/deps/debug/index.js");
+require.alias("visionmedia-debug/debug.js", "visionmedia-debug/index.js");
 require.alias("ianstormtaylor-to-camel-case/index.js", "component-css/deps/to-camel-case/index.js");
 require.alias("ianstormtaylor-to-space-case/index.js", "ianstormtaylor-to-camel-case/deps/to-space-case/index.js");
 require.alias("ianstormtaylor-to-no-case/index.js", "ianstormtaylor-to-space-case/deps/to-no-case/index.js");
@@ -25131,9 +25447,9 @@ require.alias("component-props/index.js", "component-to-function/deps/props/inde
 
 require.alias("component-type/index.js", "component-each/deps/type/index.js");
 
-require.alias("visionmedia-debug/index.js", "component-css/deps/debug/index.js");
 require.alias("visionmedia-debug/debug.js", "component-css/deps/debug/debug.js");
-
+require.alias("visionmedia-debug/debug.js", "component-css/deps/debug/index.js");
+require.alias("visionmedia-debug/debug.js", "visionmedia-debug/index.js");
 require.alias("ianstormtaylor-to-camel-case/index.js", "component-css/deps/to-camel-case/index.js");
 require.alias("ianstormtaylor-to-space-case/index.js", "ianstormtaylor-to-camel-case/deps/to-space-case/index.js");
 require.alias("ianstormtaylor-to-no-case/index.js", "ianstormtaylor-to-space-case/deps/to-no-case/index.js");
@@ -25165,6 +25481,15 @@ require.alias("optimuslime-win-query/lib/win-query.js", "optimuslime-win-query/i
 require.alias("component-emitter/index.js", "win-home-ui/deps/emitter/index.js");
 
 require.alias("win-home-ui/main.js", "win-home-ui/index.js");
+require.alias("webworker-queue/webworker-queue.js", "win-Picbreeder/deps/webworker-queue/webworker-queue.js");
+require.alias("webworker-queue/webworker-queue.js", "win-Picbreeder/deps/webworker-queue/index.js");
+require.alias("webworker-queue/webworker-queue.js", "webworker-queue/index.js");
+require.alias("component-worker/index.js", "webworker-queue/deps/worker/index.js");
+require.alias("component-worker/index.js", "webworker-queue/deps/worker/index.js");
+require.alias("component-emitter/index.js", "component-worker/deps/emitter/index.js");
+
+require.alias("component-worker/index.js", "component-worker/index.js");
+require.alias("webworker-queue/webworker-queue.js", "webworker-queue/index.js");
 require.alias("geno-to-picture/geno-to-picture.js", "win-Picbreeder/deps/geno-to-picture/geno-to-picture.js");
 require.alias("geno-to-picture/generateBitmap.js", "win-Picbreeder/deps/geno-to-picture/generateBitmap.js");
 require.alias("geno-to-picture/base64.js", "win-Picbreeder/deps/geno-to-picture/base64.js");

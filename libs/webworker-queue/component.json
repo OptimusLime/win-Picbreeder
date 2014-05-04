@@ -1,0 +1,15 @@
+{
+  "name": "webworker-queue",
+  "description": "Handles a revolving set of webworkers and tasks to be completed",
+  "version": "0.0.1",
+  "dependencies": {
+  },
+  "scripts": [
+    "webworker-queue.js"
+  ],
+  "main": "webworker-queue.js",
+  "dependencies" : {
+      "component/worker" : "*"
+    },
+  "license": ["MIT"]
+}

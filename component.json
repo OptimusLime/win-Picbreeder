@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "local": [
     "win-home-ui",
+    "webworker-queue",
     "geno-to-picture",
     "cppn-additions",
     "win-setup",
@@ -25,6 +26,7 @@
   ],
   "main": "win-Picbreeder.js",
   "dependencies": {
+    "component/worker" : "*",
     "optimuslime/thumbnail-grid" : "*",
     "optimuslime/traverse" : "*",
     "optimuslime/el.js" : "*",
