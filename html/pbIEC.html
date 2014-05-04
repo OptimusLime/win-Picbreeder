@@ -38,6 +38,16 @@
 
 		window.onload = function() {
 
+
+
+			//grab our webworker, we should start 7 workers
+			var WorkerQueue = require('webworker-queue');
+
+			var totalWorkers = 8;
+			var queue = new WorkerQueue("/js/cppnWorkerActivation.js", totalWorkers);
+			var winneat = require('win-neat');
+
+
 			var genoToPicture = require('geno-to-picture');
 
 			//for now, must match the win-save name 
@@ -58,7 +68,7 @@
 				"win-iec" : require("win-iec"),
 				"win-gen" : require("win-gen"),
 				"win-schema" : require("win-schema"),
-				"win-neat" : require("win-neat")
+				"win-neat" : winneat
 			};
 
 			var testingLogLevel = 10;
@@ -195,20 +205,57 @@
 
 					var evoIDToData = {};
 
-					function getOrCreateData(eID, individual)
+					function getOrCreateData(eID, individual, finished)
 					{
+						//we only sent in an ID and a callback -- no individual
+						if(typeof individual == "function")
+						{
+							finished = individual;
+							individual = undefined;
+						}
 						//return;
 						var dataURL = evoIDToData[eID];
 						if(!dataURL)
 						{
-							dataURL = genoToPicture(objSize, individual.genome);
+							//get our genome
+							var ng = winneat.genotypeFromJSON(individual.genome);
 
-							//save this info for next time
-							evoIDToData[eID] = dataURL;
+							//cppn decodeing
+							var cppn = ng.networkDecode();
+
+							//turn it into a function
+	    					var functionObject = cppn.createPureCPPNFunctions();
+
+	    					//job description huzzah
+							var jobData = {
+								wid: individual.wid,
+								width: objSize.width, 
+								height: objSize.height,
+								nodeOrder: functionObject.nodeOrder, 
+								stringFunctions: functionObject.stringFunctions,
+								biasCount: 1, //one bias node in neat genome -- ddoy
+								outputCount: ng.outputNodeCount //output count
+							};
+
+
+							// onmessage({data: jobData});
+
+							//queue up this task with our webworkers, and get a callback with the dataURL
+							queue.queueJob(jobData, function(dataObject)
+							{
+								//save this info for next time
+								evoIDToData[eID] = dataObject.dataURL;
+
+								//all done
+								finished(dataObject.dataURL);
+							});
 						}
-						return dataURL;
+						else
+						{
+							//all done!
+							finished(dataURL);
+						}
 					}
-
 
 					var uID, flex;
 					//for now we pass seed information to init display -- later, we'll move this to a more appropriate place 
@@ -232,40 +279,46 @@
 							{
 								backLog("final: p select div: ", eID);
 
-								var dataURL = getOrCreateData(eID, parent);
 
-								//individual being created
-								eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
+								eDiv.innerHTML = "";
 
-								if(finished)
-									finished();
+								getOrCreateData(eID, parent, function(dataURL)
+								{
+									//individual being created
+									eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
+
+									if(finished)
+										finished();
+								});
+							
 							})
 							uiEmitter.on('individualCreated', function(eID, eDiv, individual, finished)
 							{
-
-								
-								var dataURL = getOrCreateData(eID, individual);
-
-								//individual being created
-								eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
-
-
-
 								// backLog("final: p createive indiv: ", eID, " div: ", eDiv, " indvi: ", individual, " fins: ", finished);
 								backLog("Individual: ", individual);
 
-								//all done!
-								if(finished)
-									finished();
+								eDiv.innerHTML = "";
+
+								getOrCreateData(eID, individual, function(dataURL)
+								{
+									//individual being created
+									eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
+
+									if(finished)
+										finished();
+								});
+								
 							});
 
 							//that's all folks!
 							uiEmitter.on('publishShown', function(eID, eDiv)
 							{
-								var dataURL = getOrCreateData(eID);
+								getOrCreateData(eID, function(dataURL)
+								{
+									//individual being created
+									eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
+								});
 
-								//individual being created
-								eDiv.innerHTML = "<img src=\"" + dataURL + "\"></img>";
 							});
 
 							//don't do nuffin, it's out of our control

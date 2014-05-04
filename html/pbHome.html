@@ -126,6 +126,12 @@
 
 				function getOrCreateData(eID, individual, finished)
 				{
+					//we only sent in an ID and a callback -- no individual
+					if(typeof individual == "function")
+					{
+						finished = individual;
+						individual = undefined;
+					}
 					//return;
 					var dataURL = evoIDToData[eID];
 					if(!dataURL)
@@ -161,12 +167,13 @@
 
 							//all done
 							finished(dataObject.dataURL);
-
 						});
 					}
-
-					//all done!
-					finished(dataURL);
+					else
+					{
+						//all done!
+						finished(dataURL);
+					}
 				}
 
 
