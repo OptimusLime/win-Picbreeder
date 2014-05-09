@@ -30,15 +30,15 @@
     "optimuslime/thumbnail-grid" : "*",
     "optimuslime/traverse" : "*",
     "optimuslime/el.js" : "*",
-    "optimuslime/win-iec" : "*",
-    "optimuslime/win-query" : "*",
-    "optimuslime/win-publish" : "*",
-    "optimuslime/win-neat" : "*",
-    "optimuslime/win-backbone": "*",
-    "optimuslime/win-schema": "*",
-    "optimuslime/win-gen": "*",
-    "optimuslime/win-data": "*",
-    "optimuslime/win-phylogeny": "*",
-    "optimuslime/win-utils": "*"
+    "optimuslime/win-iec" : "0.0.2-5",
+    "optimuslime/win-query" : "0.0.1-3",
+    "optimuslime/win-publish" : "0.0.1-3",
+    "optimuslime/win-neat" : "0.0.1-8",
+    "optimuslime/win-backbone": "0.0.4-4",
+    "optimuslime/win-schema": "0.0.5-3",
+    "optimuslime/win-gen": "0.0.2-5",
+    "optimuslime/win-data": "0.0.1-2",
+    "optimuslime/win-phylogeny": "0.0.1",
+    "optimuslime/win-utils": "0.1.1"
   }
 }
