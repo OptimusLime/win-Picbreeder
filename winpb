@@ -6,6 +6,7 @@
 
 var program = require('commander');
 var BuilderClass = require('component-builder');
+var cl = require('colors');
 
   // executes `component install`
 var fs = require('fs');
@@ -21,34 +22,49 @@ program
   .version('0.0.1')
 //  .option('-C, --chdir <path>', 'change the working directory')
 
-program
-  .command('install')
-  .description('run install command to download relevant modules')
-  .option("-s, --setup_mode [mode]", "Which setup mode to use")
-  .action(function(options){
+function install(options, next)
+{
     var mode = options.setup_mode || "normal";
 
     // http://nodejs.org/api.html#_child_processes
     //let's install some component things!
-
-    console.log("Installing objects, please be patient")
-
-
+    console.log("Installing components, please be patient...")
 
     // resolve the dependency tree
     resolve(process.cwd(), {
       // install the remote components locally
-      install: true,
-      verbose: true
+      install: true
     }, function (err, tree) {
       if (err) throw err;
+
+      console.log("Installation complete. ");
+
+      if(next)
+        next();
+    });
+}
+
+function buildProject(configFile, options)
+{
+      resolve(process.cwd(), {
+      // install the remote components locally
+      install: options.install
+    }, function (err, tree) {
+      if (err) throw err;
+
+      //inject some json objects for processing!
+      tree.node.json = [configFile];
 
       // only include `.js` files from components' `.scripts` field
       build.scripts(tree)
         .use('scripts', build.plugins.js())
+        .use('scripts', build.plugins.json())
+        .use('json', build.plugins.json())
         .end(function (err, string) {
           if (err) throw err;
-          fs.writeFileSync('build.js', string);
+
+          fs.writeFileSync('./build/build.js', build.scripts.require + string);
+          console.log("JS File built");
         });
 
       // only include `.css` files from components' `.styles` field
@@ -56,19 +72,92 @@ program
         .use('styles', build.plugins.css())
         .end(function (err, string) {
           if (err) throw err;
-          fs.writeFileSync('build.css', string);
+
+          fs.writeFileSync('./build/build.css', string);
+
+          console.log("CSS File built")
         });
 
       // only copy `images` to the build folder
       build.files(tree)
         .use('images', build.plugins.symlink())
         .end(); // callback optional
-    })
+    });
+}
 
+function retrieveConfig(configFileLocation)
+{
+  var configJSON;
+   try {
+      var syncLocalConfig = fs.readFileSync(configFileLocation);
 
+      configJSON = JSON.parse(syncLocalConfig);
 
-     
+      validateConfiguration(configJSON);
+
+    }
+    catch(e)
+    {
+      console.log('\tInvalid Configuration'.red);
+      throw e;
+    }
+
+    return configJSON;
+
+}
+
+function validateConfiguration(configJSON)
+{
+  console.log('\tParsing configuration: '.magenta, configJSON);
+  //we need a few things to exist
+  // throw new Error("No known config validation process!");
+}
+
+program
+  .command('install')
+  .description('run install command to download relevant modules')
+  .option("-s, --setup_mode [mode]", "Which setup mode to use")
+  .action(function(options){
+    install(options);
  });
+
+program
+  .command('build [config]')
+  .description('run install command to download relevant modules')
+  .option("-i, --install", "Install components before build")
+  .action(function(configFile, options){
+    if(!configFile)
+    {
+      console.log('Missing config file for constructing picbreeder.');
+      return;
+    }
+    var configJSON = retrieveConfig(configFile);
+
+    var defaultConfigLocation = "pbConfig.json";
+    fs.writeFileSync(defaultConfigLocation, JSON.stringify(defaultConfigLocation));
+
+      buildProject(defaultConfigLocation, options);
+  });
+
+program
+  .command('construct [config]')
+  .description('run construct command to install and build full module')
+  .action(function(configFile, options){
+
+    if(!configFile)
+    {
+      configFile = "./localConfig.json";
+      console.log('\tDefault configuration file selected: localConfig.json'.magenta); 
+    }
+    var configJSON = retrieveConfig(configFile);
+
+    var defaultConfigLocation = "pbConfig.json";
+    fs.writeFileSync(defaultConfigLocation, JSON.stringify(configJSON));
+
+    //other stuff to do here
+      buildProject(defaultConfigLocation, {install: true});
+  });
+
 
 // program
 //   .command('exec <cmd>')
@@ -85,10 +174,10 @@ program
 //     console.log();
 //   });
 
-program
-  .command('*')
-  .action(function(env){
-    console.log('deploying "%s"', env);
-  });
+// program
+//   .command('*')
+//   .action(function(env){
+//     console.log('deploying "%s"', env);
+//   });
 
 program.parse(process.argv);

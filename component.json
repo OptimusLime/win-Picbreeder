@@ -7,6 +7,10 @@
     "win",
     "picbreeder"
   ],
+  "json" :
+    [
+    "./localConfig.json"
+    ],
   "dependencies": {
     "component/worker": "master",
     "optimuslime/traverse": "0.6.6-1",

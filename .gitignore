@@ -1,9 +1,15 @@
 components-old
 components
 
+#Configuration file built by picbreeder
+pbConfig.json
+
+
 # Logs
 logs
 *.log
+
+
 
 # Runtime data
 pids

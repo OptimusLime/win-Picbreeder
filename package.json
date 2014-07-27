@@ -2,6 +2,7 @@
   "name": "win-Picbreeder",
   "version": "0.0.1",
   "dependencies": {
+    "colors" : "*",
     "commander" : "*",
     "component-builder" : "*",
     "component-resolver" : "*"
