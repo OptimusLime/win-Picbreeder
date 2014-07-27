@@ -1,44 +1,30 @@
 {
-  "name": "win-Picbreeder",
+  "name": "win-picbreeder",
+  "repo": "OptimusLime/win-Picbreeder",
   "version": "0.0.1",
-  "local": [
-    "win-home-ui",
-    "webworker-queue",
-    "geno-to-picture",
-    "cppn-additions",
-    "win-setup",
-    "pbEncoding",
-    "win-flexIEC",
-    "flexstatic",
-    "flexparents",
-    "flexIEC"
+  "keywords": [
+    "iec",
+    "win",
+    "picbreeder"
   ],
-  "paths": [
-    "libs"
-  ],
-  "scripts": [
-    "win-Picbreeder.js",
-    "seeds/seed1.js"
-  ],
- "remotes": [
-    "https://raw.github.com",
-    "https://raw.githubusercontent.com"
-  ],
-  "main": "win-Picbreeder.js",
   "dependencies": {
-    "component/worker" : "*",
-    "optimuslime/thumbnail-grid" : "*",
-    "optimuslime/traverse" : "*",
-    "optimuslime/el.js" : "*",
-    "optimuslime/win-iec" : "0.0.2-5",
-    "optimuslime/win-query" : "0.0.1-3",
-    "optimuslime/win-publish" : "0.0.1-3",
-    "optimuslime/win-neat" : "0.0.1-8",
-    "optimuslime/win-backbone": "0.0.4-4",
-    "optimuslime/win-schema": "0.0.5-3",
-    "optimuslime/win-gen": "0.0.2-5",
-    "optimuslime/win-data": "0.0.1-2",
-    "optimuslime/win-phylogeny": "0.0.1",
+    "component/worker": "master",
+    "optimuslime/traverse": "0.6.6-1",
+    "optimuslime/el.js": "master",
+    "optimuslime/win-iec": "0.0.2-6",
+    "optimuslime/win-query": "0.0.1-4",
+    "optimuslime/win-publish": "0.0.1-4",
+    "optimuslime/win-neat": "0.0.1-9",
+    "optimuslime/win-backbone": "0.0.4-5",
+    "optimuslime/win-schema": "0.0.5-4",
+    "optimuslime/win-gen": "0.0.2-6",
+    "optimuslime/win-data": "0.0.1-3",
+    "optimuslime/win-phylogeny": "0.0.1-1",
     "optimuslime/win-utils": "0.1.1"
-  }
+  },
+  "main": "win-Picbreeder.js",
+  "scripts": [
+    "win-Picbreeder.js"
+  ],
+  "license": "MIT"
 }

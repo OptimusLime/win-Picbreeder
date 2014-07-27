@@ -1,4 +1,9 @@
 {
   "name": "win-Picbreeder",
-  "version": "0.0.1"
+  "version": "0.0.1",
+  "dependencies": {
+    "commander" : "*",
+    "component-builder" : "*",
+    "component-resolver" : "*"
+  }
 }

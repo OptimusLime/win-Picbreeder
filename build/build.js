@@ -1,39 +1,19 @@
-
 /**
- * Require the given path.
+ * Require the module at `name`.
  *
- * @param {String} path
+ * @param {String} name
  * @return {Object} exports
  * @api public
  */
 
-function require(path, parent, orig) {
-  var resolved = require.resolve(path);
+function require(name) {
+  var module = require.modules[name];
+  if (!module) throw new Error('failed to require "' + name + '"');
 
-  // lookup failed
-  if (null == resolved) {
-    orig = orig || path;
-    parent = parent || 'root';
-    var err = new Error('Failed to require "' + orig + '" from "' + parent + '"');
-    err.path = orig;
-    err.parent = parent;
-    err.require = true;
-    throw err;
-  }
-
-  var module = require.modules[resolved];
-
-  // perform real require()
-  // by invoking the module's
-  // registered function
-  if (!module._resolving && !module.exports) {
-    var mod = {};
-    mod.exports = {};
-    mod.client = mod.component = true;
-    module._resolving = true;
-    module.call(this, mod.exports, require.relative(resolved), mod);
-    delete module._resolving;
-    module.exports = mod.exports;
+  if (!('exports' in module) && typeof module.definition === 'function') {
+    module.client = module.component = true;
+    module.definition.call(this, module.exports = {}, module);
+    delete module.definition;
   }
 
   return module.exports;
@@ -46,160 +26,33 @@ function require(path, parent, orig) {
 require.modules = {};
 
 /**
- * Registered aliases.
- */
-
-require.aliases = {};
-
-/**
- * Resolve `path`.
+ * Register module at `name` with callback `definition`.
  *
- * Lookup:
- *
- *   - PATH/index.js
- *   - PATH.js
- *   - PATH
- *
- * @param {String} path
- * @return {String} path or null
- * @api private
- */
-
-require.resolve = function(path) {
-  if (path.charAt(0) === '/') path = path.slice(1);
-
-  var paths = [
-    path,
-    path + '.js',
-    path + '.json',
-    path + '/index.js',
-    path + '/index.json'
-  ];
-
-  for (var i = 0; i < paths.length; i++) {
-    var path = paths[i];
-    if (require.modules.hasOwnProperty(path)) return path;
-    if (require.aliases.hasOwnProperty(path)) return require.aliases[path];
-  }
-};
-
-/**
- * Normalize `path` relative to the current path.
- *
- * @param {String} curr
- * @param {String} path
- * @return {String}
- * @api private
- */
-
-require.normalize = function(curr, path) {
-  var segs = [];
-
-  if ('.' != path.charAt(0)) return path;
-
-  curr = curr.split('/');
-  path = path.split('/');
-
-  for (var i = 0; i < path.length; ++i) {
-    if ('..' == path[i]) {
-      curr.pop();
-    } else if ('.' != path[i] && '' != path[i]) {
-      segs.push(path[i]);
-    }
-  }
-
-  return curr.concat(segs).join('/');
-};
-
-/**
- * Register module at `path` with callback `definition`.
- *
- * @param {String} path
+ * @param {String} name
  * @param {Function} definition
  * @api private
  */
 
-require.register = function(path, definition) {
-  require.modules[path] = definition;
+require.register = function (name, definition) {
+  require.modules[name] = {
+    definition: definition
+  };
 };
 
 /**
- * Alias a module definition.
+ * Define a module's exports immediately with `exports`.
  *
- * @param {String} from
- * @param {String} to
+ * @param {String} name
+ * @param {Generic} exports
  * @api private
  */
 
-require.alias = function(from, to) {
-  if (!require.modules.hasOwnProperty(from)) {
-    throw new Error('Failed to alias "' + from + '", it does not exist');
-  }
-  require.aliases[to] = from;
-};
-
-/**
- * Return a require function relative to the `parent` path.
- *
- * @param {String} parent
- * @return {Function}
- * @api private
- */
-
-require.relative = function(parent) {
-  var p = require.normalize(parent, '..');
-
-  /**
-   * lastIndexOf helper.
-   */
-
-  function lastIndexOf(arr, obj) {
-    var i = arr.length;
-    while (i--) {
-      if (arr[i] === obj) return i;
-    }
-    return -1;
-  }
-
-  /**
-   * The relative require() itself.
-   */
-
-  function localRequire(path) {
-    var resolved = localRequire.resolve(path);
-    return require(resolved, parent, path);
-  }
-
-  /**
-   * Resolve relative to the parent.
-   */
-
-  localRequire.resolve = function(path) {
-    var c = path.charAt(0);
-    if ('/' == c) return path.slice(1);
-    if ('.' == c) return require.normalize(p, path);
-
-    // resolve deps by returning
-    // the dep in the nearest "deps"
-    // directory
-    var segs = parent.split('/');
-    var i = lastIndexOf(segs, 'deps') + 1;
-    if (!i) i = 0;
-    path = segs.slice(0, i + 1).join('/') + '/deps/' + path;
-    return path;
+require.define = function (name, exports) {
+  require.modules[name] = {
+    exports: exports
   };
-
-  /**
-   * Check if module is defined at `path`.
-   */
-
-  localRequire.exists = function(path) {
-    return require.modules.hasOwnProperty(localRequire.resolve(path));
-  };
-
-  return localRequire;
 };
-require.register("component-emitter/index.js", function(exports, require, module){
+require.register("component~emitter@master", function (exports, module) {
 
 /**
  * Expose `Emitter`.
@@ -366,13 +219,14 @@ Emitter.prototype.hasListeners = function(event){
 };
 
 });
-require.register("component-worker/index.js", function(exports, require, module){
+
+require.register("component~worker@master", function (exports, module) {
 
 /**
  * Module dependencies.
  */
 
-var Emitter = require('emitter');
+var Emitter = require("component~emitter@master");
 var WebWorker = window.Worker;
 
 /**
@@ -473,5073 +327,8 @@ Worker.prototype.request = function(msg, fn, transferables){
 };
 
 });
-require.register("desandro-eventie/eventie.js", function(exports, require, module){
-/*!
- * eventie v1.0.5
- * event binding helper
- *   eventie.bind( elem, 'click', myFn )
- *   eventie.unbind( elem, 'click', myFn )
- * MIT license
- */
 
-/*jshint browser: true, undef: true, unused: true */
-/*global define: false, module: false */
-
-( function( window ) {
-
-'use strict';
-
-var docElem = document.documentElement;
-
-var bind = function() {};
-
-function getIEEvent( obj ) {
-  var event = window.event;
-  // add event.target
-  event.target = event.target || event.srcElement || obj;
-  return event;
-}
-
-if ( docElem.addEventListener ) {
-  bind = function( obj, type, fn ) {
-    obj.addEventListener( type, fn, false );
-  };
-} else if ( docElem.attachEvent ) {
-  bind = function( obj, type, fn ) {
-    obj[ type + fn ] = fn.handleEvent ?
-      function() {
-        var event = getIEEvent( obj );
-        fn.handleEvent.call( fn, event );
-      } :
-      function() {
-        var event = getIEEvent( obj );
-        fn.call( obj, event );
-      };
-    obj.attachEvent( "on" + type, obj[ type + fn ] );
-  };
-}
-
-var unbind = function() {};
-
-if ( docElem.removeEventListener ) {
-  unbind = function( obj, type, fn ) {
-    obj.removeEventListener( type, fn, false );
-  };
-} else if ( docElem.detachEvent ) {
-  unbind = function( obj, type, fn ) {
-    obj.detachEvent( "on" + type, obj[ type + fn ] );
-    try {
-      delete obj[ type + fn ];
-    } catch ( err ) {
-      // can't delete window object properties
-      obj[ type + fn ] = undefined;
-    }
-  };
-}
-
-var eventie = {
-  bind: bind,
-  unbind: unbind
-};
-
-// ----- module definition ----- //
-
-if ( typeof define === 'function' && define.amd ) {
-  // AMD
-  define( eventie );
-} else if ( typeof exports === 'object' ) {
-  // CommonJS
-  module.exports = eventie;
-} else {
-  // browser global
-  window.eventie = eventie;
-}
-
-})( this );
-
-});
-require.register("wolfy87-eventemitter/EventEmitter.js", function(exports, require, module){
-/*!
- * EventEmitter v4.2.7 - git.io/ee
- * Oliver Caldwell
- * MIT license
- * @preserve
- */
-
-(function () {
-	'use strict';
-
-	/**
-	 * Class for managing events.
-	 * Can be extended to provide event functionality in other classes.
-	 *
-	 * @class EventEmitter Manages event registering and emitting.
-	 */
-	function EventEmitter() {}
-
-	// Shortcuts to improve speed and size
-	var proto = EventEmitter.prototype;
-	var exports = this;
-	var originalGlobalValue = exports.EventEmitter;
-
-	/**
-	 * Finds the index of the listener for the event in it's storage array.
-	 *
-	 * @param {Function[]} listeners Array of listeners to search through.
-	 * @param {Function} listener Method to look for.
-	 * @return {Number} Index of the specified listener, -1 if not found
-	 * @api private
-	 */
-	function indexOfListener(listeners, listener) {
-		var i = listeners.length;
-		while (i--) {
-			if (listeners[i].listener === listener) {
-				return i;
-			}
-		}
-
-		return -1;
-	}
-
-	/**
-	 * Alias a method while keeping the context correct, to allow for overwriting of target method.
-	 *
-	 * @param {String} name The name of the target method.
-	 * @return {Function} The aliased method
-	 * @api private
-	 */
-	function alias(name) {
-		return function aliasClosure() {
-			return this[name].apply(this, arguments);
-		};
-	}
-
-	/**
-	 * Returns the listener array for the specified event.
-	 * Will initialise the event object and listener arrays if required.
-	 * Will return an object if you use a regex search. The object contains keys for each matched event. So /ba[rz]/ might return an object containing bar and baz. But only if you have either defined them with defineEvent or added some listeners to them.
-	 * Each property in the object response is an array of listener functions.
-	 *
-	 * @param {String|RegExp} evt Name of the event to return the listeners from.
-	 * @return {Function[]|Object} All listener functions for the event.
-	 */
-	proto.getListeners = function getListeners(evt) {
-		var events = this._getEvents();
-		var response;
-		var key;
-
-		// Return a concatenated array of all matching events if
-		// the selector is a regular expression.
-		if (evt instanceof RegExp) {
-			response = {};
-			for (key in events) {
-				if (events.hasOwnProperty(key) && evt.test(key)) {
-					response[key] = events[key];
-				}
-			}
-		}
-		else {
-			response = events[evt] || (events[evt] = []);
-		}
-
-		return response;
-	};
-
-	/**
-	 * Takes a list of listener objects and flattens it into a list of listener functions.
-	 *
-	 * @param {Object[]} listeners Raw listener objects.
-	 * @return {Function[]} Just the listener functions.
-	 */
-	proto.flattenListeners = function flattenListeners(listeners) {
-		var flatListeners = [];
-		var i;
-
-		for (i = 0; i < listeners.length; i += 1) {
-			flatListeners.push(listeners[i].listener);
-		}
-
-		return flatListeners;
-	};
-
-	/**
-	 * Fetches the requested listeners via getListeners but will always return the results inside an object. This is mainly for internal use but others may find it useful.
-	 *
-	 * @param {String|RegExp} evt Name of the event to return the listeners from.
-	 * @return {Object} All listener functions for an event in an object.
-	 */
-	proto.getListenersAsObject = function getListenersAsObject(evt) {
-		var listeners = this.getListeners(evt);
-		var response;
-
-		if (listeners instanceof Array) {
-			response = {};
-			response[evt] = listeners;
-		}
-
-		return response || listeners;
-	};
-
-	/**
-	 * Adds a listener function to the specified event.
-	 * The listener will not be added if it is a duplicate.
-	 * If the listener returns true then it will be removed after it is called.
-	 * If you pass a regular expression as the event name then the listener will be added to all events that match it.
-	 *
-	 * @param {String|RegExp} evt Name of the event to attach the listener to.
-	 * @param {Function} listener Method to be called when the event is emitted. If the function returns true then it will be removed after calling.
-	 * @return {Object} Current instance of EventEmitter for chaining.
-	 */
-	proto.addListener = function addListener(evt, listener) {
-		var listeners = this.getListenersAsObject(evt);
-		var listenerIsWrapped = typeof listener === 'object';
-		var key;
-
-		for (key in listeners) {
-			if (listeners.hasOwnProperty(key) && indexOfListener(listeners[key], listener) === -1) {
-				listeners[key].push(listenerIsWrapped ? listener : {
-					listener: listener,
-					once: false
-				});
-			}
-		}
-
-		return this;
-	};
-
-	/**
-	 * Alias of addListener
-	 */
-	proto.on = alias('addListener');
-
-	/**
-	 * Semi-alias of addListener. It will add a listener that will be
-	 * automatically removed after it's first execution.
-	 *
-	 * @param {String|RegExp} evt Name of the event to attach the listener to.
-	 * @param {Function} listener Method to be called when the event is emitted. If the function returns true then it will be removed after calling.
-	 * @return {Object} Current instance of EventEmitter for chaining.
-	 */
-	proto.addOnceListener = function addOnceListener(evt, listener) {
-		return this.addListener(evt, {
-			listener: listener,
-			once: true
-		});
-	};
-
-	/**
-	 * Alias of addOnceListener.
-	 */
-	proto.once = alias('addOnceListener');
-
-	/**
-	 * Defines an event name. This is required if you want to use a regex to add a listener to multiple events at once. If you don't do this then how do you expect it to know what event to add to? Should it just add to every possible match for a regex? No. That is scary and bad.
-	 * You need to tell it what event names should be matched by a regex.
-	 *
-	 * @param {String} evt Name of the event to create.
-	 * @return {Object} Current instance of EventEmitter for chaining.
-	 */
-	proto.defineEvent = function defineEvent(evt) {
-		this.getListeners(evt);
-		return this;
-	};
-
-	/**
-	 * Uses defineEvent to define multiple events.
-	 *
-	 * @param {String[]} evts An array of event names to define.
-	 * @return {Object} Current instance of EventEmitter for chaining.
-	 */
-	proto.defineEvents = function defineEvents(evts) {
-		for (var i = 0; i < evts.length; i += 1) {
-			this.defineEvent(evts[i]);
-		}
-		return this;
-	};
-
-	/**
-	 * Removes a listener function from the specified event.
-	 * When passed a regular expression as the event name, it will remove the listener from all events that match it.
-	 *
-	 * @param {String|RegExp} evt Name of the event to remove the listener from.
-	 * @param {Function} listener Method to remove from the event.
-	 * @return {Object} Current instance of EventEmitter for chaining.
-	 */
-	proto.removeListener = function removeListener(evt, listener) {
-		var listeners = this.getListenersAsObject(evt);
-		var index;
-		var key;
-
-		for (key in listeners) {
-			if (listeners.hasOwnProperty(key)) {
-				index = indexOfListener(listeners[key], listener);
-
-				if (index !== -1) {
-					listeners[key].splice(index, 1);
-				}
-			}
-		}
-
-		return this;
-	};
-
-	/**
-	 * Alias of removeListener
-	 */
-	proto.off = alias('removeListener');
-
-	/**
-	 * Adds listeners in bulk using the manipulateListeners method.
-	 * If you pass an object as the second argument you can add to multiple events at once. The object should contain key value pairs of events and listeners or listener arrays. You can also pass it an event name and an array of listeners to be added.
-	 * You can also pass it a regular expression to add the array of listeners to all events that match it.
-	 * Yeah, this function does quite a bit. That's probably a bad thing.
-	 *
-	 * @param {String|Object|RegExp} evt An event name if you will pass an array of listeners next. An object if you wish to add to multiple events at once.
-	 * @param {Function[]} [listeners] An optional array of listener functions to add.
-	 * @return {Object} Current instance of EventEmitter for chaining.
-	 */
-	proto.addListeners = function addListeners(evt, listeners) {
-		// Pass through to manipulateListeners
-		return this.manipulateListeners(false, evt, listeners);
-	};
-
-	/**
-	 * Removes listeners in bulk using the manipulateListeners method.
-	 * If you pass an object as the second argument you can remove from multiple events at once. The object should contain key value pairs of events and listeners or listener arrays.
-	 * You can also pass it an event name and an array of listeners to be removed.
-	 * You can also pass it a regular expression to remove the listeners from all events that match it.
-	 *
-	 * @param {String|Object|RegExp} evt An event name if you will pass an array of listeners next. An object if you wish to remove from multiple events at once.
-	 * @param {Function[]} [listeners] An optional array of listener functions to remove.
-	 * @return {Object} Current instance of EventEmitter for chaining.
-	 */
-	proto.removeListeners = function removeListeners(evt, listeners) {
-		// Pass through to manipulateListeners
-		return this.manipulateListeners(true, evt, listeners);
-	};
-
-	/**
-	 * Edits listeners in bulk. The addListeners and removeListeners methods both use this to do their job. You should really use those instead, this is a little lower level.
-	 * The first argument will determine if the listeners are removed (true) or added (false).
-	 * If you pass an object as the second argument you can add/remove from multiple events at once. The object should contain key value pairs of events and listeners or listener arrays.
-	 * You can also pass it an event name and an array of listeners to be added/removed.
-	 * You can also pass it a regular expression to manipulate the listeners of all events that match it.
-	 *
-	 * @param {Boolean} remove True if you want to remove listeners, false if you want to add.
-	 * @param {String|Object|RegExp} evt An event name if you will pass an array of listeners next. An object if you wish to add/remove from multiple events at once.
-	 * @param {Function[]} [listeners] An optional array of listener functions to add/remove.
-	 * @return {Object} Current instance of EventEmitter for chaining.
-	 */
-	proto.manipulateListeners = function manipulateListeners(remove, evt, listeners) {
-		var i;
-		var value;
-		var single = remove ? this.removeListener : this.addListener;
-		var multiple = remove ? this.removeListeners : this.addListeners;
-
-		// If evt is an object then pass each of it's properties to this method
-		if (typeof evt === 'object' && !(evt instanceof RegExp)) {
-			for (i in evt) {
-				if (evt.hasOwnProperty(i) && (value = evt[i])) {
-					// Pass the single listener straight through to the singular method
-					if (typeof value === 'function') {
-						single.call(this, i, value);
-					}
-					else {
-						// Otherwise pass back to the multiple function
-						multiple.call(this, i, value);
-					}
-				}
-			}
-		}
-		else {
-			// So evt must be a string
-			// And listeners must be an array of listeners
-			// Loop over it and pass each one to the multiple method
-			i = listeners.length;
-			while (i--) {
-				single.call(this, evt, listeners[i]);
-			}
-		}
-
-		return this;
-	};
-
-	/**
-	 * Removes all listeners from a specified event.
-	 * If you do not specify an event then all listeners will be removed.
-	 * That means every event will be emptied.
-	 * You can also pass a regex to remove all events that match it.
-	 *
-	 * @param {String|RegExp} [evt] Optional name of the event to remove all listeners for. Will remove from every event if not passed.
-	 * @return {Object} Current instance of EventEmitter for chaining.
-	 */
-	proto.removeEvent = function removeEvent(evt) {
-		var type = typeof evt;
-		var events = this._getEvents();
-		var key;
-
-		// Remove different things depending on the state of evt
-		if (type === 'string') {
-			// Remove all listeners for the specified event
-			delete events[evt];
-		}
-		else if (evt instanceof RegExp) {
-			// Remove all events matching the regex.
-			for (key in events) {
-				if (events.hasOwnProperty(key) && evt.test(key)) {
-					delete events[key];
-				}
-			}
-		}
-		else {
-			// Remove all listeners in all events
-			delete this._events;
-		}
-
-		return this;
-	};
-
-	/**
-	 * Alias of removeEvent.
-	 *
-	 * Added to mirror the node API.
-	 */
-	proto.removeAllListeners = alias('removeEvent');
-
-	/**
-	 * Emits an event of your choice.
-	 * When emitted, every listener attached to that event will be executed.
-	 * If you pass the optional argument array then those arguments will be passed to every listener upon execution.
-	 * Because it uses `apply`, your array of arguments will be passed as if you wrote them out separately.
-	 * So they will not arrive within the array on the other side, they will be separate.
-	 * You can also pass a regular expression to emit to all events that match it.
-	 *
-	 * @param {String|RegExp} evt Name of the event to emit and execute listeners for.
-	 * @param {Array} [args] Optional array of arguments to be passed to each listener.
-	 * @return {Object} Current instance of EventEmitter for chaining.
-	 */
-	proto.emitEvent = function emitEvent(evt, args) {
-		var listeners = this.getListenersAsObject(evt);
-		var listener;
-		var i;
-		var key;
-		var response;
-
-		for (key in listeners) {
-			if (listeners.hasOwnProperty(key)) {
-				i = listeners[key].length;
-
-				while (i--) {
-					// If the listener returns true then it shall be removed from the event
-					// The function is executed either with a basic call or an apply if there is an args array
-					listener = listeners[key][i];
-
-					if (listener.once === true) {
-						this.removeListener(evt, listener.listener);
-					}
-
-					response = listener.listener.apply(this, args || []);
-
-					if (response === this._getOnceReturnValue()) {
-						this.removeListener(evt, listener.listener);
-					}
-				}
-			}
-		}
-
-		return this;
-	};
-
-	/**
-	 * Alias of emitEvent
-	 */
-	proto.trigger = alias('emitEvent');
-
-	/**
-	 * Subtly different from emitEvent in that it will pass its arguments on to the listeners, as opposed to taking a single array of arguments to pass on.
-	 * As with emitEvent, you can pass a regex in place of the event name to emit to all events that match it.
-	 *
-	 * @param {String|RegExp} evt Name of the event to emit and execute listeners for.
-	 * @param {...*} Optional additional arguments to be passed to each listener.
-	 * @return {Object} Current instance of EventEmitter for chaining.
-	 */
-	proto.emit = function emit(evt) {
-		var args = Array.prototype.slice.call(arguments, 1);
-		return this.emitEvent(evt, args);
-	};
-
-	/**
-	 * Sets the current value to check against when executing listeners. If a
-	 * listeners return value matches the one set here then it will be removed
-	 * after execution. This value defaults to true.
-	 *
-	 * @param {*} value The new value to check for when executing listeners.
-	 * @return {Object} Current instance of EventEmitter for chaining.
-	 */
-	proto.setOnceReturnValue = function setOnceReturnValue(value) {
-		this._onceReturnValue = value;
-		return this;
-	};
-
-	/**
-	 * Fetches the current value to check against when executing listeners. If
-	 * the listeners return value matches this one then it should be removed
-	 * automatically. It will return true by default.
-	 *
-	 * @return {*|Boolean} The current value to check for or the default, true.
-	 * @api private
-	 */
-	proto._getOnceReturnValue = function _getOnceReturnValue() {
-		if (this.hasOwnProperty('_onceReturnValue')) {
-			return this._onceReturnValue;
-		}
-		else {
-			return true;
-		}
-	};
-
-	/**
-	 * Fetches the events object and creates one if required.
-	 *
-	 * @return {Object} The events storage object.
-	 * @api private
-	 */
-	proto._getEvents = function _getEvents() {
-		return this._events || (this._events = {});
-	};
-
-	/**
-	 * Reverts the global {@link EventEmitter} to its previous value and returns a reference to this version.
-	 *
-	 * @return {Function} Non conflicting EventEmitter class.
-	 */
-	EventEmitter.noConflict = function noConflict() {
-		exports.EventEmitter = originalGlobalValue;
-		return EventEmitter;
-	};
-
-	// Expose the class either via AMD, CommonJS or the global object
-	if (typeof define === 'function' && define.amd) {
-		define(function () {
-			return EventEmitter;
-		});
-	}
-	else if (typeof module === 'object' && module.exports){
-		module.exports = EventEmitter;
-	}
-	else {
-		this.EventEmitter = EventEmitter;
-	}
-}.call(this));
-
-});
-require.register("desandro-imagesloaded/imagesloaded.js", function(exports, require, module){
-/*!
- * imagesLoaded v3.1.6
- * JavaScript is all like "You images are done yet or what?"
- * MIT License
- */
-
-( function( window, factory ) { 'use strict';
-  // universal module definition
-
-  /*global define: false, module: false, require: false */
-
-  if ( typeof define === 'function' && define.amd ) {
-    // AMD
-    define( [
-      'eventEmitter/EventEmitter',
-      'eventie/eventie'
-    ], function( EventEmitter, eventie ) {
-      return factory( window, EventEmitter, eventie );
-    });
-  } else if ( typeof exports === 'object' ) {
-    // CommonJS
-    module.exports = factory(
-      window,
-      require('eventEmitter'),
-      require('eventie')
-    );
-  } else {
-    // browser global
-    window.imagesLoaded = factory(
-      window,
-      window.EventEmitter,
-      window.eventie
-    );
-  }
-
-})( this,
-
-// --------------------------  factory -------------------------- //
-
-function factory( window, EventEmitter, eventie ) {
-
-'use strict';
-
-var $ = window.jQuery;
-var console = window.console;
-var hasConsole = typeof console !== 'undefined';
-
-// -------------------------- helpers -------------------------- //
-
-// extend objects
-function extend( a, b ) {
-  for ( var prop in b ) {
-    a[ prop ] = b[ prop ];
-  }
-  return a;
-}
-
-var objToString = Object.prototype.toString;
-function isArray( obj ) {
-  return objToString.call( obj ) === '[object Array]';
-}
-
-// turn element or nodeList into an array
-function makeArray( obj ) {
-  var ary = [];
-  if ( isArray( obj ) ) {
-    // use object if already an array
-    ary = obj;
-  } else if ( typeof obj.length === 'number' ) {
-    // convert nodeList to array
-    for ( var i=0, len = obj.length; i < len; i++ ) {
-      ary.push( obj[i] );
-    }
-  } else {
-    // array of single index
-    ary.push( obj );
-  }
-  return ary;
-}
-
-  // -------------------------- imagesLoaded -------------------------- //
-
-  /**
-   * @param {Array, Element, NodeList, String} elem
-   * @param {Object or Function} options - if function, use as callback
-   * @param {Function} onAlways - callback function
-   */
-  function ImagesLoaded( elem, options, onAlways ) {
-    // coerce ImagesLoaded() without new, to be new ImagesLoaded()
-    if ( !( this instanceof ImagesLoaded ) ) {
-      return new ImagesLoaded( elem, options );
-    }
-    // use elem as selector string
-    if ( typeof elem === 'string' ) {
-      elem = document.querySelectorAll( elem );
-    }
-
-    this.elements = makeArray( elem );
-    this.options = extend( {}, this.options );
-
-    if ( typeof options === 'function' ) {
-      onAlways = options;
-    } else {
-      extend( this.options, options );
-    }
-
-    if ( onAlways ) {
-      this.on( 'always', onAlways );
-    }
-
-    this.getImages();
-
-    if ( $ ) {
-      // add jQuery Deferred object
-      this.jqDeferred = new $.Deferred();
-    }
-
-    // HACK check async to allow time to bind listeners
-    var _this = this;
-    setTimeout( function() {
-      _this.check();
-    });
-  }
-
-  ImagesLoaded.prototype = new EventEmitter();
-
-  ImagesLoaded.prototype.options = {};
-
-  ImagesLoaded.prototype.getImages = function() {
-    this.images = [];
-
-    // filter & find items if we have an item selector
-    for ( var i=0, len = this.elements.length; i < len; i++ ) {
-      var elem = this.elements[i];
-      // filter siblings
-      if ( elem.nodeName === 'IMG' ) {
-        this.addImage( elem );
-      }
-      // find children
-      // no non-element nodes, #143
-      var nodeType = elem.nodeType;
-      if ( !nodeType || !( nodeType === 1 || nodeType === 9 || nodeType === 11 ) ) {
-        continue;
-      }
-      var childElems = elem.querySelectorAll('img');
-      // concat childElems to filterFound array
-      for ( var j=0, jLen = childElems.length; j < jLen; j++ ) {
-        var img = childElems[j];
-        this.addImage( img );
-      }
-    }
-  };
-
-  /**
-   * @param {Image} img
-   */
-  ImagesLoaded.prototype.addImage = function( img ) {
-    var loadingImage = new LoadingImage( img );
-    this.images.push( loadingImage );
-  };
-
-  ImagesLoaded.prototype.check = function() {
-    var _this = this;
-    var checkedCount = 0;
-    var length = this.images.length;
-    this.hasAnyBroken = false;
-    // complete if no images
-    if ( !length ) {
-      this.complete();
-      return;
-    }
-
-    function onConfirm( image, message ) {
-      if ( _this.options.debug && hasConsole ) {
-        console.log( 'confirm', image, message );
-      }
-
-      _this.progress( image );
-      checkedCount++;
-      if ( checkedCount === length ) {
-        _this.complete();
-      }
-      return true; // bind once
-    }
-
-    for ( var i=0; i < length; i++ ) {
-      var loadingImage = this.images[i];
-      loadingImage.on( 'confirm', onConfirm );
-      loadingImage.check();
-    }
-  };
-
-  ImagesLoaded.prototype.progress = function( image ) {
-    this.hasAnyBroken = this.hasAnyBroken || !image.isLoaded;
-    // HACK - Chrome triggers event before object properties have changed. #83
-    var _this = this;
-    setTimeout( function() {
-      _this.emit( 'progress', _this, image );
-      if ( _this.jqDeferred && _this.jqDeferred.notify ) {
-        _this.jqDeferred.notify( _this, image );
-      }
-    });
-  };
-
-  ImagesLoaded.prototype.complete = function() {
-    var eventName = this.hasAnyBroken ? 'fail' : 'done';
-    this.isComplete = true;
-    var _this = this;
-    // HACK - another setTimeout so that confirm happens after progress
-    setTimeout( function() {
-      _this.emit( eventName, _this );
-      _this.emit( 'always', _this );
-      if ( _this.jqDeferred ) {
-        var jqMethod = _this.hasAnyBroken ? 'reject' : 'resolve';
-        _this.jqDeferred[ jqMethod ]( _this );
-      }
-    });
-  };
-
-  // -------------------------- jquery -------------------------- //
-
-  if ( $ ) {
-    $.fn.imagesLoaded = function( options, callback ) {
-      var instance = new ImagesLoaded( this, options, callback );
-      return instance.jqDeferred.promise( $(this) );
-    };
-  }
-
-
-  // --------------------------  -------------------------- //
-
-  function LoadingImage( img ) {
-    this.img = img;
-  }
-
-  LoadingImage.prototype = new EventEmitter();
-
-  LoadingImage.prototype.check = function() {
-    // first check cached any previous images that have same src
-    var resource = cache[ this.img.src ] || new Resource( this.img.src );
-    if ( resource.isConfirmed ) {
-      this.confirm( resource.isLoaded, 'cached was confirmed' );
-      return;
-    }
-
-    // If complete is true and browser supports natural sizes,
-    // try to check for image status manually.
-    if ( this.img.complete && this.img.naturalWidth !== undefined ) {
-      // report based on naturalWidth
-      this.confirm( this.img.naturalWidth !== 0, 'naturalWidth' );
-      return;
-    }
-
-    // If none of the checks above matched, simulate loading on detached element.
-    var _this = this;
-    resource.on( 'confirm', function( resrc, message ) {
-      _this.confirm( resrc.isLoaded, message );
-      return true;
-    });
-
-    resource.check();
-  };
-
-  LoadingImage.prototype.confirm = function( isLoaded, message ) {
-    this.isLoaded = isLoaded;
-    this.emit( 'confirm', this, message );
-  };
-
-  // -------------------------- Resource -------------------------- //
-
-  // Resource checks each src, only once
-  // separate class from LoadingImage to prevent memory leaks. See #115
-
-  var cache = {};
-
-  function Resource( src ) {
-    this.src = src;
-    // add to cache
-    cache[ src ] = this;
-  }
-
-  Resource.prototype = new EventEmitter();
-
-  Resource.prototype.check = function() {
-    // only trigger checking once
-    if ( this.isChecked ) {
-      return;
-    }
-    // simulate loading on detached element
-    var proxyImage = new Image();
-    eventie.bind( proxyImage, 'load', this );
-    eventie.bind( proxyImage, 'error', this );
-    proxyImage.src = this.src;
-    // set flag
-    this.isChecked = true;
-  };
-
-  // ----- events ----- //
-
-  // trigger specified handler for event type
-  Resource.prototype.handleEvent = function( event ) {
-    var method = 'on' + event.type;
-    if ( this[ method ] ) {
-      this[ method ]( event );
-    }
-  };
-
-  Resource.prototype.onload = function( event ) {
-    this.confirm( true, 'onload' );
-    this.unbindProxyEvents( event );
-  };
-
-  Resource.prototype.onerror = function( event ) {
-    this.confirm( false, 'onerror' );
-    this.unbindProxyEvents( event );
-  };
-
-  // ----- confirm ----- //
-
-  Resource.prototype.confirm = function( isLoaded, message ) {
-    this.isConfirmed = true;
-    this.isLoaded = isLoaded;
-    this.emit( 'confirm', this, message );
-  };
-
-  Resource.prototype.unbindProxyEvents = function( event ) {
-    eventie.unbind( event.target, 'load', this );
-    eventie.unbind( event.target, 'error', this );
-  };
-
-  // -----  ----- //
-
-  return ImagesLoaded;
-
-});
-
-});
-require.register("twolfson-computedstyle/dist/computedStyle.commonjs.js", function(exports, require, module){
-// This code has been refactored for 140 bytes
-// You can see the original here: https://github.com/twolfson/computedStyle/blob/04cd1da2e30fa45844f95f5cb1ac898e9b9ef050/lib/computedStyle.js
-var computedStyle = function (el, prop, getComputedStyle) {
-  getComputedStyle = window.getComputedStyle;
-
-  // In one fell swoop
-  return (
-    // If we have getComputedStyle
-    getComputedStyle ?
-      // Query it
-      // TODO: From CSS-Query notes, we might need (node, null) for FF
-      getComputedStyle(el) :
-
-    // Otherwise, we are in IE and use currentStyle
-      el.currentStyle
-  )[
-    // Switch to camelCase for CSSOM
-    // DEV: Grabbed from jQuery
-    // https://github.com/jquery/jquery/blob/1.9-stable/src/css.js#L191-L194
-    // https://github.com/jquery/jquery/blob/1.9-stable/src/core.js#L593-L597
-    prop.replace(/-(\w)/gi, function (word, letter) {
-      return letter.toUpperCase()
-    })
-  ]
-}
-
-module.exports = computedStyle;
-});
-require.register("ramitos-iswindow/src/isWindow.js", function(exports, require, module){
-module.exports = function (el) {
-  return el !== null && el === el.window
-}
-});
-require.register("ramitos-isdocument/src/isDocument.js", function(exports, require, module){
-module.exports = function (el) {
-  return el.nodeType === 9
-}
-});
-require.register("ramitos-iselement/src/isElement.js", function(exports, require, module){
-var type = require('type')
-var isFn = (type(HTMLElement) === 'function')
-
-module.exports = function (el) {
-  if(isFn) return (el instanceof HTMLElement)
-  return type(el) === 'element' && type(el.nodeName) === 'string'
-}
-});
-require.register("component-type/index.js", function(exports, require, module){
-/**
- * toString ref.
- */
-
-var toString = Object.prototype.toString;
-
-/**
- * Return the type of `val`.
- *
- * @param {Mixed} val
- * @return {String}
- * @api public
- */
-
-module.exports = function(val){
-  switch (toString.call(val)) {
-    case '[object Date]': return 'date';
-    case '[object RegExp]': return 'regexp';
-    case '[object Arguments]': return 'arguments';
-    case '[object Array]': return 'array';
-    case '[object Error]': return 'error';
-  }
-
-  if (val === null) return 'null';
-  if (val === undefined) return 'undefined';
-  if (val !== val) return 'nan';
-  if (val && val.nodeType === 1) return 'element';
-
-  return typeof val.valueOf();
-};
-
-});
-require.register("ramitos-interpolate/interpolate.js", function(exports, require, module){
-/*
- * Copyright Joyent, Inc. and other Node contributors.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sublicense, and/or sell copies of the Software, and to permit
- * persons to whom the Software is furnished to do so, subject to the
- * following conditions:
- *
- * The above copyright notice and this permission notice shall be included
- * in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
- * NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
- */
-
-module.exports = function (f) {
-  if (typeof f !== 'string') throw new Error('first parameter must be a string')
-
-  var i = 1,
-      args = arguments,
-      len = args.length,
-      str
-
-  str = f.replace(/%[sdj%]/g, function (x) {
-    if (x === '%%') return '%'
-    if (i >= len) return x
-    switch (x) {
-      case '%s': return String(args[i++])
-      case '%d': return Number(args[i++])
-      case '%j': return JSON.stringify(args[i++])
-      default: return x
-    }
-  })
-
-  for (var x = args[i]; i < len; x = args[++i]) {
-     str += ' ' + x
-   }
-
-   return str
-}
-});
-require.register("yields-capitalize/index.js", function(exports, require, module){
-
-/**
- * Capitalize the provided `str`.
- *
- * example:
- *
- *        capitalize('foo');
- *        // > Foo
- *
- * @param {String} str
- * @return {String}
- */
-
-exports = module.exports = function (str) {
-  return str.charAt(0).toUpperCase()
-    + str.slice(1);
-};
-
-/**
- * Capitalize words.
- *
- * @param {String} str
- * @return {String}
- */
-
-exports.words = function(str){
-  return str.replace(/\w+/g, exports);
-};
-
-});
-require.register("kenany-is-number/index.js", function(exports, require, module){
-var numberClass = '[object Number]';
-var objectProto = Object.prototype;
-var toString = objectProto.toString;
-
-/**
- * Checks if `value` is a number.
- *
- * Note: `NaN` is considered a number. See http://es5.github.io/#x8.5.
- *
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if the `value` is a number, else `false`.
- * @api public
- */
-function isNumber(value) {
-  return typeof value == 'number' ||
-    value && typeof value == 'object' && toString.call(value) == numberClass || false;
-}
-
-module.exports = isNumber;
-});
-require.register("kenany-is-nan/index.js", function(exports, require, module){
-var isNumber = require('is-number');
-
-/**
- * Checks if `value` is `NaN`.
- *
- * Note: This is not the same as native `isNaN` which will return `true` for
- * `undefined` and other non-numeric values. See http://es5.github.io/#x15.1.2.4.
- *
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if the `value` is `NaN`, else `false`.
- */
-function isNaN(value) {
-  return isNumber(value) && value != +value;
-}
-
-module.exports = isNaN;
-});
-require.register("ramitos-from_px/src/from_px.js", function(exports, require, module){
-var type = require('type'),
-    is_nan = require('is-nan')
-
-module.exports = function (px) {
-  if(type(px) !== 'string') return 0
-  var number = Number(px.replace(/px$/, ''))
-
-  return is_nan(number) ? 0 : number
-}
-});
-require.register("ramitos-to_px/src/to_px.js", function(exports, require, module){
-var type = require('type'),
-    interpolate = require('interpolate')
-
-module.exports = function (n, pos) {
-  if(type(n) === 'string')
-    return n
-
-  if(type(n) === 'number')
-    return interpolate('%dpx', (pos && n < 0) ? 0 : n)
-
-  return '0px'
-}
-});
-require.register("ramitos-dimensions/src/dimensions.js", function(exports, require, module){
-var interpolate = require('interpolate'),
-    capitalize = require('capitalize'),
-    isWindow = require('isWindow'),
-    isDocument = require('isDocument'),
-    isElement = require('isElement'),
-    style = require('computedStyle'),
-    from_px = require('from_px'),
-    to_px = require('to_px'),
-    type = require('type'),
-    css = require('css')
-
-
-var from_window = function (el, name) {
-  return el.document.documentElement[interpolate('client%s', capitalize(name))]
-}
-
-// Get document width or height
-// Either scroll[Width/Height] or offset[Width/Height] or client[Width/Height],
-// whichever is greatest
-var from_document = function (el, name) {
-  name = capitalize(name)
-
-  var scroll_name = interpolate('scroll%s', name)
-  var offset_name = interpolate('offset%s', name)
-  var client_name = interpolate('client%s', name)
-
-  var body_scroll = el.body[scroll_name]
-  var document_scroll = el.documentElement[scroll_name]
-
-  var body_offset = el.body[offset_name]
-  var document_offset = el.documentElement[offset_name]
-
-  var body_client = el.body[client_name]
-  var document_client = el.documentElement[client_name]
-
-  return Math.max(body_scroll, document_scroll, body_offset, document_offset, body_client, document_client)
-}
-
-
-// flag to include padding or not
-// by default it should include padding
-var inner = function (el, name, from, to) {
-  if(isWindow(el))
-    return from_window(el, name)
-
-  if(isDocument(el))
-    return from_document(el, name)
-
-  if(!isElement(el))
-    return null
-
-  var content = from_px(style(el, name))
-  var boxSizing = style(el, 'box-sizing')
-  var padding = 0
-  var border = 0
-
-  // if the width property already includes padding and not the border
-  // then just get the width computedValue
-  if(boxSizing === 'padding-box')
-    return content
-
-  // if the width value doesn't include the padding, calculate it
-  padding += from_px(style(el, interpolate('padding-%s', from)))
-  padding += from_px(style(el, interpolate('padding-%s', to)))
-
-  // if the width includes the border value AND padding
-  // calculate the border to then remove it from the width value
-  if(boxSizing === 'border-box') {
-    border += from_px(style(el, interpolate('border-%s-width', from)))
-    border += from_px(style(el, interpolate('border-%s-width', to)))
-  }
-
-  return content + padding - border
-}
-
-var outer = function (el, withMargin, name, from, to) {
-  if(isWindow(el))
-    return from_window(el, name)
-
-  if(isDocument(el))
-    return from_document(el, name)
-
-  if(!isElement(el))
-    return null
-
-  var content = from_px(style(el, name))
-  var boxSizing = style(el, 'box-sizing')
-  var padding = 0
-  var border = 0
-  var margin = 0
-
-  // width already includes border and padding
-  if(boxSizing === 'border-box' && !withMargin)
-    return content
-
-  margin += from_px(style(el, interpolate('margin-%s', from)))
-  margin += from_px(style(el, interpolate('margin-%s', to)))
-
-  // width already includes border and padding
-  if(boxSizing === 'border-box' && withMargin)
-    return content + margin
-
-  border += from_px(style(el, interpolate('border-%s-width', from)))
-  border += from_px(style(el, interpolate('border-%s-width', to)))
-
-  // width already includes padding (but NOT border)
-  if(boxSizing === 'padding-box' & !withMargin)
-    return content + border
-
-  // width already includes padding (but NOT border)
-  if(boxSizing === 'padding-box' & withMargin)
-    return content + border + margin
-
-  padding += from_px(style(el, interpolate('padding-%s', from)))
-  padding += from_px(style(el, interpolate('padding-%s', to)))
-
-  if(!withMargin)
-    return content + border + padding
-
-  return content + border + margin + padding
-}
-
-var wh = function (el, value, name, from, to) {
-  if(isWindow(el))
-    return from_window(el, name)
-
-  if(isDocument(el))
-    return from_document(el, name)
-
-  if(!isElement(el))
-    return null
-
-  if(type(value) !== 'undefined')
-    return wh.set(el, value, name, from, to)
-
-  return wh.get(el, name, from, to)
-}
-
-wh.set = function (el, value, name, from, to) {
-  var to_set = Object.create(null)
-  var content = from_px(style(el, name))
-  var boxSizing = style(el, 'box-sizing')
-  var padding = 0
-  var border = 0
-
-  if(!boxSizing || boxSizing === 'content-box') {
-    to_set[name] = to_px(value, true)
-    return css(el, to_set)
-  }
-
-  padding += from_px(style(el, interpolate('padding-%s', from)))
-  padding += from_px(style(el, interpolate('padding-%s', to)))
-
-  if(boxSizing === 'padding-box') {
-    to_set[name] = value = to_px(value + padding, true)
-    return css(el, to_set)
-  }
-
-  border += from_px(style(el, interpolate('border-%s-width', from)))
-  border += from_px(style(el, interpolate('border-%s-width', to)))
-
-  to_set[name] = value = to_px(value + padding + border, true)
-  css(el, to_set)
-}
-
-wh.get = function (el, name, from, to) {
-  var content = from_px(style(el, name))
-  var boxSizing = style(el, 'box-sizing')
-  var padding = 0
-  var border = 0
-
-  if(!boxSizing || boxSizing === 'content-box')
-    return content
-
-  padding += from_px(style(el, interpolate('padding-%s', from)))
-  padding += from_px(style(el, interpolate('padding-%s', to)))
-
-  if(boxSizing === 'padding-box')
-    return content - padding
-
-  border += from_px(style(el, interpolate('border-%s-width', from)))
-  border += from_px(style(el, interpolate('border-%s-width', to)))
-
-  return content - padding - border
-}
-
-var dimensions = module.exports = function (el) {
-  if(!(this instanceof dimensions)) return new dimensions(el);
-
-  this.el = el
-}
-
-dimensions.prototype.innerWidth = function () {
-  return inner(this.el, 'width', 'left', 'right')
-}
-
-dimensions.prototype.innerHeight = function () {
-  return inner(this.el, 'height', 'top', 'bottom')
-}
-
-dimensions.prototype.height = function (value) {
-  return wh(this.el, value, 'height', 'top', 'bottom')
-}
-
-dimensions.prototype.width = function (value) {
-  return wh(this.el, value, 'width', 'left', 'right')
-}
-
-dimensions.prototype.outerWidth = function (withMargin) {
-  return outer(this.el, withMargin, 'width', 'left', 'right')
-}
-
-dimensions.prototype.outerHeight = function (withMargin) {
-  return outer(this.el, withMargin, 'height', 'top', 'bottom')
-}
-});
-require.register("enyo-domready/index.js", function(exports, require, module){
-/*!
- * Copyright (c) 2012 Matias Meno <m@tias.me>
- * 
- * Original code (c) by Dustin Diaz 2012 - License MIT
- */
-
-
-/**
- * Expose `domready`.
- */
-
-module.exports = domready;
-
-
-/**
- *
- * Cross browser implementation of the domready event
- *
- * @param {Function} ready - the callback to be invoked as soon as the dom is fully loaded.
- * @api public
- */
-
-function domready(ready) {
- var fns = [], fn, f = false
-    , doc = document
-    , testEl = doc.documentElement
-    , hack = testEl.doScroll
-    , domContentLoaded = 'DOMContentLoaded'
-    , addEventListener = 'addEventListener'
-    , onreadystatechange = 'onreadystatechange'
-    , readyState = 'readyState'
-    , loaded = /^loade|c/.test(doc[readyState])
-
-  function flush(f) {
-    loaded = 1
-    while (f = fns.shift()) f()
-  }
-
-  doc[addEventListener] && doc[addEventListener](domContentLoaded, fn = function () {
-    doc.removeEventListener(domContentLoaded, fn, f)
-    flush()
-  }, f)
-
-
-  hack && doc.attachEvent(onreadystatechange, fn = function () {
-    if (/^c/.test(doc[readyState])) {
-      doc.detachEvent(onreadystatechange, fn)
-      flush()
-    }
-  })
-
-  return (ready = hack ?
-    function (fn) {
-      self != top ?
-        loaded ? fn() : fns.push(fn) :
-        function () {
-          try {
-            testEl.doScroll('left')
-          } catch (e) {
-            return setTimeout(function() { ready(fn) }, 50)
-          }
-          fn()
-        }()
-    } :
-    function (fn) {
-      loaded ? fn() : fns.push(fn)
-    })
-}
-});
-require.register("timoxley-dom-support/index.js", function(exports, require, module){
-var domready = require('domready')()
-
-module.exports = (function() {
-
-	var support,
-		all,
-		a,
-		select,
-		opt,
-		input,
-		fragment,
-		eventName,
-		i,
-		isSupported,
-		clickFn,
-		div = document.createElement("div");
-
-	// Setup
-	div.setAttribute( "className", "t" );
-	div.innerHTML = "  <link/><table></table><a href='/a'>a</a><input type='checkbox'/>";
-
-	// Support tests won't run in some limited or non-browser environments
-	all = div.getElementsByTagName("*");
-	a = div.getElementsByTagName("a")[ 0 ];
-	if ( !all || !a || !all.length ) {
-		return {};
-	}
-
-	// First batch of tests
-	select = document.createElement("select");
-	opt = select.appendChild( document.createElement("option") );
-	input = div.getElementsByTagName("input")[ 0 ];
-
-	a.style.cssText = "top:1px;float:left;opacity:.5";
-	support = {
-		// IE strips leading whitespace when .innerHTML is used
-		leadingWhitespace: ( div.firstChild.nodeType === 3 ),
-
-		// Make sure that tbody elements aren't automatically inserted
-		// IE will insert them into empty tables
-		tbody: !div.getElementsByTagName("tbody").length,
-
-		// Make sure that link elements get serialized correctly by innerHTML
-		// This requires a wrapper element in IE
-		htmlSerialize: !!div.getElementsByTagName("link").length,
-
-		// Get the style information from getAttribute
-		// (IE uses .cssText instead)
-		style: /top/.test( a.getAttribute("style") ),
-
-		// Make sure that URLs aren't manipulated
-		// (IE normalizes it by default)
-		hrefNormalized: ( a.getAttribute("href") === "/a" ),
-
-		// Make sure that element opacity exists
-		// (IE uses filter instead)
-		// Use a regex to work around a WebKit issue. See #5145
-		opacity: /^0.5/.test( a.style.opacity ),
-
-		// Verify style float existence
-		// (IE uses styleFloat instead of cssFloat)
-		cssFloat: !!a.style.cssFloat,
-
-		// Make sure that if no value is specified for a checkbox
-		// that it defaults to "on".
-		// (WebKit defaults to "" instead)
-		checkOn: ( input.value === "on" ),
-
-		// Make sure that a selected-by-default option has a working selected property.
-		// (WebKit defaults to false instead of true, IE too, if it's in an optgroup)
-		optSelected: opt.selected,
-
-		// Test setAttribute on camelCase class. If it works, we need attrFixes when doing get/setAttribute (ie6/7)
-		getSetAttribute: div.className !== "t",
-
-		// Tests for enctype support on a form (#6743)
-		enctype: !!document.createElement("form").enctype,
-
-		// Makes sure cloning an html5 element does not cause problems
-		// Where outerHTML is undefined, this still works
-		html5Clone: document.createElement("nav").cloneNode( true ).outerHTML !== "<:nav></:nav>",
-
-		// jQuery.support.boxModel DEPRECATED in 1.8 since we don't support Quirks Mode
-		boxModel: ( document.compatMode === "CSS1Compat" ),
-
-		// Will be defined later
-		submitBubbles: true,
-		changeBubbles: true,
-		focusinBubbles: false,
-		deleteExpando: true,
-		noCloneEvent: true,
-		inlineBlockNeedsLayout: false,
-		shrinkWrapBlocks: false,
-		reliableMarginRight: true,
-		boxSizingReliable: true,
-		pixelPosition: false
-	};
-
-	// Make sure checked status is properly cloned
-	input.checked = true;
-	support.noCloneChecked = input.cloneNode( true ).checked;
-
-	// Make sure that the options inside disabled selects aren't marked as disabled
-	// (WebKit marks them as disabled)
-	select.disabled = true;
-	support.optDisabled = !opt.disabled;
-
-	// Test to see if it's possible to delete an expando from an element
-	// Fails in Internet Explorer
-	try {
-		delete div.test;
-	} catch( e ) {
-		support.deleteExpando = false;
-	}
-
-	if ( !div.addEventListener && div.attachEvent && div.fireEvent ) {
-		div.attachEvent( "onclick", clickFn = function() {
-			// Cloning a node shouldn't copy over any
-			// bound event handlers (IE does this)
-			support.noCloneEvent = false;
-		});
-		div.cloneNode( true ).fireEvent("onclick");
-		div.detachEvent( "onclick", clickFn );
-	}
-
-	// Check if a radio maintains its value
-	// after being appended to the DOM
-	input = document.createElement("input");
-	input.value = "t";
-	input.setAttribute( "type", "radio" );
-	support.radioValue = input.value === "t";
-
-	input.setAttribute( "checked", "checked" );
-
-	// #11217 - WebKit loses check when the name is after the checked attribute
-	input.setAttribute( "name", "t" );
-
-	div.appendChild( input );
-	fragment = document.createDocumentFragment();
-	fragment.appendChild( div.lastChild );
-
-	// WebKit doesn't clone checked state correctly in fragments
-	support.checkClone = fragment.cloneNode( true ).cloneNode( true ).lastChild.checked;
-
-	// Check if a disconnected checkbox will retain its checked
-	// value of true after appended to the DOM (IE6/7)
-	support.appendChecked = input.checked;
-
-	fragment.removeChild( input );
-	fragment.appendChild( div );
-
-	// Technique from Juriy Zaytsev
-	// http://perfectionkills.com/detecting-event-support-without-browser-sniffing/
-	// We only care about the case where non-standard event systems
-	// are used, namely in IE. Short-circuiting here helps us to
-	// avoid an eval call (in setAttribute) which can cause CSP
-	// to go haywire. See: https://developer.mozilla.org/en/Security/CSP
-	if ( !div.addEventListener ) {
-		for ( i in {
-			submit: true,
-			change: true,
-			focusin: true
-		}) {
-			eventName = "on" + i;
-			isSupported = ( eventName in div );
-			if ( !isSupported ) {
-				div.setAttribute( eventName, "return;" );
-				isSupported = ( typeof div[ eventName ] === "function" );
-			}
-			support[ i + "Bubbles" ] = isSupported;
-		}
-	}
-
-	// Run tests that need a body at doc ready
-	domready(function() {
-		var container, div, tds, marginDiv,
-			divReset = "padding:0;margin:0;border:0;display:block;overflow:hidden;box-sizing:content-box;-moz-box-sizing:content-box;-webkit-box-sizing:content-box;",
-			body = document.getElementsByTagName("body")[0];
-
-		if ( !body ) {
-			// Return for frameset docs that don't have a body
-			return;
-		}
-
-		container = document.createElement("div");
-		container.style.cssText = "visibility:hidden;border:0;width:0;height:0;position:static;top:0;margin-top:1px";
-		body.insertBefore( container, body.firstChild );
-
-		// Construct the test element
-		div = document.createElement("div");
-		container.appendChild( div );
-
-    //Check if table cells still have offsetWidth/Height when they are set
-    //to display:none and there are still other visible table cells in a
-    //table row; if so, offsetWidth/Height are not reliable for use when
-    //determining if an element has been hidden directly using
-    //display:none (it is still safe to use offsets if a parent element is
-    //hidden; don safety goggles and see bug #4512 for more information).
-    //(only IE 8 fails this test)
-		div.innerHTML = "<table><tr><td></td><td>t</td></tr></table>";
-		tds = div.getElementsByTagName("td");
-		tds[ 0 ].style.cssText = "padding:0;margin:0;border:0;display:none";
-		isSupported = ( tds[ 0 ].offsetHeight === 0 );
-
-		tds[ 0 ].style.display = "";
-		tds[ 1 ].style.display = "none";
-
-		// Check if empty table cells still have offsetWidth/Height
-		// (IE <= 8 fail this test)
-		support.reliableHiddenOffsets = isSupported && ( tds[ 0 ].offsetHeight === 0 );
-
-		// Check box-sizing and margin behavior
-		div.innerHTML = "";
-		div.style.cssText = "box-sizing:border-box;-moz-box-sizing:border-box;-webkit-box-sizing:border-box;padding:1px;border:1px;display:block;width:4px;margin-top:1%;position:absolute;top:1%;";
-		support.boxSizing = ( div.offsetWidth === 4 );
-		support.doesNotIncludeMarginInBodyOffset = ( body.offsetTop !== 1 );
-
-		// NOTE: To any future maintainer, we've window.getComputedStyle
-		// because jsdom on node.js will break without it.
-		if ( window.getComputedStyle ) {
-			support.pixelPosition = ( window.getComputedStyle( div, null ) || {} ).top !== "1%";
-			support.boxSizingReliable = ( window.getComputedStyle( div, null ) || { width: "4px" } ).width === "4px";
-
-			// Check if div with explicit width and no margin-right incorrectly
-			// gets computed margin-right based on width of container. For more
-			// info see bug #3333
-			// Fails in WebKit before Feb 2011 nightlies
-			// WebKit Bug 13343 - getComputedStyle returns wrong value for margin-right
-			marginDiv = document.createElement("div");
-			marginDiv.style.cssText = div.style.cssText = divReset;
-			marginDiv.style.marginRight = marginDiv.style.width = "0";
-			div.style.width = "1px";
-			div.appendChild( marginDiv );
-			support.reliableMarginRight =
-				!parseFloat( ( window.getComputedStyle( marginDiv, null ) || {} ).marginRight );
-		}
-
-		if ( typeof div.style.zoom !== "undefined" ) {
-			// Check if natively block-level elements act like inline-block
-			// elements when setting their display to 'inline' and giving
-			// them layout
-			// (IE < 8 does this)
-			div.innerHTML = "";
-			div.style.cssText = divReset + "width:1px;padding:1px;display:inline;zoom:1";
-			support.inlineBlockNeedsLayout = ( div.offsetWidth === 3 );
-
-			// Check if elements with layout shrink-wrap their children
-			// (IE 6 does this)
-			div.style.display = "block";
-			div.style.overflow = "visible";
-			div.innerHTML = "<div></div>";
-			div.firstChild.style.width = "5px";
-			support.shrinkWrapBlocks = ( div.offsetWidth !== 3 );
-
-			container.style.zoom = 1;
-		}
-
-		// Null elements to avoid leaks in IE
-		body.removeChild( container );
-		container = div = tds = marginDiv = null;
-	});
-
-	// Null elements to avoid leaks in IE
-	fragment.removeChild( div );
-	all = a = select = opt = input = fragment = div = null;
-
-	return support;
-})();
-
-});
-require.register("component-within-document/index.js", function(exports, require, module){
-
-/**
- * Check if `el` is within the document.
- *
- * @param {Element} el
- * @return {Boolean}
- * @api private
- */
-
-module.exports = function(el) {
-  var node = el;
-  while (node = node.parentNode) {
-    if (node == document) return true;
-  }
-  return false;
-};
-});
-require.register("timoxley-offset/index.js", function(exports, require, module){
-var support = require('dom-support')
-var contains = require('within-document')
-
-/**
- * Get offset of an element within the viewport.
- *
- * @api public
- */
-
-module.exports = function offset(el) {
-  var doc = el && el.ownerDocument
-  if (!doc) return
-
-  // Make sure it's not a disconnected DOM node
-  if (!contains(el)) return box
-
-  var body = doc.body
-  if (body === el) {
-    return bodyOffset(el)
-  }
-
-  var box = { top: 0, left: 0 }
-  if ( typeof el.getBoundingClientRect !== "undefined" ) {
-    // If we don't have gBCR, just use 0,0 rather than error
-    // BlackBerry 5, iOS 3 (original iPhone)
-    box = el.getBoundingClientRect()
-  }
-
-  var docEl = doc.documentElement
-  var clientTop  = docEl.clientTop  || body.clientTop  || 0
-  var clientLeft = docEl.clientLeft || body.clientLeft || 0
-  var scrollTop  = window.pageYOffset || docEl.scrollTop
-  var scrollLeft = window.pageXOffset || docEl.scrollLeft
-
-  return {
-    top: box.top  + scrollTop  - clientTop,
-    left: box.left + scrollLeft - clientLeft
-  }
-}
-
-function bodyOffset(body) {
-  var top = body.offsetTop
-  var left = body.offsetLeft
-
-  if (support.doesNotIncludeMarginInBodyOffset) {
-    top  += parseFloat(body.style.marginTop || 0)
-    left += parseFloat(body.style.marginLeft || 0)
-  }
-
-  return {
-    top: top,
-    left: left
-  }
-}
-
-});
-require.register("juliangruber-prefixed/index.js", function(exports, require, module){
-/**
- * Supported prefixes.
- */
-
-var prefixes = [
-  '-webkit-', '-moz-', '-o-', '-ms-', ''
-];
-
-/**
- * Expose `prefixed`.
- */
-
-module.exports = prefixed;
-
-/**
- * Set a style with all the vendor prefixes.
- *
- * @param {Object} style
- * @param {String} attribute
- * @param {String} value
- */
-
-function prefixed (style, attribute, value) {
-  for (var i = 0; i < prefixes.length; i++) {
-    style[prefixes[i] + attribute] = value;
-  }
-};
-
-/**
- * Get a (possibly prefixed) value.
- *
- * @param {Object} style
- * @param {String} attribute
- * @return {String}
- */
-
-prefixed.get = function (style, attribute) {
-  for (var i = 0; i < prefixes.length; i++) {
-    var value = style[prefixes[i] + attribute];
-    if (value && value != '') return value;
-  }
-  return '';
-};
-
-
-});
-require.register("juliangruber-fade/index.js", function(exports, require, module){
-/**
- * Module dependencies.
- */
-
-var prefixed = require('prefixed');
-
-/**
- * Expose `fade`.
- */
-
-module.exports = fade;
-
-/**
- * Fade `el` to `opacity` in `duration` seconds.
- *
- * @param {Element} el
- * @param {Number} opacity
- * @param {Number=} duration
- * @param {Function=} callback
- *
- * @todo Add other vendor prefixes
- * @todo Properly clear transition
- */
-
-function fade (el, opacity, duration, callback) {
-  if (typeof duration === 'undefined') duration = 1000;
-  else if (typeof duration === 'function') {
-    callback = duration;
-    duration = 1000;
-  }
-
-  var oldTransition = prefixed.get(el.style, 'transition') || '';
-  prefixed(el.style, 'transition', 'opacity ' + (duration/1000) + 's');
-  el.style.opacity = opacity;
-
-  setTimeout(function () {
-    prefixed(el.style, 'transition', oldTransition);
-    if (callback) callback();
-  }, duration);
-}
-
-/**
- * Fade in `el`.
- *
- * @param {Element} el
- * @param {Number=} duration
- * @param {Function=} callback
- */
-
-fade.out = function (el, duration, callback) {
-  fade(el, 0, duration, callback);
-};
-
-/**
- * Fade out `el`.
- *
- * @param {Element} el
- * @param {Number=} duration
- * @param {Function=} callback
- */
-
-fade['in'] = function (el, duration, callback) {
-  fade(el, 1, duration, callback);
-};
-
-});
-require.register("component-raf/index.js", function(exports, require, module){
-
-module.exports = window.requestAnimationFrame
-  || window.webkitRequestAnimationFrame
-  || window.mozRequestAnimationFrame
-  || window.oRequestAnimationFrame
-  || window.msRequestAnimationFrame
-  || fallback;
-
-var prev = new Date().getTime();
-function fallback(fn) {
-  var curr = new Date().getTime();
-  var ms = Math.max(0, 16 - (curr - prev));
-  setTimeout(fn, ms);
-  prev = curr;
-}
-
-});
-require.register("component-ease/index.js", function(exports, require, module){
-
-exports.linear = function(n){
-  return n;
-};
-
-exports.inQuad = function(n){
-  return n * n;
-};
-
-exports.outQuad = function(n){
-  return n * (2 - n);
-};
-
-exports.inOutQuad = function(n){
-  n *= 2;
-  if (n < 1) return 0.5 * n * n;
-  return - 0.5 * (--n * (n - 2) - 1);
-};
-
-exports.inCube = function(n){
-  return n * n * n;
-};
-
-exports.outCube = function(n){
-  return --n * n * n + 1;
-};
-
-exports.inOutCube = function(n){
-  n *= 2;
-  if (n < 1) return 0.5 * n * n * n;
-  return 0.5 * ((n -= 2 ) * n * n + 2);
-};
-
-exports.inQuart = function(n){
-  return n * n * n * n;
-};
-
-exports.outQuart = function(n){
-  return 1 - (--n * n * n * n);
-};
-
-exports.inOutQuart = function(n){
-  n *= 2;
-  if (n < 1) return 0.5 * n * n * n * n;
-  return -0.5 * ((n -= 2) * n * n * n - 2);
-};
-
-exports.inQuint = function(n){
-  return n * n * n * n * n;
-}
-
-exports.outQuint = function(n){
-  return --n * n * n * n * n + 1;
-}
-
-exports.inOutQuint = function(n){
-  n *= 2;
-  if (n < 1) return 0.5 * n * n * n * n * n;
-  return 0.5 * ((n -= 2) * n * n * n * n + 2);
-};
-
-exports.inSine = function(n){
-  return 1 - Math.cos(n * Math.PI / 2 );
-};
-
-exports.outSine = function(n){
-  return Math.sin(n * Math.PI / 2);
-};
-
-exports.inOutSine = function(n){
-  return .5 * (1 - Math.cos(Math.PI * n));
-};
-
-exports.inExpo = function(n){
-  return 0 == n ? 0 : Math.pow(1024, n - 1);
-};
-
-exports.outExpo = function(n){
-  return 1 == n ? n : 1 - Math.pow(2, -10 * n);
-};
-
-exports.inOutExpo = function(n){
-  if (0 == n) return 0;
-  if (1 == n) return 1;
-  if ((n *= 2) < 1) return .5 * Math.pow(1024, n - 1);
-  return .5 * (-Math.pow(2, -10 * (n - 1)) + 2);
-};
-
-exports.inCirc = function(n){
-  return 1 - Math.sqrt(1 - n * n);
-};
-
-exports.outCirc = function(n){
-  return Math.sqrt(1 - (--n * n));
-};
-
-exports.inOutCirc = function(n){
-  n *= 2
-  if (n < 1) return -0.5 * (Math.sqrt(1 - n * n) - 1);
-  return 0.5 * (Math.sqrt(1 - (n -= 2) * n) + 1);
-};
-
-exports.inBack = function(n){
-  var s = 1.70158;
-  return n * n * (( s + 1 ) * n - s);
-};
-
-exports.outBack = function(n){
-  var s = 1.70158;
-  return --n * n * ((s + 1) * n + s) + 1;
-};
-
-exports.inOutBack = function(n){
-  var s = 1.70158 * 1.525;
-  if ( ( n *= 2 ) < 1 ) return 0.5 * ( n * n * ( ( s + 1 ) * n - s ) );
-  return 0.5 * ( ( n -= 2 ) * n * ( ( s + 1 ) * n + s ) + 2 );
-};
-
-exports.inBounce = function(n){
-  return 1 - exports.outBounce(1 - n);
-};
-
-exports.outBounce = function(n){
-  if ( n < ( 1 / 2.75 ) ) {
-    return 7.5625 * n * n;
-  } else if ( n < ( 2 / 2.75 ) ) {
-    return 7.5625 * ( n -= ( 1.5 / 2.75 ) ) * n + 0.75;
-  } else if ( n < ( 2.5 / 2.75 ) ) {
-    return 7.5625 * ( n -= ( 2.25 / 2.75 ) ) * n + 0.9375;
-  } else {
-    return 7.5625 * ( n -= ( 2.625 / 2.75 ) ) * n + 0.984375;
-  }
-};
-
-exports.inOutBounce = function(n){
-  if (n < .5) return exports.inBounce(n * 2) * .5;
-  return exports.outBounce(n * 2 - 1) * .5 + .5;
-};
-
-// aliases
-
-exports['in-quad'] = exports.inQuad;
-exports['out-quad'] = exports.outQuad;
-exports['in-out-quad'] = exports.inOutQuad;
-exports['in-cube'] = exports.inCube;
-exports['out-cube'] = exports.outCube;
-exports['in-out-cube'] = exports.inOutCube;
-exports['in-quart'] = exports.inQuart;
-exports['out-quart'] = exports.outQuart;
-exports['in-out-quart'] = exports.inOutQuart;
-exports['in-quint'] = exports.inQuint;
-exports['out-quint'] = exports.outQuint;
-exports['in-out-quint'] = exports.inOutQuint;
-exports['in-sine'] = exports.inSine;
-exports['out-sine'] = exports.outSine;
-exports['in-out-sine'] = exports.inOutSine;
-exports['in-expo'] = exports.inExpo;
-exports['out-expo'] = exports.outExpo;
-exports['in-out-expo'] = exports.inOutExpo;
-exports['in-circ'] = exports.inCirc;
-exports['out-circ'] = exports.outCirc;
-exports['in-out-circ'] = exports.inOutCirc;
-exports['in-back'] = exports.inBack;
-exports['out-back'] = exports.outBack;
-exports['in-out-back'] = exports.inOutBack;
-exports['in-bounce'] = exports.inBounce;
-exports['out-bounce'] = exports.outBounce;
-exports['in-out-bounce'] = exports.inOutBounce;
-
-});
-require.register("component-tween/index.js", function(exports, require, module){
-
-/**
- * Module dependencies.
- */
-
-var Emitter = require('emitter')
-  , ease = require('ease');
-
-/**
- * Expose `Tween`.
- */
-
-module.exports = Tween;
-
-/**
- * Initialize a new `Tween` with `obj`.
- *
- * @param {Object|Array} obj
- * @api public
- */
-
-function Tween(obj) {
-  if (!(this instanceof Tween)) return new Tween(obj);
-  this._from = obj;
-  this.ease('linear');
-  this.duration(500);
-}
-
-/**
- * Mixin emitter.
- */
-
-Emitter(Tween.prototype);
-
-/**
- * Reset the tween.
- *
- * @api public
- */
-
-Tween.prototype.reset = function(){
-  this.isArray = Array.isArray(this._from);
-  this._curr = clone(this._from);
-  this._done = false;
-  this._start = Date.now();
-  return this;
-};
-
-/**
- * Tween to `obj` and reset internal state.
- *
- *    tween.to({ x: 50, y: 100 })
- *
- * @param {Object|Array} obj
- * @return {Tween} self
- * @api public
- */
-
-Tween.prototype.to = function(obj){
-  this.reset();
-  this._to = obj;
-  return this;
-};
-
-/**
- * Set duration to `ms` [500].
- *
- * @param {Number} ms
- * @return {Tween} self
- * @api public
- */
-
-Tween.prototype.duration = function(ms){
-  this._duration = ms;
-  this._end = this._start + this._duration;
-  return this;
-};
-
-/**
- * Set easing function to `fn`.
- *
- *    tween.ease('in-out-sine')
- *
- * @param {String|Function} fn
- * @return {Tween}
- * @api public
- */
-
-Tween.prototype.ease = function(fn){
-  fn = 'function' == typeof fn ? fn : ease[fn];
-  if (!fn) throw new TypeError('invalid easing function');
-  this._ease = fn;
-  return this;
-};
-
-/**
- * Perform a step.
- *
- * @return {Tween} self
- * @api private
- */
-
-Tween.prototype.step = function(){
-  if (this._done) return;
-
-  // duration
-  var duration = this._duration;
-  var end = this._end;
-  var now = Date.now();
-  var delta = now - this._start;
-  var done = delta >= duration;
-
-  // complete
-  if (done) {
-    this._from = this._curr;
-    this._done = true;
-    this.emit('end')
-    return;
-  }
-
-  // tween
-  var from = this._from;
-  var to = this._to;
-  var curr = this._curr;
-  var fn = this._ease;
-  var p = (now - this._start) / duration;
-  var n = fn(p);
-
-  // array
-  if (this.isArray) {
-    for (var i = 0; i < from.length; ++i) {
-      curr[i] = from[i] + (to[i] - from[i]) * n;
-    }
-
-    this._update(curr);
-    return this;
-  }
-
-  // objech
-  for (var k in from) {
-    curr[k] = from[k] + (to[k] - from[k]) * n;
-  }
-
-  this._update(curr);
-  return this;
-};
-
-/**
- * Set update function to `fn` or
- * when no argument is given this performs
- * a "step".
- *
- * @param {Function} fn
- * @return {Tween} self
- * @api public
- */
-
-Tween.prototype.update = function(fn){
-  if (0 == arguments.length) return this.step();
-  this._update = fn;
-  return this;
-};
-
-/**
- * Clone `obj`.
- *
- * @api private
- */
-
-function clone(obj) {
-  if (Array.isArray(obj)) return obj.slice();
-  var ret = {};
-  for (var key in obj) ret[key] = obj[key];
-  return ret;
-}
-});
-require.register("optimuslime-animate-property/index.js", function(exports, require, module){
-/**
- * Module dependencies.
- */
-
-var Tween = require('tween');
-var raf = require('raf');
-
-/**
- * Expose `animateProperty`.
- */
-
-module.exports = animateProperty;
-
-/**
- * Animate properties of a given element.
- *
- * @param {Number} x
- * @param {Number} y
- * @api public
- */
-
-function animateProperty(el, props, options) {
-  options = options || {};
-
-  // start position
-  var start = initial(el, props);
-
-  // setup tween
-  var tween = Tween(start)
-    .ease(options.ease || 'out-circ')
-    .to(props)
-    .duration(options.duration || 1000);
-
-  // animate
-  tween.update(function(o){
-    for(var key in o)
-    {
-      //don't set something that was never defined in the first place
-      if(el[key] != undefined)
-        el[key] = o[key];
-      else if(el.setAttribute) { //if it is undefined, we check for setAttribute
-        el.setAttribute(key, o[key]);
-      }
-      else {
-        //uh oh -- don't know about this case -- maybe we'll just set it to be safe
-        el[key] = o[key];
-        //note that the order of if/else operations is important,
-        //that's why we don't just set el[key] = o[key] in the first place
-      }
-    }
-  });
-
-  // handle end
-  tween.on('end', function(){
-    animate = function(){};
-  });
-
-  // animate
-  function animate() {
-    raf(animate);
-    tween.update();
-  }
-
-  animate();
-  
-  return tween;
-}
-
-/**
- * Return intitial values.
- *
- * @return {Object}
- * @api private
- */
-
-function initial(el, props) {
-  //check properties -- we want the intial value
-  var initial = {};
-  for(var key in props)
-  {
-    var pVal = el[key];
-    if(pVal == undefined && el.getAttribute)
-      pVal = el.getAttribute(key);
-      
-    pVal = pVal || 0;
-    initial[key] = pVal;
-  }
-  return initial;
-}
-
-});
-require.register("optimuslime-data/index.js", function(exports, require, module){
-/**
- * expose `data`
- */
-
-module.exports = data;
-
-/**
- * global unique id
- */
-
-data.uniq = 0;
-
-/**
- * global cache.
- */
-
-data.cache = {};
-
-/**
- * api
- */
-
-data.api = {
-  has: has,
-  del: del,
-  set: set,
-  get: get
-};
-
-/**
- * Get data `api` for the provided `el`.
- *
- * example:
- *
- *        var el = document.scripts[0];
- *
- *        data(el)
- *          .set({ foo: bar })
- *          .set('hello', 'world')
- *
- *        data(el).has('foo')
- *        // > true
- *        data(el).del('foo').has('foo');
- *        // > false
- *
- *        data(el).get();
- *        // > { hello: 'world' }
- *        data(el).get('hello');
- *        // > world
- *        data(el).get('foo');
- *        // > undefined
- *
- * @param {HTMLElement} el
- * @return {Object}
- */
-
-function data (el) {
-  var id = el.__uniq || ++data.uniq, cache;
-  cache = (data.cache[id] = data.cache[id] || {});
-  el.__uniq = id;
-  data.api.el = el;
-  data.api.cache = cache;
-  return data.api;
-}
-
-/**
- * Set `key` to `val` or provide
- * an object that will be merged
- * with the element `data`.
- *
- *
- * example:
- *
- *        set({ foo: 'bar' });
- *        set(console).get();
- *        // > { foo: 'bar', log: fn ... }
- *        set('foo', 'hello').get();
- *        // > { foo: 'hello', log: fn }
- *        set({}).get();
- *        // > {}
- *
- * @param {String|Object} name
- * @param {mixed} val
- * @return {self}
- */
-
-function set (name, val) {
-  if ('string' != typeof name) {
-    for (var k in name) {
-      this.cache[k] = name[k];
-    }
-  } else {
-    this.cache[name] = val;
-  }
-
-  return this;
-}
-
-/**
- * Get `value` where `key`.
- *
- * if `key` argument is omitted
- * the method will return all `data`.
- *
- * note that the method will first
- * attempt to get the `key` from the
- * cache, if it's not there it will attempt
- * to get `data-*` attr.
- *
- * example:
- *
- *            get('foo');
- *            // > null
- *            get();
- *            // > {}
- *
- * @param {String} key
- * @return {mixed}
- */
-
-function get (k) {
-  var cache = this.cache, ret;
-  if (!k) return cache;
-  if (ret = cache[k]) return ret;
-  return cache[k] = attr(this.el, k);
-}
-
-/**
- * Check whether or not `key` exists.
- *
- * example:
- *
- *          has('foo');
- *          // > false
- *          set('foo', 'bar').has('foo');
- *          // > true
- *
- * @param {String} key
- * @return {bool}
- */
-
-function has (key) {
-  return !! this.get(key);
-}
-
-/**
- * delete `key` from cache.
- *
- * if `key` is omitted the method
- * will reset the element cache to
- * a new `Object`.
- *
- * example:
- *
- *        set('foo', 'bar');
- *        del('foo').get();
- *        // > {}
- *        set(console).del();
- *        // > {}
- *
- * @param {String} key
- * @return {self}
- */
-
-function del (key) {
-  if (key) {
-    delete this.cache[key];
-  } else {
-    data.cache[this.el.__uniq] =
-    this.cache = {};
-  }
-
-  return this;
-}
-
-/**
- * get attribute helper.
- *
- * @param {HTMLElement} el
- * @param {String} k
- */
-
-function attr (el, k) {
-  if(el.getAttribute)
-    return el.getAttribute('data-' + k);
-}
-
-});
-require.register("component-classes/index.js", function(exports, require, module){
-/**
- * Module dependencies.
- */
-
-var index = require('indexof');
-
-/**
- * Whitespace regexp.
- */
-
-var re = /\s+/;
-
-/**
- * toString reference.
- */
-
-var toString = Object.prototype.toString;
-
-/**
- * Wrap `el` in a `ClassList`.
- *
- * @param {Element} el
- * @return {ClassList}
- * @api public
- */
-
-module.exports = function(el){
-  return new ClassList(el);
-};
-
-/**
- * Initialize a new ClassList for `el`.
- *
- * @param {Element} el
- * @api private
- */
-
-function ClassList(el) {
-  if (!el) throw new Error('A DOM element reference is required');
-  this.el = el;
-  this.list = el.classList;
-}
-
-/**
- * Add class `name` if not already present.
- *
- * @param {String} name
- * @return {ClassList}
- * @api public
- */
-
-ClassList.prototype.add = function(name){
-  // classList
-  if (this.list) {
-    this.list.add(name);
-    return this;
-  }
-
-  // fallback
-  var arr = this.array();
-  var i = index(arr, name);
-  if (!~i) arr.push(name);
-  this.el.className = arr.join(' ');
-  return this;
-};
-
-/**
- * Remove class `name` when present, or
- * pass a regular expression to remove
- * any which match.
- *
- * @param {String|RegExp} name
- * @return {ClassList}
- * @api public
- */
-
-ClassList.prototype.remove = function(name){
-  if ('[object RegExp]' == toString.call(name)) {
-    return this.removeMatching(name);
-  }
-
-  // classList
-  if (this.list) {
-    this.list.remove(name);
-    return this;
-  }
-
-  // fallback
-  var arr = this.array();
-  var i = index(arr, name);
-  if (~i) arr.splice(i, 1);
-  this.el.className = arr.join(' ');
-  return this;
-};
-
-/**
- * Remove all classes matching `re`.
- *
- * @param {RegExp} re
- * @return {ClassList}
- * @api private
- */
-
-ClassList.prototype.removeMatching = function(re){
-  var arr = this.array();
-  for (var i = 0; i < arr.length; i++) {
-    if (re.test(arr[i])) {
-      this.remove(arr[i]);
-    }
-  }
-  return this;
-};
-
-/**
- * Toggle class `name`, can force state via `force`.
- *
- * For browsers that support classList, but do not support `force` yet,
- * the mistake will be detected and corrected.
- *
- * @param {String} name
- * @param {Boolean} force
- * @return {ClassList}
- * @api public
- */
-
-ClassList.prototype.toggle = function(name, force){
-  // classList
-  if (this.list) {
-    if ("undefined" !== typeof force) {
-      if (force !== this.list.toggle(name, force)) {
-        this.list.toggle(name); // toggle again to correct
-      }
-    } else {
-      this.list.toggle(name);
-    }
-    return this;
-  }
-
-  // fallback
-  if ("undefined" !== typeof force) {
-    if (!force) {
-      this.remove(name);
-    } else {
-      this.add(name);
-    }
-  } else {
-    if (this.has(name)) {
-      this.remove(name);
-    } else {
-      this.add(name);
-    }
-  }
-
-  return this;
-};
-
-/**
- * Return an array of classes.
- *
- * @return {Array}
- * @api public
- */
-
-ClassList.prototype.array = function(){
-  var str = this.el.className.replace(/^\s+|\s+$/g, '');
-  var arr = str.split(re);
-  if ('' === arr[0]) arr.shift();
-  return arr;
-};
-
-/**
- * Check if class `name` is present.
- *
- * @param {String} name
- * @return {ClassList}
- * @api public
- */
-
-ClassList.prototype.has =
-ClassList.prototype.contains = function(name){
-  return this.list
-    ? this.list.contains(name)
-    : !! ~index(this.array(), name);
-};
-
-});
-require.register("component-props/index.js", function(exports, require, module){
-/**
- * Global Names
- */
-
-var globals = /\b(this|Array|Date|Object|Math|JSON)\b/g;
-
-/**
- * Return immediate identifiers parsed from `str`.
- *
- * @param {String} str
- * @param {String|Function} map function or prefix
- * @return {Array}
- * @api public
- */
-
-module.exports = function(str, fn){
-  var p = unique(props(str));
-  if (fn && 'string' == typeof fn) fn = prefixed(fn);
-  if (fn) return map(str, p, fn);
-  return p;
-};
-
-/**
- * Return immediate identifiers in `str`.
- *
- * @param {String} str
- * @return {Array}
- * @api private
- */
-
-function props(str) {
-  return str
-    .replace(/\.\w+|\w+ *\(|"[^"]*"|'[^']*'|\/([^/]+)\//g, '')
-    .replace(globals, '')
-    .match(/[$a-zA-Z_]\w*/g)
-    || [];
-}
-
-/**
- * Return `str` with `props` mapped with `fn`.
- *
- * @param {String} str
- * @param {Array} props
- * @param {Function} fn
- * @return {String}
- * @api private
- */
-
-function map(str, props, fn) {
-  var re = /\.\w+|\w+ *\(|"[^"]*"|'[^']*'|\/([^/]+)\/|[a-zA-Z_]\w*/g;
-  return str.replace(re, function(_){
-    if ('(' == _[_.length - 1]) return fn(_);
-    if (!~props.indexOf(_)) return _;
-    return fn(_);
-  });
-}
-
-/**
- * Return unique array.
- *
- * @param {Array} arr
- * @return {Array}
- * @api private
- */
-
-function unique(arr) {
-  var ret = [];
-
-  for (var i = 0; i < arr.length; i++) {
-    if (~ret.indexOf(arr[i])) continue;
-    ret.push(arr[i]);
-  }
-
-  return ret;
-}
-
-/**
- * Map with prefix `str`.
- */
-
-function prefixed(str) {
-  return function(_){
-    return str + _;
-  };
-}
-
-});
-require.register("component-to-function/index.js", function(exports, require, module){
-/**
- * Module Dependencies
- */
-
-var expr = require('props');
-
-/**
- * Expose `toFunction()`.
- */
-
-module.exports = toFunction;
-
-/**
- * Convert `obj` to a `Function`.
- *
- * @param {Mixed} obj
- * @return {Function}
- * @api private
- */
-
-function toFunction(obj) {
-  switch ({}.toString.call(obj)) {
-    case '[object Object]':
-      return objectToFunction(obj);
-    case '[object Function]':
-      return obj;
-    case '[object String]':
-      return stringToFunction(obj);
-    case '[object RegExp]':
-      return regexpToFunction(obj);
-    default:
-      return defaultToFunction(obj);
-  }
-}
-
-/**
- * Default to strict equality.
- *
- * @param {Mixed} val
- * @return {Function}
- * @api private
- */
-
-function defaultToFunction(val) {
-  return function(obj){
-    return val === obj;
-  }
-}
-
-/**
- * Convert `re` to a function.
- *
- * @param {RegExp} re
- * @return {Function}
- * @api private
- */
-
-function regexpToFunction(re) {
-  return function(obj){
-    return re.test(obj);
-  }
-}
-
-/**
- * Convert property `str` to a function.
- *
- * @param {String} str
- * @return {Function}
- * @api private
- */
-
-function stringToFunction(str) {
-  // immediate such as "> 20"
-  if (/^ *\W+/.test(str)) return new Function('_', 'return _ ' + str);
-
-  // properties such as "name.first" or "age > 18" or "age > 18 && age < 36"
-  return new Function('_', 'return ' + get(str));
-}
-
-/**
- * Convert `object` to a function.
- *
- * @param {Object} object
- * @return {Function}
- * @api private
- */
-
-function objectToFunction(obj) {
-  var match = {}
-  for (var key in obj) {
-    match[key] = typeof obj[key] === 'string'
-      ? defaultToFunction(obj[key])
-      : toFunction(obj[key])
-  }
-  return function(val){
-    if (typeof val !== 'object') return false;
-    for (var key in match) {
-      if (!(key in val)) return false;
-      if (!match[key](val[key])) return false;
-    }
-    return true;
-  }
-}
-
-/**
- * Built the getter function. Supports getter style functions
- *
- * @param {String} str
- * @return {String}
- * @api private
- */
-
-function get(str) {
-  var props = expr(str);
-  if (!props.length) return '_.' + str;
-
-  var val;
-  for(var i = 0, prop; prop = props[i]; i++) {
-    val = '_.' + prop;
-    val = "('function' == typeof " + val + " ? " + val + "() : " + val + ")";
-    str = str.replace(new RegExp(prop, 'g'), val);
-  }
-
-  return str;
-}
-
-});
-require.register("component-each/index.js", function(exports, require, module){
-
-/**
- * Module dependencies.
- */
-
-var type = require('type');
-var toFunction = require('to-function');
-
-/**
- * HOP reference.
- */
-
-var has = Object.prototype.hasOwnProperty;
-
-/**
- * Iterate the given `obj` and invoke `fn(val, i)`
- * in optional context `ctx`.
- *
- * @param {String|Array|Object} obj
- * @param {Function} fn
- * @param {Object} [ctx]
- * @api public
- */
-
-module.exports = function(obj, fn, ctx){
-  fn = toFunction(fn);
-  ctx = ctx || this;
-  switch (type(obj)) {
-    case 'array':
-      return array(obj, fn, ctx);
-    case 'object':
-      if ('number' == typeof obj.length) return array(obj, fn, ctx);
-      return object(obj, fn, ctx);
-    case 'string':
-      return string(obj, fn, ctx);
-  }
-};
-
-/**
- * Iterate string chars.
- *
- * @param {String} obj
- * @param {Function} fn
- * @param {Object} ctx
- * @api private
- */
-
-function string(obj, fn, ctx) {
-  for (var i = 0; i < obj.length; ++i) {
-    fn.call(ctx, obj.charAt(i), i);
-  }
-}
-
-/**
- * Iterate object keys.
- *
- * @param {Object} obj
- * @param {Function} fn
- * @param {Object} ctx
- * @api private
- */
-
-function object(obj, fn, ctx) {
-  for (var key in obj) {
-    if (has.call(obj, key)) {
-      fn.call(ctx, key, obj[key]);
-    }
-  }
-}
-
-/**
- * Iterate array-ish.
- *
- * @param {Array|Object} obj
- * @param {Function} fn
- * @param {Object} ctx
- * @api private
- */
-
-function array(obj, fn, ctx) {
-  for (var i = 0; i < obj.length; ++i) {
-    fn.call(ctx, obj[i], i);
-  }
-}
-
-});
-require.register("visionmedia-debug/debug.js", function(exports, require, module){
-
-/**
- * Expose `debug()` as the module.
- */
-
-module.exports = debug;
-
-/**
- * Create a debugger with the given `name`.
- *
- * @param {String} name
- * @return {Type}
- * @api public
- */
-
-function debug(name) {
-  if (!debug.enabled(name)) return function(){};
-
-  return function(fmt){
-    fmt = coerce(fmt);
-
-    var curr = new Date;
-    var ms = curr - (debug[name] || curr);
-    debug[name] = curr;
-
-    fmt = name
-      + ' '
-      + fmt
-      + ' +' + debug.humanize(ms);
-
-    // This hackery is required for IE8
-    // where `console.log` doesn't have 'apply'
-    window.console
-      && console.log
-      && Function.prototype.apply.call(console.log, console, arguments);
-  }
-}
-
-/**
- * The currently active debug mode names.
- */
-
-debug.names = [];
-debug.skips = [];
-
-/**
- * Enables a debug mode by name. This can include modes
- * separated by a colon and wildcards.
- *
- * @param {String} name
- * @api public
- */
-
-debug.enable = function(name) {
-  try {
-    localStorage.debug = name;
-  } catch(e){}
-
-  var split = (name || '').split(/[\s,]+/)
-    , len = split.length;
-
-  for (var i = 0; i < len; i++) {
-    name = split[i].replace('*', '.*?');
-    if (name[0] === '-') {
-      debug.skips.push(new RegExp('^' + name.substr(1) + '$'));
-    }
-    else {
-      debug.names.push(new RegExp('^' + name + '$'));
-    }
-  }
-};
-
-/**
- * Disable debug output.
- *
- * @api public
- */
-
-debug.disable = function(){
-  debug.enable('');
-};
-
-/**
- * Humanize the given `ms`.
- *
- * @param {Number} m
- * @return {String}
- * @api private
- */
-
-debug.humanize = function(ms) {
-  var sec = 1000
-    , min = 60 * 1000
-    , hour = 60 * min;
-
-  if (ms >= hour) return (ms / hour).toFixed(1) + 'h';
-  if (ms >= min) return (ms / min).toFixed(1) + 'm';
-  if (ms >= sec) return (ms / sec | 0) + 's';
-  return ms + 'ms';
-};
-
-/**
- * Returns true if the given mode name is enabled, false otherwise.
- *
- * @param {String} name
- * @return {Boolean}
- * @api public
- */
-
-debug.enabled = function(name) {
-  for (var i = 0, len = debug.skips.length; i < len; i++) {
-    if (debug.skips[i].test(name)) {
-      return false;
-    }
-  }
-  for (var i = 0, len = debug.names.length; i < len; i++) {
-    if (debug.names[i].test(name)) {
-      return true;
-    }
-  }
-  return false;
-};
-
-/**
- * Coerce `val`.
- */
-
-function coerce(val) {
-  if (val instanceof Error) return val.stack || val.message;
-  return val;
-}
-
-// persist
-
-try {
-  if (window.localStorage) debug.enable(localStorage.debug);
-} catch(e){}
-
-});
-require.register("ianstormtaylor-to-no-case/index.js", function(exports, require, module){
-
-/**
- * Expose `toNoCase`.
- */
-
-module.exports = toNoCase;
-
-
-/**
- * Test whether a string is camel-case.
- */
-
-var hasSpace = /\s/;
-var hasCamel = /[a-z][A-Z]/;
-var hasSeparator = /[\W_]/;
-
-
-/**
- * Remove any starting case from a `string`, like camel or snake, but keep
- * spaces and punctuation that may be important otherwise.
- *
- * @param {String} string
- * @return {String}
- */
-
-function toNoCase (string) {
-  if (hasSpace.test(string)) return string.toLowerCase();
-
-  if (hasSeparator.test(string)) string = unseparate(string);
-  if (hasCamel.test(string)) string = uncamelize(string);
-  return string.toLowerCase();
-}
-
-
-/**
- * Separator splitter.
- */
-
-var separatorSplitter = /[\W_]+(.|$)/g;
-
-
-/**
- * Un-separate a `string`.
- *
- * @param {String} string
- * @return {String}
- */
-
-function unseparate (string) {
-  return string.replace(separatorSplitter, function (m, next) {
-    return next ? ' ' + next : '';
-  });
-}
-
-
-/**
- * Camelcase splitter.
- */
-
-var camelSplitter = /(.)([A-Z]+)/g;
-
-
-/**
- * Un-camelcase a `string`.
- *
- * @param {String} string
- * @return {String}
- */
-
-function uncamelize (string) {
-  return string.replace(camelSplitter, function (m, previous, uppers) {
-    return previous + ' ' + uppers.toLowerCase().split('').join(' ');
-  });
-}
-});
-require.register("ianstormtaylor-to-space-case/index.js", function(exports, require, module){
-
-var clean = require('to-no-case');
-
-
-/**
- * Expose `toSpaceCase`.
- */
-
-module.exports = toSpaceCase;
-
-
-/**
- * Convert a `string` to space case.
- *
- * @param {String} string
- * @return {String}
- */
-
-
-function toSpaceCase (string) {
-  return clean(string).replace(/[\W_]+(.|$)/g, function (matches, match) {
-    return match ? ' ' + match : '';
-  });
-}
-});
-require.register("ianstormtaylor-to-camel-case/index.js", function(exports, require, module){
-
-var toSpace = require('to-space-case');
-
-
-/**
- * Expose `toCamelCase`.
- */
-
-module.exports = toCamelCase;
-
-
-/**
- * Convert a `string` to camel case.
- *
- * @param {String} string
- * @return {String}
- */
-
-
-function toCamelCase (string) {
-  return toSpace(string).replace(/\s(\w)/g, function (matches, letter) {
-    return letter.toUpperCase();
-  });
-}
-});
-require.register("component-css/index.js", function(exports, require, module){
-/**
- * Module Dependencies
- */
-
-var debug = require('debug')('css');
-var set = require('./lib/style');
-var get = require('./lib/css');
-
-/**
- * Expose `css`
- */
-
-module.exports = css;
-
-/**
- * Get and set css values
- *
- * @param {Element} el
- * @param {String|Object} prop
- * @param {Mixed} val
- * @return {Element} el
- * @api public
- */
-
-function css(el, prop, val) {
-  if (!el) return;
-
-  if (undefined !== val) {
-    var obj = {};
-    obj[prop] = val;
-    debug('setting styles %j', obj);
-    return setStyles(el, obj);
-  }
-
-  if ('object' == typeof prop) {
-    debug('setting styles %j', prop);
-    return setStyles(el, prop);
-  }
-
-  debug('getting %s', prop);
-  return get(el, prop);
-}
-
-/**
- * Set the styles on an element
- *
- * @param {Element} el
- * @param {Object} props
- * @return {Element} el
- */
-
-function setStyles(el, props) {
-  for (var prop in props) {
-    set(el, prop, props[prop]);
-  }
-
-  return el;
-}
-
-});
-require.register("component-css/lib/css.js", function(exports, require, module){
-/**
- * Module Dependencies
- */
-
-var debug = require('debug')('css:css');
-var camelcase = require('to-camel-case');
-var computed = require('./computed');
-var property = require('./prop');
-
-/**
- * Expose `css`
- */
-
-module.exports = css;
-
-/**
- * CSS Normal Transforms
- */
-
-var cssNormalTransform = {
-  letterSpacing: 0,
-  fontWeight: 400
-};
-
-/**
- * Get a CSS value
- *
- * @param {Element} el
- * @param {String} prop
- * @param {Mixed} extra
- * @param {Array} styles
- * @return {String}
- */
-
-function css(el, prop, extra, styles) {
-  var hooks = require('./hooks');
-  var orig = camelcase(prop);
-  var style = el.style;
-  var val;
-
-  prop = property(prop, style);
-  var hook = hooks[prop] || hooks[orig];
-
-  // If a hook was provided get the computed value from there
-  if (hook && hook.get) {
-    debug('get hook provided. use that');
-    val = hook.get(el, true, extra);
-  }
-
-  // Otherwise, if a way to get the computed value exists, use that
-  if (undefined == val) {
-    debug('fetch the computed value of %s', prop);
-    val = computed(el, prop);
-  }
-
-  if ('normal' == val && cssNormalTransform[prop]) {
-    val = cssNormalTransform[prop];
-    debug('normal => %s', val);
-  }
-
-  // Return, converting to number if forced or a qualifier was provided and val looks numeric
-  if ('' == extra || extra) {
-    debug('converting value: %s into a number', val);
-    var num = parseFloat(val);
-    return true === extra || isNumeric(num) ? num || 0 : val;
-  }
-
-  return val;
-}
-
-/**
- * Is Numeric
- *
- * @param {Mixed} obj
- * @return {Boolean}
- */
-
-function isNumeric(obj) {
-  return !isNan(parseFloat(obj)) && isFinite(obj);
-}
-
-});
-require.register("component-css/lib/prop.js", function(exports, require, module){
-/**
- * Module dependencies
- */
-
-var debug = require('debug')('css:prop');
-var camelcase = require('to-camel-case');
-var vendor = require('./vendor');
-
-/**
- * Export `prop`
- */
-
-module.exports = prop;
-
-/**
- * Normalize Properties
- */
-
-var cssProps = {
-  'float': 'cssFloat' in document.documentElement.style ? 'cssFloat' : 'styleFloat'
-};
-
-/**
- * Get the vendor prefixed property
- *
- * @param {String} prop
- * @param {String} style
- * @return {String} prop
- * @api private
- */
-
-function prop(prop, style) {
-  prop = cssProps[prop] || (cssProps[prop] = vendor(prop, style));
-  debug('transform property: %s => %s', prop, style);
-  return prop;
-}
-
-});
-require.register("component-css/lib/swap.js", function(exports, require, module){
-/**
- * Export `swap`
- */
-
-module.exports = swap;
-
-/**
- * Initialize `swap`
- *
- * @param {Element} el
- * @param {Object} options
- * @param {Function} fn
- * @param {Array} args
- * @return {Mixed}
- */
-
-function swap(el, options, fn, args) {
-  // Remember the old values, and insert the new ones
-  for (var key in options) {
-    old[key] = el.style[key];
-    el.style[key] = options[key];
-  }
-
-  ret = fn.apply(el, args || []);
-
-  // Revert the old values
-  for (key in options) {
-    el.style[key] = old[key];
-  }
-
-  return ret;
-}
-
-});
-require.register("component-css/lib/style.js", function(exports, require, module){
-/**
- * Module Dependencies
- */
-
-var debug = require('debug')('css:style');
-var camelcase = require('to-camel-case');
-var support = require('./support');
-var property = require('./prop');
-var hooks = require('./hooks');
-
-/**
- * Expose `style`
- */
-
-module.exports = style;
-
-/**
- * Possibly-unitless properties
- *
- * Don't automatically add 'px' to these properties
- */
-
-var cssNumber = {
-  "columnCount": true,
-  "fillOpacity": true,
-  "fontWeight": true,
-  "lineHeight": true,
-  "opacity": true,
-  "order": true,
-  "orphans": true,
-  "widows": true,
-  "zIndex": true,
-  "zoom": true
-};
-
-/**
- * Set a css value
- *
- * @param {Element} el
- * @param {String} prop
- * @param {Mixed} val
- * @param {Mixed} extra
- */
-
-function style(el, prop, val, extra) {
-  // Don't set styles on text and comment nodes
-  if (!el || el.nodeType === 3 || el.nodeType === 8 || !el.style ) return;
-
-  var orig = camelcase(prop);
-  var style = el.style;
-  var type = typeof val;
-
-  if (!val) return get(el, prop, orig, extra);
-
-  prop = property(prop, style);
-
-  var hook = hooks[prop] || hooks[orig];
-
-  // If a number was passed in, add 'px' to the (except for certain CSS properties)
-  if ('number' == type && !cssNumber[orig]) {
-    debug('adding "px" to end of number');
-    val += 'px';
-  }
-
-  // Fixes jQuery #8908, it can be done more correctly by specifying setters in cssHooks,
-  // but it would mean to define eight (for every problematic property) identical functions
-  if (!support.clearCloneStyle && '' === val && 0 === prop.indexOf('background')) {
-    debug('set property (%s) value to "inherit"', prop);
-    style[prop] = 'inherit';
-  }
-
-  // If a hook was provided, use that value, otherwise just set the specified value
-  if (!hook || !hook.set || undefined !== (val = hook.set(el, val, extra))) {
-    // Support: Chrome, Safari
-    // Setting style to blank string required to delete "style: x !important;"
-    debug('set hook defined. setting property (%s) to %s', prop, val);
-    style[prop] = '';
-    style[prop] = val;
-  }
-
-}
-
-/**
- * Get the style
- *
- * @param {Element} el
- * @param {String} prop
- * @param {String} orig
- * @param {Mixed} extra
- * @return {String}
- */
-
-function get(el, prop, orig, extra) {
-  var style = el.style;
-  var hook = hooks[prop] || hooks[orig];
-  var ret;
-
-  if (hook && hook.get && undefined !== (ret = hook.get(el, false, extra))) {
-    debug('get hook defined, returning: %s', ret);
-    return ret;
-  }
-
-  ret = style[prop];
-  debug('getting %s', ret);
-  return ret;
-}
-
-});
-require.register("component-css/lib/hooks.js", function(exports, require, module){
-/**
- * Module Dependencies
- */
-
-var each = require('each');
-var css = require('./css');
-var cssShow = { position: 'absolute', visibility: 'hidden', display: 'block' };
-var pnum = (/[+-]?(?:\d*\.|)\d+(?:[eE][+-]?\d+|)/).source;
-var rnumnonpx = new RegExp( '^(' + pnum + ')(?!px)[a-z%]+$', 'i');
-var rnumsplit = new RegExp( '^(' + pnum + ')(.*)$', 'i');
-var rdisplayswap = /^(none|table(?!-c[ea]).+)/;
-var styles = require('./styles');
-var support = require('./support');
-var swap = require('./swap');
-var computed = require('./computed');
-var cssExpand = [ "Top", "Right", "Bottom", "Left" ];
-
-/**
- * Height & Width
- */
-
-each(['width', 'height'], function(name) {
-  exports[name] = {};
-
-  exports[name].get = function(el, compute, extra) {
-    if (!compute) return;
-    // certain elements can have dimension info if we invisibly show them
-    // however, it must have a current display style that would benefit from this
-    return 0 == el.offsetWidth && rdisplayswap.test(css(el, 'display'))
-      ? swap(el, cssShow, function() { return getWidthOrHeight(el, name, extra); })
-      : getWidthOrHeight(el, name, extra);
-  }
-
-  exports[name].set = function(el, val, extra) {
-    var styles = extra && styles(el);
-    return setPositiveNumber(el, val, extra
-      ? augmentWidthOrHeight(el, name, extra, 'border-box' == css(el, 'boxSizing', false, styles), styles)
-      : 0
-    );
-  };
-
-});
-
-/**
- * Opacity
- */
-
-exports.opacity = {};
-exports.opacity.get = function(el, compute) {
-  if (!compute) return;
-  var ret = computed(el, 'opacity');
-  return '' == ret ? '1' : ret;
-}
-
-/**
- * Utility: Set Positive Number
- *
- * @param {Element} el
- * @param {Mixed} val
- * @param {Number} subtract
- * @return {Number}
- */
-
-function setPositiveNumber(el, val, subtract) {
-  var matches = rnumsplit.exec(val);
-  return matches ?
-    // Guard against undefined 'subtract', e.g., when used as in cssHooks
-    Math.max(0, matches[1]) + (matches[2] || 'px') :
-    val;
-}
-
-/**
- * Utility: Get the width or height
- *
- * @param {Element} el
- * @param {String} prop
- * @param {Mixed} extra
- * @return {String}
- */
-
-function getWidthOrHeight(el, prop, extra) {
-  // Start with offset property, which is equivalent to the border-box value
-  var valueIsBorderBox = true;
-  var val = prop === 'width' ? el.offsetWidth : el.offsetHeight;
-  var styles = computed(el);
-  var isBorderBox = support.boxSizing && css(el, 'boxSizing') === 'border-box';
-
-  // some non-html elements return undefined for offsetWidth, so check for null/undefined
-  // svg - https://bugzilla.mozilla.org/show_bug.cgi?id=649285
-  // MathML - https://bugzilla.mozilla.org/show_bug.cgi?id=491668
-  if (val <= 0 || val == null) {
-    // Fall back to computed then uncomputed css if necessary
-    val = computed(el, prop, styles);
-
-    if (val < 0 || val == null) {
-      val = el.style[prop];
-    }
-
-    // Computed unit is not pixels. Stop here and return.
-    if (rnumnonpx.test(val)) {
-      return val;
-    }
-
-    // we need the check for style in case a browser which returns unreliable values
-    // for getComputedStyle silently falls back to the reliable el.style
-    valueIsBorderBox = isBorderBox && (support.boxSizingReliable() || val === el.style[prop]);
-
-    // Normalize ', auto, and prepare for extra
-    val = parseFloat(val) || 0;
-  }
-
-  // use the active box-sizing model to add/subtract irrelevant styles
-  extra = extra || (isBorderBox ? 'border' : 'content');
-  val += augmentWidthOrHeight(el, prop, extra, valueIsBorderBox, styles);
-  return val + 'px';
-}
-
-/**
- * Utility: Augment the width or the height
- *
- * @param {Element} el
- * @param {String} prop
- * @param {Mixed} extra
- * @param {Boolean} isBorderBox
- * @param {Array} styles
- */
-
-function augmentWidthOrHeight(el, prop, extra, isBorderBox, styles) {
-  // If we already have the right measurement, avoid augmentation,
-  // Otherwise initialize for horizontal or vertical properties
-  var i = extra === (isBorderBox ? 'border' : 'content') ? 4 : 'width' == prop ? 1 : 0;
-  var val = 0;
-
-  for (; i < 4; i += 2) {
-    // both box models exclude margin, so add it if we want it
-    if (extra === 'margin') {
-      val += css(el, extra + cssExpand[i], true, styles);
-    }
-
-    if (isBorderBox) {
-      // border-box includes padding, so remove it if we want content
-      if (extra === 'content') {
-        val -= css(el, 'padding' + cssExpand[i], true, styles);
-      }
-
-      // at this point, extra isn't border nor margin, so remove border
-      if (extra !== 'margin') {
-        val -= css(el, 'border' + cssExpand[i] + 'Width', true, styles);
-      }
-    } else {
-      // at this point, extra isn't content, so add padding
-      val += css(el, 'padding' + cssExpand[i], true, styles);
-
-      // at this point, extra isn't content nor padding, so add border
-      if (extra !== 'padding') {
-        val += css(el, 'border' + cssExpand[i] + 'Width', true, styles);
-      }
-    }
-  }
-
-  return val;
-}
-
-});
-require.register("component-css/lib/styles.js", function(exports, require, module){
-/**
- * Expose `styles`
- */
-
-module.exports = styles;
-
-/**
- * Get all the styles
- *
- * @param {Element} el
- * @return {Array}
- */
-
-function styles(el) {
-  if (window.getComputedStyle) {
-    return el.ownerDocument.defaultView.getComputedStyle(el, null);
-  } else {
-    return el.currentStyle;
-  }
-}
-
-});
-require.register("component-css/lib/vendor.js", function(exports, require, module){
-/**
- * Module Dependencies
- */
-
-var prefixes = ['Webkit', 'O', 'Moz', 'ms'];
-
-/**
- * Expose `vendor`
- */
-
-module.exports = vendor;
-
-/**
- * Get the vendor prefix for a given property
- *
- * @param {String} prop
- * @param {Object} style
- * @return {String}
- */
-
-function vendor(prop, style) {
-  // shortcut for names that are not vendor prefixed
-  if (style[prop]) return prop;
-
-  // check for vendor prefixed names
-  var capName = prop[0].toUpperCase() + prop.slice(1);
-  var original = prop;
-  var i = prefixes.length;
-
-  while (i--) {
-    prop = prefixes[i] + capName;
-    if (prop in style) return prop;
-  }
-
-  return original;
-}
-
-});
-require.register("component-css/lib/support.js", function(exports, require, module){
-/**
- * Support values
- */
-
-var reliableMarginRight;
-var boxSizingReliableVal;
-var pixelPositionVal;
-var clearCloneStyle;
-
-/**
- * Container setup
- */
-
-var docElem = document.documentElement;
-var container = document.createElement('div');
-var div = document.createElement('div');
-
-/**
- * Clear clone style
- */
-
-div.style.backgroundClip = 'content-box';
-div.cloneNode(true).style.backgroundClip = '';
-exports.clearCloneStyle = div.style.backgroundClip === 'content-box';
-
-container.style.cssText = 'border:0;width:0;height:0;position:absolute;top:0;left:-9999px;margin-top:1px';
-container.appendChild(div);
-
-/**
- * Pixel position
- *
- * Webkit bug: https://bugs.webkit.org/show_bug.cgi?id=29084
- * getComputedStyle returns percent when specified for top/left/bottom/right
- * rather than make the css module depend on the offset module, we just check for it here
- */
-
-exports.pixelPosition = function() {
-  if (undefined == pixelPositionVal) computePixelPositionAndBoxSizingReliable();
-  return pixelPositionVal;
-}
-
-/**
- * Reliable box sizing
- */
-
-exports.boxSizingReliable = function() {
-  if (undefined == boxSizingReliableVal) computePixelPositionAndBoxSizingReliable();
-  return boxSizingReliableVal;
-}
-
-/**
- * Reliable margin right
- *
- * Support: Android 2.3
- * Check if div with explicit width and no margin-right incorrectly
- * gets computed margin-right based on width of container. (#3333)
- * WebKit Bug 13343 - getComputedStyle returns wrong value for margin-right
- * This support function is only executed once so no memoizing is needed.
- *
- * @return {Boolean}
- */
-
-exports.reliableMarginRight = function() {
-  var ret;
-  var marginDiv = div.appendChild(document.createElement("div" ));
-
-  marginDiv.style.cssText = div.style.cssText = divReset;
-  marginDiv.style.marginRight = marginDiv.style.width = "0";
-  div.style.width = "1px";
-  docElem.appendChild(container);
-
-  ret = !parseFloat(window.getComputedStyle(marginDiv, null).marginRight);
-
-  docElem.removeChild(container);
-
-  // Clean up the div for other support tests.
-  div.innerHTML = "";
-
-  return ret;
-}
-
-/**
- * Executing both pixelPosition & boxSizingReliable tests require only one layout
- * so they're executed at the same time to save the second computation.
- */
-
-function computePixelPositionAndBoxSizingReliable() {
-  // Support: Firefox, Android 2.3 (Prefixed box-sizing versions).
-  div.style.cssText = "-webkit-box-sizing:border-box;-moz-box-sizing:border-box;" +
-    "box-sizing:border-box;padding:1px;border:1px;display:block;width:4px;margin-top:1%;" +
-    "position:absolute;top:1%";
-  docElem.appendChild(container);
-
-  var divStyle = window.getComputedStyle(div, null);
-  pixelPositionVal = divStyle.top !== "1%";
-  boxSizingReliableVal = divStyle.width === "4px";
-
-  docElem.removeChild(container);
-}
-
-
-
-});
-require.register("component-css/lib/computed.js", function(exports, require, module){
-/**
- * Module Dependencies
- */
-
-var debug = require('debug')('css:computed');
-var withinDocument = require('within-document');
-var styles = require('./styles');
-
-/**
- * Expose `computed`
- */
-
-module.exports = computed;
-
-/**
- * Get the computed style
- *
- * @param {Element} el
- * @param {String} prop
- * @param {Array} precomputed (optional)
- * @return {Array}
- * @api private
- */
-
-function computed(el, prop, precomputed) {
-  var computed = precomputed || styles(el);
-  var ret;
-  
-  if (!computed) return;
-
-  if (computed.getPropertyValue) {
-    ret = computed.getPropertyValue(prop) || computed[prop];
-  } else {
-    ret = computed[prop];
-  }
-
-  if ('' === ret && !withinDocument(el)) {
-    debug('element not within document, try finding from style attribute');
-    var style = require('./style');
-    ret = style(el, prop);
-  }
-
-  debug('computed value of %s: %s', prop, ret);
-
-  // Support: IE
-  // IE returns zIndex value as an integer.
-  return undefined === ret ? ret : ret + '';
-}
-
-});
-require.register("component-indexof/index.js", function(exports, require, module){
-module.exports = function(arr, obj){
-  if (arr.indexOf) return arr.indexOf(obj);
-  for (var i = 0; i < arr.length; ++i) {
-    if (arr[i] === obj) return i;
-  }
-  return -1;
-};
-});
-require.register("component-query/index.js", function(exports, require, module){
-function one(selector, el) {
-  return el.querySelector(selector);
-}
-
-exports = module.exports = function(selector, el){
-  el = el || document;
-  return one(selector, el);
-};
-
-exports.all = function(selector, el){
-  el = el || document;
-  return el.querySelectorAll(selector);
-};
-
-exports.engine = function(obj){
-  if (!obj.one) throw new Error('.one callback required');
-  if (!obj.all) throw new Error('.all callback required');
-  one = obj.one;
-  exports.all = obj.all;
-  return exports;
-};
-
-});
-require.register("component-matches-selector/index.js", function(exports, require, module){
-/**
- * Module dependencies.
- */
-
-var query = require('query');
-
-/**
- * Element prototype.
- */
-
-var proto = Element.prototype;
-
-/**
- * Vendor function.
- */
-
-var vendor = proto.matches
-  || proto.webkitMatchesSelector
-  || proto.mozMatchesSelector
-  || proto.msMatchesSelector
-  || proto.oMatchesSelector;
-
-/**
- * Expose `match()`.
- */
-
-module.exports = match;
-
-/**
- * Match `el` to `selector`.
- *
- * @param {Element} el
- * @param {String} selector
- * @return {Boolean}
- * @api public
- */
-
-function match(el, selector) {
-  if (vendor) return vendor.call(el, selector);
-  var nodes = query.all(selector, el.parentNode);
-  for (var i = 0; i < nodes.length; ++i) {
-    if (nodes[i] == el) return true;
-  }
-  return false;
-}
-
-});
-require.register("optimuslime-thumbnail-grid/lib/xThumb.js", function(exports, require, module){
-/*
-* debouncedresize: special jQuery event that happens once after a window resize
-*
-* latest version and complete README available on Github:
-* https://github.com/louisremi/jquery-smartresize/blob/master/jquery.debouncedresize.js
-*
-* Copyright 2011 @louis_remi
-* Licensed under the MIT license.
-*/
-
-//note that we're removing jquery from everything...
-//we don't want to require jquery to use the thumbnail layout. Why do you need such a behemoth?
-var matches = require('matches-selector')
-var getIndex = require('indexof')
-var emitter = require('emitter');
-var _imagesLoaded = require('imagesloaded');
-
-
-//stored data with an html div object -- like jquery data
-var _data = require('data');
-var _offset = require('offset');
-var _dimensions = require('dimensions');
-var _el = require('el.js');
-var _classes = require('classes');
-var _fade = require('fade');
-var _css = require('css');
-// var _scrollTo = require('scroll-to');
-var _animateProperty = require('animate-property');
-
-var $special,
-	resizeTimeout;
-
-var emitEvents = {};
-emitter(emitEvents);
-
-var resizeThreshold = 250;
-//add resize to window
-this.addEventListener('resize', function(event, execAsap)
-{
-	// Save the context
-		var context = this,
-			args = arguments,
-			dispatch = function() {
-				// set correct event type
-				var ev = "debouncedresize";
-				//prepend event to args
-				[].splice.call(args, 0, 0, ev, context);
-				//then we make the emit call -- where context is the "this" == window
-				emitEvents.emit.apply(emitEvents, args);
-				// $event.dispatch.apply( context, args );
-			};
-
-		if ( resizeTimeout ) {
-			clearTimeout( resizeTimeout );
-		}
-
-		// execAsap ?
-			// dispatch() :
-			resizeTimeout = setTimeout( dispatch, resizeThreshold );
-
-
-});
-
-function _eq(arr, ix)
-{
-	//get the array length -- we may need to invert ix if it's less than zero
-	var arrLen = arr.length;
-
-	//start from the end of the list
-	if(ix < 0)
-		ix = arrLen - Math.abs(ix);
-
-	//return that index! 
-	return arr[ix];
-}
-function _index(el)
-{
-	if(el.parentNode)
-		return getIndex(el.parentNode.children, el);
-	else
-		return -1;
-}
-function _hide(div)
-{
-	_data(div).set('display', div.style.display);
-	div.style.display = 'none';
-}
-function _show(div)
-{
-	//can't have null here!
-	div.style.display = _data(div).get('display') || 'block';
-}
-function _firstChild(div, selMatch)
-{
-	var dChildren = div.children;
-	for(var i=0; i < dChildren.length; i++)
-	{
-		//children
-		var c = dChildren[i];
-
-		//matches
-		if(matches(c, selMatch))
-			return c;
-	}
-}
-function _isVisible(div)
-{
-	//any node without a parent and no children is clearly not visible -- how could it be
-	if(!div.parentNode && !div.children.length)
-		return false;
-
-	return !(div.offsetWidth === 0 && div.offsetHeight === 0);
-}
-
-function _find(div, selMatch)
-{
-
-	var cMatch = [];
-	var nextCycle = div.children;
-
-	while(nextCycle.length)
-	{
-		var more = [];
-		for(var i=0; i < nextCycle.length; i++)
-		{
-			var child = nextCycle[i];
-
-			if(matches(child, selMatch))
-				cMatch.push(child);
-
-			var next = child.children;
-			if(next.length)
-				more = more.concat(next);
-		}
-		//keep going until no more children
-		nextCycle = more;
-	}
-
-	return cMatch;
-}
-function _selectCheck(div, check)
-{
-	var regex = new RegExp("/\b" + check + "\b/");
-	return div.className.match(regex)
-}
-
-module.exports = function(div) {
-
-	var _grid = div || document.getElementById("og-grid");
-
-	var $items = [];
-	for(var i=0; i < _grid.children.length; i++)
-	{
-		var c = _grid.children[i];
-		if(matches(c, 'li'))
-			$items.push(c);
-	}
-
-	// current expanded item's index
-	var current = -1,
-		// position (top) of the expanded item
-		// used to know if the preview will expand in a different row
-		previewPos = -1,
-		// extra amount of pixels to scroll the window
-		scrollExtra = 0,
-		// extra margin when expanded (between preview overlay and the next items)
-		marginExpanded = 10,
-		//what is our window size
-		winsize,
-		$body = [document.querySelector('html'), document.querySelector('body')],
-		// transitionend events
-		transEndEventNames = {
-			'WebkitTransition' : 'webkitTransitionEnd',
-			'MozTransition' : 'transitionend',
-			'OTransition' : 'oTransitionEnd',
-			'msTransition' : 'MSTransitionEnd',
-			'transition' : 'transitionend'
-		},
-		transEndEventName = transEndEventNames[ Modernizr.prefixed( 'transition' ) ],
-		// support for csstransitions
-		support = Modernizr.csstransitions,
-		// default settings
-		settings = {
-			minHeight : 500,
-			speed : 350,
-			easing : 'ease',
-			innerlink : "Visit Website"
-		};
-
-	function init( config ) {
-		
-		// the settings..
-		//overwrite any setting with those passed in by config
-		if(config)
-		{
-			for(var key in settings)
-			{
-				if(config[key])
-					settings[key] = config[key];
-			}
-
-		}
-
-		// preload all images
-		_imagesLoaded( _grid, function() {
-
-			// save item´s size and offset
-			saveItemInfo( true );
-			// get window´s size
-			winsize = cGetWinSize();
-			// initialize some events
-			initEvents();
-
-		});
-
-	}
-
-	// add more items to the grid.
-	// the new items need to appended to the grid.
-	// after that call Grid.addItems(theItems);
-	function addItems( $newitems ) {
-
-		$items = $items.concat( $newitems );
-
-		for(var i=0; i < $newitems.length; i++)
-		{
-			var $item = $newitems[i];
-			_data($item).set( {
-				offsetTop : _offset($item).top,
-				height : _dimensions($item).height()
-			} );
-		}
-
-		c_init_items_events( $newitems );
-	}
-
-	// saves the item´s offset top and height (if saveheight is true)
-	function saveItemInfo( saveheight ) {
-
-		for(var i=0; i < $items.length; i++)
-		{
-			var $item = $items[i];
-			var iData = _data($item);
-			iData.set( 'offsetTop',  _offset($item).top );
-			if( saveheight ) {
-				iData.set( 'height', _dimensions($item).height() );
-			}
-		}
-	}
-
-	function initEvents() {
-		
-		// when clicking an item, show the preview with the item´s info and large image.
-		// close the item if already expanded.
-		// also close if clicking on the item´s cross
-		c_init_items_events( $items );
-		
-		//don't double add listeners for debounced
-		if(emitEvents.hasListeners('debouncedresize'))
-			return;
-
-		// on window resize get the window´s size again
-		// reset some values..
-		emitEvents.on( 'debouncedresize', function() {
-			var context = arguments[0];
-			scrollExtra = 0;
-			previewPos = -1;
-			// save item´s offset
-			saveItemInfo();
-			winsize = cGetWinSize();
-			var preview = _data( context ).get( 'preview' );
-			if( typeof preview != 'undefined' ) {
-				hidePreview();
-			}
-
-		} );
-
-	}
-
-	function c_init_items_events($items)
-	{
-		//have to loop through html elements and add click events like jquery
-		for(var i=0; i < $items.length; i++)
-		{
-			var div = $items[i];
-			//check if we match this selector (like jQuery.on)
-			// if(matches(div, 'span.og-close'))
-			// {
-			// 	//if we do, add a click event
-			// 	div.addEventListener('click', function(e)
-			// 	{
-			// 		//make sure to hide when close clicked
-			// 		hidePreview();
-			// 		//do not follow links
-			// 		e.preventDefault();
-  	// 				e.stopPropagation();
-			// 	});
-			// }
-
-			//for all the children link objects <a>
-			var dChildren = div.children;
-			for(var c=0; c < dChildren.length; c++)
-			{
-				var child = dChildren[c];
-				if(matches(child, 'a'))
-				{
-					//add a click event for this ref
-					child.addEventListener('click', function(e)
-					{
-						//get its parents
-						var $item = this.parentNode;
-
-						// check if item already opened
-						//check the index of this object, relative to the parents
-						current === _index($item) ? hidePreview() : showPreview( $item );
-						
-						//do not follow links -- don't allow event to propogate
-						e.preventDefault();
-	  					e.stopPropagation();
-
-					})
-				}
-
-			}
-		}
-	}
-
-
-	function cGetWinSize() {
-		var w = window;
-    	var e = document.documentElement,
-	    	g = document.getElementsByTagName('body')[0];
-
-	    return {width: w.innerWidth || e.clientWidth || g.clientWidth, height: w.innerHeight|| e.clientHeight|| g.clientHeight};
-	}
-
-	function showPreview( $item ) {
-
-		var preview = _data( this ).get( 'preview' ),
-			// item´s offset top
-			position = _data($item).get( 'offsetTop' );
-
-		scrollExtra = 0;
-
-		// if a preview exists and previewPos is different (different row) from item´s top then close it
-		if( typeof preview != 'undefined' ) {
-
-			// not in the same row
-			if( previewPos !== position ) {
-				// if position > previewPos then we need to take te current preview´s height in consideration when scrolling the window
-				if( position > previewPos ) {
-					scrollExtra = preview.height;
-				}
-				hidePreview();
-			}
-			// same row
-			else {
-				preview.update( $item );
-				return false;
-			}
-			
-		}
-
-		// update previewPos
-		previewPos = position;
-
-		preview = new Preview( $item );
-		// initialize new preview for the clicked item
-		_data( this ).set( 'preview' , preview );
-
-		// expand preview overlay
-		preview.open();
-
-	}
-
-	function hidePreview() {
-		current = -1;
-		var preview = _data( this ).get( 'preview' );
-		preview.close();
-		_data(this).del('preview');
-	}
-
-	// the preview obj / overlay
-	function Preview( $item ) {
-		this.$item = $item;
-		this.expandedIdx = _index(this.$item);
-		this.create();
-		this.update();
-	}
-
-	function _wrapOpenTimeout(obj, delay)
-	{
-		setTimeout(function(){
-
-			// set the height for the preview and the item
-			obj.setHeights();
-			// scroll to position the preview in the right place
-			obj.positionPreview();
-
-
-		}, delay)
-	}
-	function _wrapClose(obj, delay, onEndFn)
-	{
-		setTimeout( function() {
-
-			if( typeof obj.$largeImg !== 'undefined' ) {
-				//i believe fadeout fast == 200 ms, slow = 600ms
-				_fade.out(obj.$largeImg, 1000);//.fadeOut( 'fast' );
-			}
-
-			_css(obj.$previewEl, 'height', "0" );
-			// the current expanded item (might be different from obj.$item)
-			var $expandedItem = _eq($items, obj.expandedIdx );
-			
-			var h = _data($expandedItem).get( 'height' );
-			_css($expandedItem, 'height', _data($expandedItem).get( 'height' ) );
-
-			$expandedItem.addEventListener(transEndEventName, onEndFn);
-
-			if( !support ) {
-				onEndFn.call();
-			}
-
-		}, delay );
-
-	}
-
-	Preview.prototype = {
-		create : function() {
-			// create Preview structure:
-			this.$title = document.createElement('h3');
-			this.$description = document.createElement('p');
-			//what should the inner link say? Check the data-innerLink attribute/cache
-			this.$href = _el('a', {href: "#"}, settings.innerlink);// '<a href="#">Visit website</a>' );
-			this.$details = _el( 'div', {class : "og-details"}, [this.$title, this.$description, this.$href]);
-			this.$loading = _el( 'div', {class:"og-loading"} );
-			this.$fullimage = _el( 'div', {class: "og-fullimg"}, [this.$loading]);
-			this.$closePreview = _el('span', {class: "og-close"});
-			this.$previewInner = _el( 'div', {class : "og-expander-inner"}, [this.$closePreview, this.$fullimage, this.$details]);
-			this.$previewEl = _el( 'div', {class : "og-expander"}, [this.$previewInner]);
-
-			//we do, add a click event
-			this.$closePreview.addEventListener('click', function(e)
-			{
-				//make sure to hide when close clicked
-				hidePreview();
-				//do not follow links
-				e.preventDefault();
-				e.stopPropagation();
-			});
-
-			// append preview element to the item
-			this.$item.appendChild( this.getEl() );
-			// set the transitions for the preview and the item
-			if( support ) {
-				this.setTransition();
-			}
-		},
-		update : function( $item ) {
-
-			if( $item ) {
-				this.$item = $item;
-			}
-			
-			// if already expanded remove class "og-expanded" from current item and add it to new item
-			if( current !== -1 ) {
-				//what is this function call eq?
-				var $currentItem = _eq($items, current );
-				_classes($currentItem).remove( 'og-expanded' );
-				_classes(this.$item).add( 'og-expanded' );
-				// position the preview correctly
-				this.positionPreview();
-			}
-
-			// update current value
-			current = _index(this.$item);
-
-			// update preview´s content
-			var $itemEl, eldata;
-
-			$itemEl = _firstChild(this.$item, 'a');
-			var iData = _data($itemEl);
-			eldata = {
-				href : $itemEl.getAttribute( 'href' ),
-				largesrc : iData.get( 'largesrc' ),
-				title : iData.get( 'title' ),
-				description : iData.get( 'description' )
-			};
-
-			this.$title.innerHTML = ( eldata.title );
-			this.$description.innerHTML = ( eldata.description );
-			this.$href.setAttribute( 'href', eldata.href );
-
-			var ilText = iData.get('innerlink');
-			if(ilText)
-				this.$href.innerHTML = ilText;
-
-			var self = this;
-			
-			// remove the current image in the preview
-			if( typeof self.$largeImg != 'undefined' ) {
-				//pull it out!
-				self.$largeImg.parentNode.removeChild(self.$largeImg);
-			}
-
-			// preload large image and add it to the preview
-			// for smaller screens we don´t display the large image (the media query will hide the fullimage wrapper)
-			if( _isVisible(self.$fullimage)) {
-			 //_selectCheck(self.$fullimage, ':visible' ) ) {
-				_show(this.$loading);
-
-				var nImg = document.createElement('img');
-
-				//then load?
-				nImg.onload = function()
-				{
-					var $img =  this;
-					//check if we're loaded or something
-					if( $img.getAttribute( 'src' ) === _data(_firstChild(self.$item, 'a')).get( 'largesrc' ) ) {
-						
-						//finisehd laoding
-						_hide(self.$loading);
-
-						//find any images and remove them -- take note -- this is the delete phase
-						//in the future, we'll customize this
-						var images = _find(self.$fullimage, 'img');
-						for(var i=0; i < images.length; i++)
-						{
-							var div = images[i];
-							//take div out of the equation -- where possible
-							if(div.parentNode)
-								div.parentNode.removeChild(div);
-						}
-
-						//now we fade in, I believe
-						self.$largeImg = $img;
-						_fade.in($img, 350);
-
-						self.$fullimage.appendChild(self.$largeImg);
-					}
-				}
-
-
-				//make sure we have an event listener ready when calling
-				nImg.src = eldata.largesrc;
-
-				//hack for when the image is loaded from cache
-				if(nImg.complete)
-					nImg.onload();
-
-			}
-
-		},
-		open : function() {
-
-			_wrapOpenTimeout(this, 25);
-
-		},
-		close : function() {
-
-			var self = this,
-				onEndFn = function() {
-					if( support ) {
-
-						// $( this ).off( transEndEventName );
-						var d = _data(this);
-						var end = d.get('onEndFn');
-						this.removeEventListener(transEndEventName, end);
-						//no more need of this
-						d.del('onEndFn');
-					}
-					//remove the class name
-					_classes(self.$item).remove( 'og-expanded' );
-					
-					//remove preview object from the world
-					if(self.$previewEl.parentNode)
-						self.$previewEl.parentNode.removeChild(self.$previewEl);
-				};
-
-				_wrapClose(this, 25, onEndFn);
-				//cache our callback
-				_data(this).set('onEndFn', onEndFn);
-			
-			return false;
-
-		},
-		calcHeight : function() {
-
-			var iData = _data(this.$item);
-			var heightPreview = winsize.height - iData.get( 'height' ) - marginExpanded,
-				itemHeight = winsize.height;
-
-			if( heightPreview < settings.minHeight ) {
-				heightPreview = settings.minHeight;
-				itemHeight = settings.minHeight + iData.get( 'height' ) + marginExpanded;
-			}
-
-			this.height = heightPreview;
-			this.itemHeight = itemHeight;
-
-		},
-		setHeights : function() {
-
-			var self = this,
-				onEndFn = function() {
-					if( support ) {
-
-						var d = _data(self.$item);
-						var end = d.get('onEndFn');				
-						self.$item.removeEventListener(transEndEventName, end);
-
-					}
-					//add expanded class
-					_classes(self.$item).add( 'og-expanded' );
-				};
-
-			//must calculate heights to know heights
-			this.calcHeight();
-
-			//set the preview and item height
-			_css(this.$previewEl, 'height', this.height );
-			_css(this.$item, 'height', this.itemHeight )
-
-			//set our event listener for transition end
-			this.$item.addEventListener(transEndEventName, onEndFn);
-		
-			//save the end fn callback for later removal
-			_data(self.$item).set('onEndFn', onEndFn);
-
-			//do we call immediately?
-			if( !support ) {
-				onEndFn.call();
-			}
-
-		},
-		positionPreview : function() {
-
-			var iData = _data(this.$item);
-			// scroll page
-			// case 1 : preview height + item height fits in window´s height
-			// case 2 : preview height + item height does not fit in window´s height and preview height is smaller than window´s height
-			// case 3 : preview height + item height does not fit in window´s height and preview height is bigger than window´s height
-			var position = iData.get( 'offsetTop' ),
-				previewOffsetT =  _offset(this.$previewEl).top - scrollExtra,
-				scrollVal = this.height + iData.get( 'height' ) + marginExpanded <= winsize.height ? position : this.height < winsize.height ? previewOffsetT - ( winsize.height - this.height ) : previewOffsetT;
-			
-			// _scrollTo(0, scrollVal, {
-			// 	duration: settings.speed
-			// 	// ease: settings.easing
-			// });
-
-			//scroll the display to a given offset
-			//body might be many objects using jquery right now
-			for(var i=0; i < $body.length; i++){
-				var original = $body[i].scrollTop;
-				_animateProperty($body[i], {scrollTop : scrollVal}, {duration: settings.speed});
-			}
-
-			// $body.animate( { scrollTop : scrollVal }, settings.speed );
-
-		},
-		setTransition  : function() {
-
-			_css(this.$previewEl, 'transition', 'height ' + settings.speed + 'ms ' + settings.easing );
-			_css(this.$item, 'transition', 'height ' + settings.speed + 'ms ' + settings.easing );
-
-		},
-		getEl : function() {
-			return this.$previewEl;
-		}
-	}
-
-	return { 
-		init : init,
-		addItems : addItems
-	};
-
-}
-
-
-});
-require.register("optimuslime-traverse/index.js", function(exports, require, module){
-var traverse = module.exports = function (obj) {
-    return new Traverse(obj);
-};
-
-function Traverse (obj) {
-    this.value = obj;
-}
-
-Traverse.prototype.get = function (ps) {
-    var node = this.value;
-    for (var i = 0; i < ps.length; i ++) {
-        var key = ps[i];
-        if (!node || !hasOwnProperty.call(node, key)) {
-            node = undefined;
-            break;
-        }
-        node = node[key];
-    }
-    return node;
-};
-
-Traverse.prototype.has = function (ps) {
-    var node = this.value;
-    for (var i = 0; i < ps.length; i ++) {
-        var key = ps[i];
-        if (!node || !hasOwnProperty.call(node, key)) {
-            return false;
-        }
-        node = node[key];
-    }
-    return true;
-};
-
-Traverse.prototype.set = function (ps, value) {
-    var node = this.value;
-    for (var i = 0; i < ps.length - 1; i ++) {
-        var key = ps[i];
-        if (!hasOwnProperty.call(node, key)) node[key] = {};
-        node = node[key];
-    }
-    node[ps[i]] = value;
-    return value;
-};
-
-Traverse.prototype.map = function (cb) {
-    return walk(this.value, cb, true);
-};
-
-Traverse.prototype.forEach = function (cb) {
-    this.value = walk(this.value, cb, false);
-    return this.value;
-};
-
-Traverse.prototype.reduce = function (cb, init) {
-    var skip = arguments.length === 1;
-    var acc = skip ? this.value : init;
-    this.forEach(function (x) {
-        if (!this.isRoot || !skip) {
-            acc = cb.call(this, acc, x);
-        }
-    });
-    return acc;
-};
-
-Traverse.prototype.paths = function () {
-    var acc = [];
-    this.forEach(function (x) {
-        acc.push(this.path); 
-    });
-    return acc;
-};
-
-Traverse.prototype.nodes = function () {
-    var acc = [];
-    this.forEach(function (x) {
-        acc.push(this.node);
-    });
-    return acc;
-};
-
-Traverse.prototype.clone = function () {
-    var parents = [], nodes = [];
-    
-    return (function clone (src) {
-        for (var i = 0; i < parents.length; i++) {
-            if (parents[i] === src) {
-                return nodes[i];
-            }
-        }
-        
-        if (typeof src === 'object' && src !== null) {
-            var dst = copy(src);
-            
-            parents.push(src);
-            nodes.push(dst);
-            
-            forEach(objectKeys(src), function (key) {
-                dst[key] = clone(src[key]);
-            });
-            
-            parents.pop();
-            nodes.pop();
-            return dst;
-        }
-        else {
-            return src;
-        }
-    })(this.value);
-};
-
-function walk (root, cb, immutable) {
-    var path = [];
-    var parents = [];
-    var alive = true;
-    
-    return (function walker (node_) {
-        var node = immutable ? copy(node_) : node_;
-        var modifiers = {};
-        
-        var keepGoing = true;
-        
-        var state = {
-            node : node,
-            node_ : node_,
-            path : [].concat(path),
-            parent : parents[parents.length - 1],
-            parents : parents,
-            key : path.slice(-1)[0],
-            isRoot : path.length === 0,
-            level : path.length,
-            circular : null,
-            update : function (x, stopHere) {
-                if (!state.isRoot) {
-                    state.parent.node[state.key] = x;
-                }
-                state.node = x;
-                if (stopHere) keepGoing = false;
-            },
-            'delete' : function (stopHere) {
-                delete state.parent.node[state.key];
-                if (stopHere) keepGoing = false;
-            },
-            remove : function (stopHere) {
-                if (isArray(state.parent.node)) {
-                    state.parent.node.splice(state.key, 1);
-                }
-                else {
-                    delete state.parent.node[state.key];
-                }
-                if (stopHere) keepGoing = false;
-            },
-            keys : null,
-            before : function (f) { modifiers.before = f },
-            after : function (f) { modifiers.after = f },
-            pre : function (f) { modifiers.pre = f },
-            post : function (f) { modifiers.post = f },
-            stop : function () { alive = false },
-            block : function () { keepGoing = false }
-        };
-        
-        if (!alive) return state;
-        
-        function updateState() {
-            if (typeof state.node === 'object' && state.node !== null) {
-                if (!state.keys || state.node_ !== state.node) {
-                    state.keys = objectKeys(state.node)
-                }
-                
-                state.isLeaf = state.keys.length == 0;
-                
-                for (var i = 0; i < parents.length; i++) {
-                    if (parents[i].node_ === node_) {
-                        state.circular = parents[i];
-                        break;
-                    }
-                }
-            }
-            else {
-                state.isLeaf = true;
-                state.keys = null;
-            }
-            
-            state.notLeaf = !state.isLeaf;
-            state.notRoot = !state.isRoot;
-        }
-        
-        updateState();
-        
-        // use return values to update if defined
-        var ret = cb.call(state, state.node);
-        if (ret !== undefined && state.update) state.update(ret);
-        
-        if (modifiers.before) modifiers.before.call(state, state.node);
-        
-        if (!keepGoing) return state;
-        
-        if (typeof state.node == 'object'
-        && state.node !== null && !state.circular) {
-            parents.push(state);
-            
-            updateState();
-            
-            forEach(state.keys, function (key, i) {
-                path.push(key);
-                
-                if (modifiers.pre) modifiers.pre.call(state, state.node[key], key);
-                
-                var child = walker(state.node[key]);
-                if (immutable && hasOwnProperty.call(state.node, key)) {
-                    state.node[key] = child.node;
-                }
-                
-                child.isLast = i == state.keys.length - 1;
-                child.isFirst = i == 0;
-                
-                if (modifiers.post) modifiers.post.call(state, child);
-                
-                path.pop();
-            });
-            parents.pop();
-        }
-        
-        if (modifiers.after) modifiers.after.call(state, state.node);
-        
-        return state;
-    })(root).node;
-}
-
-function copy (src) {
-    if (typeof src === 'object' && src !== null) {
-        var dst;
-        
-        if (isArray(src)) {
-            dst = [];
-        }
-        else if (isDate(src)) {
-            dst = new Date(src.getTime ? src.getTime() : src);
-        }
-        else if (isRegExp(src)) {
-            dst = new RegExp(src);
-        }
-        else if (isError(src)) {
-            dst = { message: src.message };
-        }
-        else if (isBoolean(src)) {
-            dst = new Boolean(src);
-        }
-        else if (isNumber(src)) {
-            dst = new Number(src);
-        }
-        else if (isString(src)) {
-            dst = new String(src);
-        }
-        else if (Object.create && Object.getPrototypeOf) {
-            dst = Object.create(Object.getPrototypeOf(src));
-        }
-        else if (src.constructor === Object) {
-            dst = {};
-        }
-        else {
-            var proto =
-                (src.constructor && src.constructor.prototype)
-                || src.__proto__
-                || {}
-            ;
-            var T = function () {};
-            T.prototype = proto;
-            dst = new T;
-        }
-        
-        forEach(objectKeys(src), function (key) {
-            dst[key] = src[key];
-        });
-        return dst;
-    }
-    else return src;
-}
-
-var objectKeys = Object.keys || function keys (obj) {
-    var res = [];
-    for (var key in obj) res.push(key)
-    return res;
-};
-
-function toS (obj) { return Object.prototype.toString.call(obj) }
-function isDate (obj) { return toS(obj) === '[object Date]' }
-function isRegExp (obj) { return toS(obj) === '[object RegExp]' }
-function isError (obj) { return toS(obj) === '[object Error]' }
-function isBoolean (obj) { return toS(obj) === '[object Boolean]' }
-function isNumber (obj) { return toS(obj) === '[object Number]' }
-function isString (obj) { return toS(obj) === '[object String]' }
-
-var isArray = Array.isArray || function isArray (xs) {
-    return Object.prototype.toString.call(xs) === '[object Array]';
-};
-
-var forEach = function (xs, fn) {
-    if (xs.forEach) return xs.forEach(fn)
-    else for (var i = 0; i < xs.length; i++) {
-        fn(xs[i], i, xs);
-    }
-};
-
-forEach(objectKeys(Traverse.prototype), function (key) {
-    traverse[key] = function (obj) {
-        var args = [].slice.call(arguments, 1);
-        var t = new Traverse(obj);
-        return t[key].apply(t, args);
-    };
-});
-
-var hasOwnProperty = Object.hasOwnProperty || function (obj, key) {
-    return key in obj;
-};
-
-});
-require.register("optimuslime-el.js/el.js", function(exports, require, module){
+require.register("optimuslime~el.js@master", function (exports, module) {
 /**
 * el.js v0.3 - A JavaScript Node Creation Tool
 *
@@ -5660,9 +449,404 @@ el.input = function(attrs, child) {
 };
 
 });
-require.register("optimuslime-win-iec/lib/win-iec.js", function(exports, require, module){
+
+require.register("optimuslime~win-utils@master", function (exports, module) {
+
+var winutils = {};
+
+module.exports = winutils;
+
+//right now, it's all we have setup -- later there will be more utilities
+winutils.cuid = require("optimuslime~win-utils@master/uuid/cuid.js");
+
+winutils.math = require("optimuslime~win-utils@master/math/winmath.js");
+
+
+});
+
+require.register("optimuslime~win-utils@master/uuid/cuid.js", function (exports, module) {
+/**
+ * cuid.js
+ * Collision-resistant UID generator for browsers and node.
+ * Sequential for fast db lookups and recency sorting.
+ * Safe for element IDs and server-side lookups.
+ *
+ * Extracted from CLCTR
+ * 
+ * Copyright (c) Eric Elliott 2012
+ * MIT License
+ */
+//From: https://github.com/dilvie/cuid
+
+//note that module.exports is at the end -- it exports the api variable
+
+/*global window, navigator, document, require, process, module */
+var c = 0,
+    blockSize = 4,
+    base = 36,
+    discreteValues = Math.pow(base, blockSize),
+
+    pad = function pad(num, size) {
+      var s = "000000000" + num;
+      return s.substr(s.length-size);
+    },
+
+    randomBlock = function randomBlock() {
+      return pad((Math.random() *
+            discreteValues << 0)
+            .toString(base), blockSize);
+    },
+
+    api = function cuid() {
+      // Starting with a lowercase letter makes
+      // it HTML element ID friendly.
+      var letter = 'c', // hard-coded allows for sequential access
+
+        // timestamp
+        // warning: this exposes the exact date and time
+        // that the uid was created.
+        timestamp = (new Date().getTime()).toString(base),
+
+        // Prevent same-machine collisions.
+        counter,
+
+        // A few chars to generate distinct ids for different
+        // clients (so different computers are far less
+        // likely to generate the same id)
+        fingerprint = api.fingerprint(),
+
+        // Grab some more chars from Math.random()
+        random = randomBlock() + randomBlock() + randomBlock() + randomBlock();
+
+        c = (c < discreteValues) ? c : 0;
+        counter = pad(c.toString(base), blockSize);
+
+      c++; // this is not subliminal
+
+      return  (letter + timestamp + counter + fingerprint + random);
+    };
+
+api.slug = function slug() {
+  var date = new Date().getTime().toString(36),
+    counter = c.toString(36).slice(-1),
+    print = api.fingerprint().slice(0,1) +
+      api.fingerprint().slice(-1),
+    random = randomBlock().slice(-1);
+
+  c++;
+
+  return date.slice(2,4) + date.slice(-2) + 
+    counter + print + random;
+};
+
+//fingerprint changes based on nodejs or component setup
+var isBrowser = (typeof process == 'undefined');
+
+api.fingerprint = isBrowser ?
+  function browserPrint() {
+      return pad((navigator.mimeTypes.length +
+          navigator.userAgent.length).toString(36) +
+          api.globalCount().toString(36), 4);
+  }
+: function nodePrint() {
+  var os = require("os"),
+
+  padding = 2,
+  pid = pad((process.pid).toString(36), padding),
+  hostname = os.hostname(),
+  length = hostname.length,
+  hostId = pad((hostname)
+    .split('')
+    .reduce(function (prev, char) {
+      return +prev + char.charCodeAt(0);
+    }, +length + 36)
+    .toString(36),
+  padding);
+return pid + hostId;
+};
+
+api.globalCount = function globalCount() {
+    // We want to cache the results of this
+    var cache = (function calc() {
+        var i,
+            count = 0;
+
+            //global count only ever called inside browser environment
+            //lets loop through and count the keys in window -- then cahce that as part of our fingerprint
+        for (i in window) {
+            count++;
+        }
+
+        return count;
+    }());
+
+    api.globalCount = function () { return cache; };
+    return cache;
+};
+
+api.isLessThan = function(first, second)
+{
+  var fParse= parseInt(first);
+  var sParse = parseInt(second);
+  if(isNaN(fParse) && isNaN(sParse))
+  {
+     //tease apart first, second to determine which ID came first
+    //counter + fingerprint + random = 6 blocks of 4 = 24
+    var dateEnd = 6*blockSize;
+    var counterEnd = 5*blockSize;
+    var charStart = 1;
+
+    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
+    var firstTime = parseInt(first.slice(charStart, first.length - dateEnd), base);
+    //ditto for counter
+    var firstCounter = parseInt(first.slice(first.length - dateEnd, first.length - counterEnd),base);
+
+    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
+    var secondTime =  parseInt(second.slice(charStart, second.length - dateEnd), base);
+    
+    //ditto for counter 
+    var secondCounter = parseInt(second.slice(second.length - dateEnd, second.length - counterEnd), base);
+
+    //either the first time is less than the second time, and we answer this question immediately
+    //or the times are equal -- then we pull the lower counter
+    //techincially counters can wrap, but this won't happen very often AND this is all for measuring disjoint/excess behavior
+    //the time should be enough of an ordering principal for this not to matter
+    return firstTime < secondTime || (firstTime == secondTime && firstCounter < secondCounter);
+
+  }
+  else if(isNaN(sParse))
+  {
+    //if sParse is a string, then the first is a number and the second is a string UUID
+    //to maintain backwards compat -- number come before strings in neatjs ordering
+    return true;
+  }//both are not NaN -- we have two numbers to compare
+  else
+  {
+    return fParse < sParse;
+  }
+}
+
+//we send out API
+module.exports = api;
+
+
+
+
+});
+
+require.register("optimuslime~win-utils@master/math/winmath.js", function (exports, module) {
+
+var mathHelper = {};
+
+module.exports = mathHelper;
+
+mathHelper.next = function(max)
+{
+    return Math.floor(Math.random()*max);
+};
+
+});
+
+require.register("optimuslime~win-utils@0.1.1", function (exports, module) {
+
+var winutils = {};
+
+module.exports = winutils;
+
+//right now, it's all we have setup -- later there will be more utilities
+winutils.cuid = require("optimuslime~win-utils@0.1.1/uuid/cuid.js");
+
+winutils.math = require("optimuslime~win-utils@0.1.1/math/winmath.js");
+
+
+});
+
+require.register("optimuslime~win-utils@0.1.1/uuid/cuid.js", function (exports, module) {
+/**
+ * cuid.js
+ * Collision-resistant UID generator for browsers and node.
+ * Sequential for fast db lookups and recency sorting.
+ * Safe for element IDs and server-side lookups.
+ *
+ * Extracted from CLCTR
+ * 
+ * Copyright (c) Eric Elliott 2012
+ * MIT License
+ */
+//From: https://github.com/dilvie/cuid
+
+//note that module.exports is at the end -- it exports the api variable
+
+/*global window, navigator, document, require, process, module */
+var c = 0,
+    blockSize = 4,
+    base = 36,
+    discreteValues = Math.pow(base, blockSize),
+
+    pad = function pad(num, size) {
+      var s = "000000000" + num;
+      return s.substr(s.length-size);
+    },
+
+    randomBlock = function randomBlock() {
+      return pad((Math.random() *
+            discreteValues << 0)
+            .toString(base), blockSize);
+    },
+
+    api = function cuid() {
+      // Starting with a lowercase letter makes
+      // it HTML element ID friendly.
+      var letter = 'c', // hard-coded allows for sequential access
+
+        // timestamp
+        // warning: this exposes the exact date and time
+        // that the uid was created.
+        timestamp = (new Date().getTime()).toString(base),
+
+        // Prevent same-machine collisions.
+        counter,
+
+        // A few chars to generate distinct ids for different
+        // clients (so different computers are far less
+        // likely to generate the same id)
+        fingerprint = api.fingerprint(),
+
+        // Grab some more chars from Math.random()
+        random = randomBlock() + randomBlock() + randomBlock() + randomBlock();
+
+        c = (c < discreteValues) ? c : 0;
+        counter = pad(c.toString(base), blockSize);
+
+      c++; // this is not subliminal
+
+      return  (letter + timestamp + counter + fingerprint + random);
+    };
+
+api.slug = function slug() {
+  var date = new Date().getTime().toString(36),
+    counter = c.toString(36).slice(-1),
+    print = api.fingerprint().slice(0,1) +
+      api.fingerprint().slice(-1),
+    random = randomBlock().slice(-1);
+
+  c++;
+
+  return date.slice(2,4) + date.slice(-2) + 
+    counter + print + random;
+};
+
+//fingerprint changes based on nodejs or component setup
+var isBrowser = (typeof process == 'undefined');
+
+api.fingerprint = isBrowser ?
+  function browserPrint() {
+      return pad((navigator.mimeTypes.length +
+          navigator.userAgent.length).toString(36) +
+          api.globalCount().toString(36), 4);
+  }
+: function nodePrint() {
+  var os = require("os"),
+
+  padding = 2,
+  pid = pad((process.pid).toString(36), padding),
+  hostname = os.hostname(),
+  length = hostname.length,
+  hostId = pad((hostname)
+    .split('')
+    .reduce(function (prev, char) {
+      return +prev + char.charCodeAt(0);
+    }, +length + 36)
+    .toString(36),
+  padding);
+return pid + hostId;
+};
+
+api.globalCount = function globalCount() {
+    // We want to cache the results of this
+    var cache = (function calc() {
+        var i,
+            count = 0;
+
+            //global count only ever called inside browser environment
+            //lets loop through and count the keys in window -- then cahce that as part of our fingerprint
+        for (i in window) {
+            count++;
+        }
+
+        return count;
+    }());
+
+    api.globalCount = function () { return cache; };
+    return cache;
+};
+
+api.isLessThan = function(first, second)
+{
+  var fParse= parseInt(first);
+  var sParse = parseInt(second);
+  if(isNaN(fParse) && isNaN(sParse))
+  {
+     //tease apart first, second to determine which ID came first
+    //counter + fingerprint + random = 6 blocks of 4 = 24
+    var dateEnd = 6*blockSize;
+    var counterEnd = 5*blockSize;
+    var charStart = 1;
+
+    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
+    var firstTime = parseInt(first.slice(charStart, first.length - dateEnd), base);
+    //ditto for counter
+    var firstCounter = parseInt(first.slice(first.length - dateEnd, first.length - counterEnd),base);
+
+    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
+    var secondTime =  parseInt(second.slice(charStart, second.length - dateEnd), base);
+    
+    //ditto for counter 
+    var secondCounter = parseInt(second.slice(second.length - dateEnd, second.length - counterEnd), base);
+
+    //either the first time is less than the second time, and we answer this question immediately
+    //or the times are equal -- then we pull the lower counter
+    //techincially counters can wrap, but this won't happen very often AND this is all for measuring disjoint/excess behavior
+    //the time should be enough of an ordering principal for this not to matter
+    return firstTime < secondTime || (firstTime == secondTime && firstCounter < secondCounter);
+
+  }
+  else if(isNaN(sParse))
+  {
+    //if sParse is a string, then the first is a number and the second is a string UUID
+    //to maintain backwards compat -- number come before strings in neatjs ordering
+    return true;
+  }//both are not NaN -- we have two numbers to compare
+  else
+  {
+    return fParse < sParse;
+  }
+}
+
+//we send out API
+module.exports = api;
+
+
+
+
+});
+
+require.register("optimuslime~win-utils@0.1.1/math/winmath.js", function (exports, module) {
+
+var mathHelper = {};
+
+module.exports = mathHelper;
+
+mathHelper.next = function(max)
+{
+    return Math.floor(Math.random()*max);
+};
+
+});
+
+require.register("optimuslime~win-iec@0.0.2-6", function (exports, module) {
 //generating session info
-var uuid = require('win-utils').cuid;
+var uuid = require("optimuslime~win-utils@master").cuid;
 
 module.exports = winiec;
 
@@ -6143,7 +1327,644 @@ function winiec(backbone, globalConfig, localConfig)
 
 
 });
-require.register("component-reduce/index.js", function(exports, require, module){
+
+require.register("optimuslime~traverse@master", function (exports, module) {
+var traverse = module.exports = function (obj) {
+    return new Traverse(obj);
+};
+
+function Traverse (obj) {
+    this.value = obj;
+}
+
+Traverse.prototype.get = function (ps) {
+    var node = this.value;
+    for (var i = 0; i < ps.length; i ++) {
+        var key = ps[i];
+        if (!node || !hasOwnProperty.call(node, key)) {
+            node = undefined;
+            break;
+        }
+        node = node[key];
+    }
+    return node;
+};
+
+Traverse.prototype.has = function (ps) {
+    var node = this.value;
+    for (var i = 0; i < ps.length; i ++) {
+        var key = ps[i];
+        if (!node || !hasOwnProperty.call(node, key)) {
+            return false;
+        }
+        node = node[key];
+    }
+    return true;
+};
+
+Traverse.prototype.set = function (ps, value) {
+    var node = this.value;
+    for (var i = 0; i < ps.length - 1; i ++) {
+        var key = ps[i];
+        if (!hasOwnProperty.call(node, key)) node[key] = {};
+        node = node[key];
+    }
+    node[ps[i]] = value;
+    return value;
+};
+
+Traverse.prototype.map = function (cb) {
+    return walk(this.value, cb, true);
+};
+
+Traverse.prototype.forEach = function (cb) {
+    this.value = walk(this.value, cb, false);
+    return this.value;
+};
+
+Traverse.prototype.reduce = function (cb, init) {
+    var skip = arguments.length === 1;
+    var acc = skip ? this.value : init;
+    this.forEach(function (x) {
+        if (!this.isRoot || !skip) {
+            acc = cb.call(this, acc, x);
+        }
+    });
+    return acc;
+};
+
+Traverse.prototype.paths = function () {
+    var acc = [];
+    this.forEach(function (x) {
+        acc.push(this.path); 
+    });
+    return acc;
+};
+
+Traverse.prototype.nodes = function () {
+    var acc = [];
+    this.forEach(function (x) {
+        acc.push(this.node);
+    });
+    return acc;
+};
+
+Traverse.prototype.clone = function () {
+    var parents = [], nodes = [];
+    
+    return (function clone (src) {
+        for (var i = 0; i < parents.length; i++) {
+            if (parents[i] === src) {
+                return nodes[i];
+            }
+        }
+        
+        if (typeof src === 'object' && src !== null) {
+            var dst = copy(src);
+            
+            parents.push(src);
+            nodes.push(dst);
+            
+            forEach(objectKeys(src), function (key) {
+                dst[key] = clone(src[key]);
+            });
+            
+            parents.pop();
+            nodes.pop();
+            return dst;
+        }
+        else {
+            return src;
+        }
+    })(this.value);
+};
+
+function walk (root, cb, immutable) {
+    var path = [];
+    var parents = [];
+    var alive = true;
+    
+    return (function walker (node_) {
+        var node = immutable ? copy(node_) : node_;
+        var modifiers = {};
+        
+        var keepGoing = true;
+        
+        var state = {
+            node : node,
+            node_ : node_,
+            path : [].concat(path),
+            parent : parents[parents.length - 1],
+            parents : parents,
+            key : path.slice(-1)[0],
+            isRoot : path.length === 0,
+            level : path.length,
+            circular : null,
+            update : function (x, stopHere) {
+                if (!state.isRoot) {
+                    state.parent.node[state.key] = x;
+                }
+                state.node = x;
+                if (stopHere) keepGoing = false;
+            },
+            'delete' : function (stopHere) {
+                delete state.parent.node[state.key];
+                if (stopHere) keepGoing = false;
+            },
+            remove : function (stopHere) {
+                if (isArray(state.parent.node)) {
+                    state.parent.node.splice(state.key, 1);
+                }
+                else {
+                    delete state.parent.node[state.key];
+                }
+                if (stopHere) keepGoing = false;
+            },
+            keys : null,
+            before : function (f) { modifiers.before = f },
+            after : function (f) { modifiers.after = f },
+            pre : function (f) { modifiers.pre = f },
+            post : function (f) { modifiers.post = f },
+            stop : function () { alive = false },
+            block : function () { keepGoing = false }
+        };
+        
+        if (!alive) return state;
+        
+        function updateState() {
+            if (typeof state.node === 'object' && state.node !== null) {
+                if (!state.keys || state.node_ !== state.node) {
+                    state.keys = objectKeys(state.node)
+                }
+                
+                state.isLeaf = state.keys.length == 0;
+                
+                for (var i = 0; i < parents.length; i++) {
+                    if (parents[i].node_ === node_) {
+                        state.circular = parents[i];
+                        break;
+                    }
+                }
+            }
+            else {
+                state.isLeaf = true;
+                state.keys = null;
+            }
+            
+            state.notLeaf = !state.isLeaf;
+            state.notRoot = !state.isRoot;
+        }
+        
+        updateState();
+        
+        // use return values to update if defined
+        var ret = cb.call(state, state.node);
+        if (ret !== undefined && state.update) state.update(ret);
+        
+        if (modifiers.before) modifiers.before.call(state, state.node);
+        
+        if (!keepGoing) return state;
+        
+        if (typeof state.node == 'object'
+        && state.node !== null && !state.circular) {
+            parents.push(state);
+            
+            updateState();
+            
+            forEach(state.keys, function (key, i) {
+                path.push(key);
+                
+                if (modifiers.pre) modifiers.pre.call(state, state.node[key], key);
+                
+                var child = walker(state.node[key]);
+                if (immutable && hasOwnProperty.call(state.node, key)) {
+                    state.node[key] = child.node;
+                }
+                
+                child.isLast = i == state.keys.length - 1;
+                child.isFirst = i == 0;
+                
+                if (modifiers.post) modifiers.post.call(state, child);
+                
+                path.pop();
+            });
+            parents.pop();
+        }
+        
+        if (modifiers.after) modifiers.after.call(state, state.node);
+        
+        return state;
+    })(root).node;
+}
+
+function copy (src) {
+    if (typeof src === 'object' && src !== null) {
+        var dst;
+        
+        if (isArray(src)) {
+            dst = [];
+        }
+        else if (isDate(src)) {
+            dst = new Date(src.getTime ? src.getTime() : src);
+        }
+        else if (isRegExp(src)) {
+            dst = new RegExp(src);
+        }
+        else if (isError(src)) {
+            dst = { message: src.message };
+        }
+        else if (isBoolean(src)) {
+            dst = new Boolean(src);
+        }
+        else if (isNumber(src)) {
+            dst = new Number(src);
+        }
+        else if (isString(src)) {
+            dst = new String(src);
+        }
+        else if (Object.create && Object.getPrototypeOf) {
+            dst = Object.create(Object.getPrototypeOf(src));
+        }
+        else if (src.constructor === Object) {
+            dst = {};
+        }
+        else {
+            var proto =
+                (src.constructor && src.constructor.prototype)
+                || src.__proto__
+                || {}
+            ;
+            var T = function () {};
+            T.prototype = proto;
+            dst = new T;
+        }
+        
+        forEach(objectKeys(src), function (key) {
+            dst[key] = src[key];
+        });
+        return dst;
+    }
+    else return src;
+}
+
+var objectKeys = Object.keys || function keys (obj) {
+    var res = [];
+    for (var key in obj) res.push(key)
+    return res;
+};
+
+function toS (obj) { return Object.prototype.toString.call(obj) }
+function isDate (obj) { return toS(obj) === '[object Date]' }
+function isRegExp (obj) { return toS(obj) === '[object RegExp]' }
+function isError (obj) { return toS(obj) === '[object Error]' }
+function isBoolean (obj) { return toS(obj) === '[object Boolean]' }
+function isNumber (obj) { return toS(obj) === '[object Number]' }
+function isString (obj) { return toS(obj) === '[object String]' }
+
+var isArray = Array.isArray || function isArray (xs) {
+    return Object.prototype.toString.call(xs) === '[object Array]';
+};
+
+var forEach = function (xs, fn) {
+    if (xs.forEach) return xs.forEach(fn)
+    else for (var i = 0; i < xs.length; i++) {
+        fn(xs[i], i, xs);
+    }
+};
+
+forEach(objectKeys(Traverse.prototype), function (key) {
+    traverse[key] = function (obj) {
+        var args = [].slice.call(arguments, 1);
+        var t = new Traverse(obj);
+        return t[key].apply(t, args);
+    };
+});
+
+var hasOwnProperty = Object.hasOwnProperty || function (obj, key) {
+    return key in obj;
+};
+
+});
+
+require.register("optimuslime~traverse@0.6.6-1", function (exports, module) {
+var traverse = module.exports = function (obj) {
+    return new Traverse(obj);
+};
+
+function Traverse (obj) {
+    this.value = obj;
+}
+
+Traverse.prototype.get = function (ps) {
+    var node = this.value;
+    for (var i = 0; i < ps.length; i ++) {
+        var key = ps[i];
+        if (!node || !hasOwnProperty.call(node, key)) {
+            node = undefined;
+            break;
+        }
+        node = node[key];
+    }
+    return node;
+};
+
+Traverse.prototype.has = function (ps) {
+    var node = this.value;
+    for (var i = 0; i < ps.length; i ++) {
+        var key = ps[i];
+        if (!node || !hasOwnProperty.call(node, key)) {
+            return false;
+        }
+        node = node[key];
+    }
+    return true;
+};
+
+Traverse.prototype.set = function (ps, value) {
+    var node = this.value;
+    for (var i = 0; i < ps.length - 1; i ++) {
+        var key = ps[i];
+        if (!hasOwnProperty.call(node, key)) node[key] = {};
+        node = node[key];
+    }
+    node[ps[i]] = value;
+    return value;
+};
+
+Traverse.prototype.map = function (cb) {
+    return walk(this.value, cb, true);
+};
+
+Traverse.prototype.forEach = function (cb) {
+    this.value = walk(this.value, cb, false);
+    return this.value;
+};
+
+Traverse.prototype.reduce = function (cb, init) {
+    var skip = arguments.length === 1;
+    var acc = skip ? this.value : init;
+    this.forEach(function (x) {
+        if (!this.isRoot || !skip) {
+            acc = cb.call(this, acc, x);
+        }
+    });
+    return acc;
+};
+
+Traverse.prototype.paths = function () {
+    var acc = [];
+    this.forEach(function (x) {
+        acc.push(this.path); 
+    });
+    return acc;
+};
+
+Traverse.prototype.nodes = function () {
+    var acc = [];
+    this.forEach(function (x) {
+        acc.push(this.node);
+    });
+    return acc;
+};
+
+Traverse.prototype.clone = function () {
+    var parents = [], nodes = [];
+    
+    return (function clone (src) {
+        for (var i = 0; i < parents.length; i++) {
+            if (parents[i] === src) {
+                return nodes[i];
+            }
+        }
+        
+        if (typeof src === 'object' && src !== null) {
+            var dst = copy(src);
+            
+            parents.push(src);
+            nodes.push(dst);
+            
+            forEach(objectKeys(src), function (key) {
+                dst[key] = clone(src[key]);
+            });
+            
+            parents.pop();
+            nodes.pop();
+            return dst;
+        }
+        else {
+            return src;
+        }
+    })(this.value);
+};
+
+function walk (root, cb, immutable) {
+    var path = [];
+    var parents = [];
+    var alive = true;
+    
+    return (function walker (node_) {
+        var node = immutable ? copy(node_) : node_;
+        var modifiers = {};
+        
+        var keepGoing = true;
+        
+        var state = {
+            node : node,
+            node_ : node_,
+            path : [].concat(path),
+            parent : parents[parents.length - 1],
+            parents : parents,
+            key : path.slice(-1)[0],
+            isRoot : path.length === 0,
+            level : path.length,
+            circular : null,
+            update : function (x, stopHere) {
+                if (!state.isRoot) {
+                    state.parent.node[state.key] = x;
+                }
+                state.node = x;
+                if (stopHere) keepGoing = false;
+            },
+            'delete' : function (stopHere) {
+                delete state.parent.node[state.key];
+                if (stopHere) keepGoing = false;
+            },
+            remove : function (stopHere) {
+                if (isArray(state.parent.node)) {
+                    state.parent.node.splice(state.key, 1);
+                }
+                else {
+                    delete state.parent.node[state.key];
+                }
+                if (stopHere) keepGoing = false;
+            },
+            keys : null,
+            before : function (f) { modifiers.before = f },
+            after : function (f) { modifiers.after = f },
+            pre : function (f) { modifiers.pre = f },
+            post : function (f) { modifiers.post = f },
+            stop : function () { alive = false },
+            block : function () { keepGoing = false }
+        };
+        
+        if (!alive) return state;
+        
+        function updateState() {
+            if (typeof state.node === 'object' && state.node !== null) {
+                if (!state.keys || state.node_ !== state.node) {
+                    state.keys = objectKeys(state.node)
+                }
+                
+                state.isLeaf = state.keys.length == 0;
+                
+                for (var i = 0; i < parents.length; i++) {
+                    if (parents[i].node_ === node_) {
+                        state.circular = parents[i];
+                        break;
+                    }
+                }
+            }
+            else {
+                state.isLeaf = true;
+                state.keys = null;
+            }
+            
+            state.notLeaf = !state.isLeaf;
+            state.notRoot = !state.isRoot;
+        }
+        
+        updateState();
+        
+        // use return values to update if defined
+        var ret = cb.call(state, state.node);
+        if (ret !== undefined && state.update) state.update(ret);
+        
+        if (modifiers.before) modifiers.before.call(state, state.node);
+        
+        if (!keepGoing) return state;
+        
+        if (typeof state.node == 'object'
+        && state.node !== null && !state.circular) {
+            parents.push(state);
+            
+            updateState();
+            
+            forEach(state.keys, function (key, i) {
+                path.push(key);
+                
+                if (modifiers.pre) modifiers.pre.call(state, state.node[key], key);
+                
+                var child = walker(state.node[key]);
+                if (immutable && hasOwnProperty.call(state.node, key)) {
+                    state.node[key] = child.node;
+                }
+                
+                child.isLast = i == state.keys.length - 1;
+                child.isFirst = i == 0;
+                
+                if (modifiers.post) modifiers.post.call(state, child);
+                
+                path.pop();
+            });
+            parents.pop();
+        }
+        
+        if (modifiers.after) modifiers.after.call(state, state.node);
+        
+        return state;
+    })(root).node;
+}
+
+function copy (src) {
+    if (typeof src === 'object' && src !== null) {
+        var dst;
+        
+        if (isArray(src)) {
+            dst = [];
+        }
+        else if (isDate(src)) {
+            dst = new Date(src.getTime ? src.getTime() : src);
+        }
+        else if (isRegExp(src)) {
+            dst = new RegExp(src);
+        }
+        else if (isError(src)) {
+            dst = { message: src.message };
+        }
+        else if (isBoolean(src)) {
+            dst = new Boolean(src);
+        }
+        else if (isNumber(src)) {
+            dst = new Number(src);
+        }
+        else if (isString(src)) {
+            dst = new String(src);
+        }
+        else if (Object.create && Object.getPrototypeOf) {
+            dst = Object.create(Object.getPrototypeOf(src));
+        }
+        else if (src.constructor === Object) {
+            dst = {};
+        }
+        else {
+            var proto =
+                (src.constructor && src.constructor.prototype)
+                || src.__proto__
+                || {}
+            ;
+            var T = function () {};
+            T.prototype = proto;
+            dst = new T;
+        }
+        
+        forEach(objectKeys(src), function (key) {
+            dst[key] = src[key];
+        });
+        return dst;
+    }
+    else return src;
+}
+
+var objectKeys = Object.keys || function keys (obj) {
+    var res = [];
+    for (var key in obj) res.push(key)
+    return res;
+};
+
+function toS (obj) { return Object.prototype.toString.call(obj) }
+function isDate (obj) { return toS(obj) === '[object Date]' }
+function isRegExp (obj) { return toS(obj) === '[object RegExp]' }
+function isError (obj) { return toS(obj) === '[object Error]' }
+function isBoolean (obj) { return toS(obj) === '[object Boolean]' }
+function isNumber (obj) { return toS(obj) === '[object Number]' }
+function isString (obj) { return toS(obj) === '[object String]' }
+
+var isArray = Array.isArray || function isArray (xs) {
+    return Object.prototype.toString.call(xs) === '[object Array]';
+};
+
+var forEach = function (xs, fn) {
+    if (xs.forEach) return xs.forEach(fn)
+    else for (var i = 0; i < xs.length; i++) {
+        fn(xs[i], i, xs);
+    }
+};
+
+forEach(objectKeys(Traverse.prototype), function (key) {
+    traverse[key] = function (obj) {
+        var args = [].slice.call(arguments, 1);
+        var t = new Traverse(obj);
+        return t[key].apply(t, args);
+    };
+});
+
+var hasOwnProperty = Object.hasOwnProperty || function (obj, key) {
+    return key in obj;
+};
+
+});
+
+require.register("component~reduce@1.0.1", function (exports, module) {
 
 /**
  * Reduce `arr` with `fn`.
@@ -6169,13 +1990,14 @@ module.exports = function(arr, fn, initial){
   return curr;
 };
 });
-require.register("visionmedia-superagent/lib/client.js", function(exports, require, module){
+
+require.register("visionmedia~superagent@master", function (exports, module) {
 /**
  * Module dependencies.
  */
 
-var Emitter = require('emitter');
-var reduce = require('reduce');
+var Emitter = require("component~emitter@master");
+var reduce = require("component~reduce@1.0.1");
 
 /**
  * Root reference for iframes.
@@ -6219,16 +2041,33 @@ function isHost(obj) {
  * Determine XHR.
  */
 
-function getXHR() {
-  if (root.XMLHttpRequest
-    && ('file:' != root.location.protocol || !root.ActiveXObject)) {
-    return new XMLHttpRequest;
+function getXHR(isXDomainRequest) {
+  if (isXDomainRequest === true) {
+    if (typeof new XMLHttpRequest().withCredentials !== 'undefined') {
+      // Check if the XMLHttpRequest object has a "withCredentials" property.
+      // "withCredentials" only exists on XMLHTTPRequest2 objects.
+      
+      return new XMLHttpRequest();
+    } else if (typeof XDomainRequest !== "undefined") {
+      // Otherwise, check if XDomainRequest.
+      // XDomainRequest only exists in IE, and is IE's way of making CORS requests.
+      
+      return new XDomainRequest();
+    } else {
+      return false;
+    }
   } else {
-    try { return new ActiveXObject('Microsoft.XMLHTTP'); } catch(e) {}
-    try { return new ActiveXObject('Msxml2.XMLHTTP.6.0'); } catch(e) {}
-    try { return new ActiveXObject('Msxml2.XMLHTTP.3.0'); } catch(e) {}
-    try { return new ActiveXObject('Msxml2.XMLHTTP'); } catch(e) {}
+    if (root.XMLHttpRequest
+      && ('file:' !== root.location.protocol || !root.ActiveXObject)) {
+      return new XMLHttpRequest();
+    } else {
+      try { return new ActiveXObject('Microsoft.XMLHTTP'); } catch(e) {}
+      try { return new ActiveXObject('Msxml2.XMLHTTP.6.0'); } catch(e) {}
+      try { return new ActiveXObject('Msxml2.XMLHTTP.3.0'); } catch(e) {}
+      try { return new ActiveXObject('Msxml2.XMLHTTP'); } catch(e) {}
+    }
   }
+
   return false;
 }
 
@@ -6467,13 +2306,20 @@ function Response(req, options) {
   this.req = req;
   this.xhr = this.req.xhr;
   this.text = this.xhr.responseText;
-  this.setStatusProperties(this.xhr.status);
+  this.setStatusProperties(typeof this.xhr.status !== 'undefined' ? this.xhr.status : 0);
+  if (typeof this.xhr.getAllResponseHeaders !== 'undefined' &&
+      typeof this.xhr.getResponseHeader !== 'undefined') {
   this.header = this.headers = parseHeader(this.xhr.getAllResponseHeaders());
   // getAllResponseHeaders sometimes falsely returns "" for CORS requests, but
   // getResponseHeader still works. so we get content-type even if getting
   // other headers fails.
   this.header['content-type'] = this.xhr.getResponseHeader('content-type');
   this.setHeaderProperties(this.header);
+  } else if (typeof this.xhr.contentType !== 'undefined') {
+    this.header = this.headers = {};
+    this.header['content-type'] = this.xhr.contentType;
+    this.setHeaderProperties(this.header);
+  }
   this.body = this.req.method != 'HEAD'
     ? this.parseBody(this.text)
     : null;
@@ -6526,7 +2372,7 @@ Response.prototype.setHeaderProperties = function(header){
 
 Response.prototype.parseBody = function(str){
   var parse = request.parse[this.type];
-  return parse
+  return parse && str && str.length
     ? parse(str)
     : null;
 };
@@ -7008,7 +2854,18 @@ Request.prototype.withCredentials = function(){
 
 Request.prototype.end = function(fn){
   var self = this;
-  var xhr = this.xhr = getXHR();
+  
+  var isXDomainRequest = false;
+
+  if (typeof root.location !== 'undefined') {
+    var hostnameMatch = this.url.match(/http[s]?:\/\/([^\/]*)/);
+
+    if (hostnameMatch && hostnameMatch[1] !== root.location.hostname) {
+      isXDomainRequest = true;
+    }
+  }
+
+  var xhr = this.xhr = getXHR(isXDomainRequest);
   var query = this._query.join('&');
   var timeout = this._timeout;
   var data = this._formData || this._data;
@@ -7017,6 +2874,7 @@ Request.prototype.end = function(fn){
   this._callback = fn || noop;
 
   // state change
+  if (typeof xhr.onreadystatechange !== 'undefined') {
   xhr.onreadystatechange = function(){
     if (4 != xhr.readyState) return;
     if (0 == xhr.status) {
@@ -7025,6 +2883,20 @@ Request.prototype.end = function(fn){
     }
     self.emit('end');
   };
+  } else {
+    xhr.onload = function () {
+      if (self.aborted) return self.timeoutError();
+      self.emit('end');
+    }
+
+    xhr.onerror = function () {
+      self.emit('end');
+    }
+
+    xhr.ontimeout = function () {
+      return self.timeoutError();
+    }
+  }
 
   // progress
   if (xhr.upload) {
@@ -7065,7 +2937,9 @@ Request.prototype.end = function(fn){
   // set header fields
   for (var field in this.header) {
     if (null == this.header[field]) continue;
+    if (typeof xhr.setRequestHeader !== 'undefined') {
     xhr.setRequestHeader(field, this.header[field]);
+  }
   }
 
   // send stuff
@@ -7221,8 +3095,9 @@ request.put = function(url, data, fn){
 module.exports = request;
 
 });
-require.register("optimuslime-win-query/lib/win-query.js", function(exports, require, module){
-var request = require('superagent');
+
+require.register("optimuslime~win-query@0.0.1-4", function (exports, module) {
+var request = require("visionmedia~superagent@master");
 
 module.exports = winquery;
 
@@ -7412,10 +3287,11 @@ function winquery(backbone, globalConfig, localConfig)
 
 
 });
-require.register("optimuslime-win-publish/lib/win-publish.js", function(exports, require, module){
+
+require.register("optimuslime~win-publish@0.0.1-4", function (exports, module) {
 //superagent handles browser or node.js requests
 //thank you tjholowaychuk
-var request = require('superagent');
+var request = require("visionmedia~superagent@master");
 
 //now we're ready to get into this module
 module.exports = winpublish;
@@ -7541,59 +3417,58 @@ function winpublish(backbone, globalConfig, localConfig)
 
 
 });
-require.register("optimuslime-cppnjs/cppn.js", function(exports, require, module){
+
+require.register("optimuslime~cppnjs@0.2.6", function (exports, module) {
 var cppnjs = {};
 
 //export the cppn library
 module.exports = cppnjs;
 
 //CPPNs
-cppnjs.cppn = require('./networks/cppn.js');
-
-cppnjs.addAdaptable = function()
-{
-    require('./extras/adaptableAdditions.js');
-};
-
-cppnjs.addPureCPPN = function()
-{
-    require('./extras/pureCPPNAdditions.js');
-};
+cppnjs.cppn = require("optimuslime~cppnjs@0.2.6/networks/cppn.js");
 
 cppnjs.addGPUExtras = function()
 {
     //requires pureCPPN activations
     cppnjs.addPureCPPN();
-    require('./extras/gpuAdditions.js');
+    require("optimuslime~cppnjs@0.2.6/extras/gpuAdditions.js");
 };
 
 //add GPU extras by default
 cppnjs.addGPUExtras();
 
+cppnjs.addAdaptable = function()
+{
+    require("optimuslime~cppnjs@0.2.6/extras/adaptableAdditions.js");
+};
 
-
+cppnjs.addPureCPPN = function()
+{
+  require("optimuslime~cppnjs@0.2.6/extras/pureCPPNAdditions.js");
+};
 
 
 //nodes and connections!
-cppnjs.cppnNode = require('./networks/cppnNode.js');
-cppnjs.cppnConnection = require('./networks/cppnConnection.js');
+cppnjs.cppnNode = require("optimuslime~cppnjs@0.2.6/networks/cppnNode.js");
+cppnjs.cppnConnection = require("optimuslime~cppnjs@0.2.6/networks/cppnConnection.js");
 
 //all the activations your heart could ever hope for
-cppnjs.cppnActivationFunctions = require('./activationFunctions/cppnActivationFunctions.js');
-cppnjs.cppnActivationFactory = require('./activationFunctions/cppnActivationFactory.js');
+cppnjs.cppnActivationFunctions = require("optimuslime~cppnjs@0.2.6/activationFunctions/cppnActivationFunctions.js");
+cppnjs.cppnActivationFactory = require("optimuslime~cppnjs@0.2.6/activationFunctions/cppnActivationFactory.js");
 
 //and the utilities to round it out!
-cppnjs.utilities = require('./utility/utilities.js');
+cppnjs.utilities = require("optimuslime~cppnjs@0.2.6/utility/utilities.js");
 
 //exporting the node type
-cppnjs.NodeType = require('./types/nodeType.js');
+cppnjs.NodeType = require("optimuslime~cppnjs@0.2.6/types/nodeType.js");
 
 
 
 });
-require.register("optimuslime-cppnjs/activationFunctions/cppnActivationFactory.js", function(exports, require, module){
-var utils = require('../utility/utilities.js');
-var cppnActivationFunctions = require('./cppnActivationFunctions.js');
+
+require.register("optimuslime~cppnjs@0.2.6/activationFunctions/cppnActivationFactory.js", function (exports, module) {
+var utils = require("optimuslime~cppnjs@0.2.6/utility/utilities.js");
+var cppnActivationFunctions = require("./cppnactivationfunctions.js");
 
 var Factory = {};
 
@@ -7658,7 +3533,8 @@ Factory.getRandomActivationFunction = function()
 
 
 });
-require.register("optimuslime-cppnjs/activationFunctions/cppnActivationFunctions.js", function(exports, require, module){
+
+require.register("optimuslime~cppnjs@0.2.6/activationFunctions/cppnActivationFunctions.js", function (exports, module) {
 var cppnActivationFunctions = {};
 
 module.exports = cppnActivationFunctions;
@@ -7830,7 +3706,8 @@ cppnActivationFunctions.AddActivationFunction(
     });
 
 });
-require.register("optimuslime-cppnjs/networks/cppnConnection.js", function(exports, require, module){
+
+require.register("optimuslime~cppnjs@0.2.6/networks/cppnConnection.js", function (exports, module) {
 /**
  * Module dependencies.
  */
@@ -7865,11 +3742,12 @@ function cppnConnection(
 
 }
 });
-require.register("optimuslime-cppnjs/networks/cppnNode.js", function(exports, require, module){
+
+require.register("optimuslime~cppnjs@0.2.6/networks/cppnNode.js", function (exports, module) {
 /**
  * Module dependencies.
  */
-var NodeType = require("../types/nodeType");
+var NodeType = require("optimuslime~cppnjs@0.2.6/types/nodeType.js");
 
 /**
  * Expose `cppnNode`.
@@ -7897,12 +3775,13 @@ function cppnNode(actFn, neurType, nid){
 
 }
 });
-require.register("optimuslime-cppnjs/networks/cppn.js", function(exports, require, module){
+
+require.register("optimuslime~cppnjs@0.2.6/networks/cppn.js", function (exports, module) {
 /**
  * Module dependencies.
  */
 
-var utilities = require('../utility/utilities.js');
+var utilities = require("optimuslime~cppnjs@0.2.6/utility/utilities.js");
 
 /**
  * Expose `CPPN`.
@@ -8272,7 +4151,8 @@ CPPN.prototype.recursiveCheckRecursive = function(currentNode)
 })(typeof exports === 'undefined'? this['cppnjs']['cppn']={}: exports, this, typeof exports === 'undefined'? true : false);
 
 });
-require.register("optimuslime-cppnjs/types/nodeType.js", function(exports, require, module){
+
+require.register("optimuslime~cppnjs@0.2.6/types/nodeType.js", function (exports, module) {
 var NodeType =
 {
     bias : "Bias",
@@ -8285,7 +4165,8 @@ var NodeType =
 module.exports = NodeType;
 
 });
-require.register("optimuslime-cppnjs/utility/utilities.js", function(exports, require, module){
+
+require.register("optimuslime~cppnjs@0.2.6/utility/utilities.js", function (exports, module) {
 var utils = {};
 
 module.exports = utils;
@@ -8491,10 +4372,11 @@ utils.RouletteWheel.selectXFromLargeObject = function(x, objects)
 };
 
 });
-require.register("optimuslime-cppnjs/extras/adaptableAdditions.js", function(exports, require, module){
+
+require.register("optimuslime~cppnjs@0.2.6/extras/adaptableAdditions.js", function (exports, module) {
 //The purpose of this file is to only extend CPPNs to have additional activation capabilities involving mod connections
 
-var cppnConnection = require("../networks/cppnConnection.js");
+var cppnConnection = require("optimuslime~cppnjs@0.2.6/networks/cppnConnection.js");
 //default all the variables that need to be added to handle adaptable activation
 var connectionPrototype = cppnConnection.prototype;
 connectionPrototype.a = 0;
@@ -8505,7 +4387,7 @@ connectionPrototype.modConnection = 0;
 connectionPrototype.learningRate = 0;
 
 
-var CPPN = require("../networks/cppn");
+var CPPN = require("optimuslime~cppnjs@0.2.6/networks/cppn.js");
 //default all the variables that need to be added to handle adaptable activation
 var cppnPrototype = CPPN.prototype;
 
@@ -8676,11 +4558,12 @@ cppnPrototype.multipleSteps = function(numberOfSteps)
 };
 
 });
-require.register("optimuslime-cppnjs/extras/pureCPPNAdditions.js", function(exports, require, module){
+
+require.register("optimuslime~cppnjs@0.2.6/extras/pureCPPNAdditions.js", function (exports, module) {
 //The purpose of this file is to only extend CPPNs to have additional activation capabilities involving turning
 //cppns into a string!
 
-var CPPN = require("../networks/cppn");
+var CPPN = require("optimuslime~cppnjs@0.2.6/networks/cppn.js");
 
 //for convenience, you can require pureCPPNAdditions
 module.exports = CPPN;
@@ -8989,12 +4872,13 @@ CPPNPrototype.recursiveCountThings = function()
 
 };
 });
-require.register("optimuslime-cppnjs/extras/gpuAdditions.js", function(exports, require, module){
+
+require.register("optimuslime~cppnjs@0.2.6/extras/gpuAdditions.js", function (exports, module) {
 //this takes in cppn functions, and outputs a shader....
 //radical!
 //needs to be tested more! How large can CPPNs get? inputs/outputs/hiddens?
 //we'll extend a CPPN to produce a GPU shader
-var CPPN = require("../networks/cppn");
+var CPPN = require("optimuslime~cppnjs@0.2.6/networks/cppn.js");
 
 var CPPNPrototype = CPPN.prototype;
 
@@ -9204,45 +5088,47 @@ CPPNPrototype.fullShaderFromCPPN = function(specificAddFunction)
 
 
 });
-require.register("optimuslime-neatjs/neat.js", function(exports, require, module){
+
+require.register("optimuslime~neatjs@master", function (exports, module) {
 var neatjs = {};
 
 //export the cppn library
 module.exports = neatjs;
 
 //nodes and connections!
-neatjs.neatNode = require('./genome/neatNode.js');
-neatjs.neatConnection = require('./genome/neatConnection.js');
-neatjs.neatGenome = require('./genome/neatGenome.js');
+neatjs.neatNode = require("optimuslime~neatjs@master/genome/neatNode.js");
+neatjs.neatConnection = require("optimuslime~neatjs@master/genome/neatConnection.js");
+neatjs.neatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
 
 //all the activations your heart could ever hope for
-neatjs.iec = require('./evolution/iec.js');
-neatjs.multiobjective = require('./evolution/multiobjective.js');
-neatjs.novelty = require('./evolution/novelty.js');
+neatjs.iec = require("optimuslime~neatjs@master/evolution/iec.js");
+neatjs.multiobjective = require("optimuslime~neatjs@master/evolution/multiobjective.js");
+neatjs.novelty = require("optimuslime~neatjs@master/evolution/novelty.js");
 
 //neatHelp
-neatjs.neatDecoder = require('./neatHelp/neatDecoder.js');
-neatjs.neatHelp = require('./neatHelp/neatHelp.js');
-neatjs.neatParameters = require('./neatHelp/neatParameters.js');
+neatjs.neatDecoder = require("optimuslime~neatjs@master/neatHelp/neatDecoder.js");
+neatjs.neatHelp = require("optimuslime~neatjs@master/neatHelp/neatHelp.js");
+neatjs.neatParameters = require("optimuslime~neatjs@master/neatHelp/neatParameters.js");
 
 //and the utilities to round it out!
-neatjs.genomeSharpToJS = require('./utility/genomeSharpToJS.js');
+neatjs.genomeSharpToJS = require("optimuslime~neatjs@master/utility/genomeSharpToJS.js");
 
 //exporting the node type
-neatjs.NodeType = require('./types/nodeType.js');
+neatjs.NodeType = require("optimuslime~neatjs@master/types/nodeType.js");
 
 
 
 });
-require.register("optimuslime-neatjs/evolution/iec.js", function(exports, require, module){
+
+require.register("optimuslime~neatjs@master/evolution/iec.js", function (exports, module) {
 /**
  * Module dependencies.
  */
 
-var NeatGenome = require('../genome/neatGenome.js');
+var NeatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
 
 //pull in variables from cppnjs
-var cppnjs = require('cppnjs');
+var cppnjs = require("optimuslime~cppnjs@0.2.6");
 var utilities =  cppnjs.utilities;
 
 /**
@@ -9394,18 +5280,19 @@ function GenericIEC(np, seeds, iecOptions)
 
 
 });
-require.register("optimuslime-neatjs/evolution/multiobjective.js", function(exports, require, module){
+
+require.register("optimuslime~neatjs@master/evolution/multiobjective.js", function (exports, module) {
 //here we have everything for NSGA-II mutliobjective search and neatjs
 /**
  * Module dependencies.
  */
 
-var NeatGenome = require('../genome/neatGenome.js');
-var Novelty = require('./novelty.js');
+var NeatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
+var Novelty = require("optimuslime~neatjs@master/evolution/novelty.js");
 
 
 //pull in variables from cppnjs
-var cppnjs = require('cppnjs');
+var cppnjs = require("optimuslime~cppnjs@0.2.6");
 var utilities =  cppnjs.utilities;
 
 
@@ -10174,13 +6061,14 @@ function MultiobjectiveSearch(seedGenomes, genomeEvaluationFunctions, neatParame
 }
 
 });
-require.register("optimuslime-neatjs/evolution/novelty.js", function(exports, require, module){
+
+require.register("optimuslime~neatjs@master/evolution/novelty.js", function (exports, module) {
 /**
  * Module dependencies.
  */
 
-var NeatGenome = require('../genome/neatGenome.js');
-var utilities =  require('cppnjs').utilities;
+var NeatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
+var utilities =  require("optimuslime~cppnjs@0.2.6").utilities;
 
 /**
  * Expose `NeatNode`.
@@ -10508,7 +6396,8 @@ Novelty.prototype.updatePopulationFitness = function(genomes)
 };
 
 });
-require.register("optimuslime-neatjs/genome/neatConnection.js", function(exports, require, module){
+
+require.register("optimuslime~neatjs@master/genome/neatConnection.js", function (exports, module) {
 
 /**
  * Module dependencies.
@@ -10560,7 +6449,8 @@ NeatConnection.Copy = function(connection)
     return new NeatConnection(connection.gid, connection.weight, {sourceID: connection.sourceID, targetID: connection.targetID});
 };
 });
-require.register("optimuslime-neatjs/genome/neatNode.js", function(exports, require, module){
+
+require.register("optimuslime~neatjs@master/genome/neatNode.js", function (exports, module) {
 /**
  * Module dependencies.
  */
@@ -10609,33 +6499,34 @@ NeatNode.Copy = function(otherNode)
     return new NeatNode(otherNode.gid, otherNode.activationFunction, otherNode.layer, {type: otherNode.nodeType});
 };
 });
-require.register("optimuslime-neatjs/genome/neatGenome.js", function(exports, require, module){
+
+require.register("optimuslime~neatjs@master/genome/neatGenome.js", function (exports, module) {
 /**
  * Module dependencies.
  */
 
 //pull in our cppn lib
-var cppnjs = require('cppnjs');
+var cppnjs = require("optimuslime~cppnjs@0.2.6");
 
 //grab our activation factory, cppn object and connections
 var CPPNactivationFactory = cppnjs.cppnActivationFactory;
 var utilities = cppnjs.utilities;
 
 //neatjs imports
-var novelty = require('../evolution/novelty.js');
-var NeatConnection = require('./neatConnection.js');
-var NeatNode = require('./neatNode.js');
+var novelty = require("optimuslime~neatjs@master/evolution/novelty.js");
+var NeatConnection = require("optimuslime~neatjs@master/genome/neatConnection.js");
+var NeatNode = require("optimuslime~neatjs@master/genome/neatNode.js");
 
 //help and params
-var neatHelp =  require('../neatHelp/neatHelp.js');
-var neatParameters =  require('../neatHelp/neatParameters.js');
-var neatDecoder =  require('../neatHelp/neatDecoder.js');
+var neatHelp =  require("optimuslime~neatjs@master/neatHelp/neatHelp.js");
+var neatParameters =  require("optimuslime~neatjs@master/neatHelp/neatParameters.js");
+var neatDecoder =  require("optimuslime~neatjs@master/neatHelp/neatDecoder.js");
 
-var wUtils = require('win-utils');
+var wUtils = require("optimuslime~win-utils@0.1.1");
 var uuid = wUtils.cuid;
 
 //going to need to read node types appropriately
-var NodeType = require('../types/nodeType.js');
+var NodeType = require("optimuslime~neatjs@master/types/nodeType.js");
 
 /**
  * Expose `NeatGenome`.
@@ -12247,13 +8138,14 @@ NeatGenome.prototype.removeSimpleNeuron = function(nodeConnectionLookup, nid, ne
 };
 
 });
-require.register("optimuslime-neatjs/neatHelp/neatDecoder.js", function(exports, require, module){
+
+require.register("optimuslime~neatjs@master/neatHelp/neatDecoder.js", function (exports, module) {
 /**
  * Module dependencies.
  */
 
 //pull in our cppn lib
-var cppnjs = require('cppnjs');
+var cppnjs = require("optimuslime~cppnjs@0.2.6");
 
 //grab our activation factory, cppn object and connections
 var CPPNactivationFactory = cppnjs.cppnActivationFactory;
@@ -12261,7 +8153,7 @@ var CPPN = cppnjs.cppn;
 var CPPNConnection = cppnjs.cppnConnection;
 
 //going to need to read node types appropriately
-var NodeType = require('../types/nodeType.js');
+var NodeType = require("optimuslime~neatjs@master/types/nodeType.js");
 
 /**
  * Expose `NeatDecoder`.
@@ -12364,11 +8256,12 @@ neatDecoder.DecodeToFloatFastConcurrentNetwork = function(ng, activationFunction
 
 
 });
-require.register("optimuslime-neatjs/neatHelp/neatHelp.js", function(exports, require, module){
+
+require.register("optimuslime~neatjs@master/neatHelp/neatHelp.js", function (exports, module) {
 /**
 * Module dependencies.
 */
-var uuid = require('win-utils').cuid;
+var uuid = require("optimuslime~win-utils@0.1.1").cuid;
 /**
 * Expose `neatHelp`.
 */
@@ -12473,7 +8366,8 @@ neatHelp.CorrelationResults.prototype.performIntegrityCheckByInnovation = functi
 };
 
 });
-require.register("optimuslime-neatjs/neatHelp/neatParameters.js", function(exports, require, module){
+
+require.register("optimuslime~neatjs@master/neatHelp/neatParameters.js", function (exports, module) {
 /**
  * Module dependencies.
  */
@@ -12756,7 +8650,8 @@ NeatParameters.Copy = function(copyFrom)
 
 
 });
-require.register("optimuslime-neatjs/types/nodeType.js", function(exports, require, module){
+
+require.register("optimuslime~neatjs@master/types/nodeType.js", function (exports, module) {
 var NodeType =
 {
     bias : "Bias",
@@ -12768,7 +8663,8 @@ var NodeType =
 
 module.exports = NodeType;
 });
-require.register("optimuslime-neatjs/utility/genomeSharpToJS.js", function(exports, require, module){
+
+require.register("optimuslime~neatjs@master/utility/genomeSharpToJS.js", function (exports, module) {
 //Convert between C# SharpNEAT Genotype encoded in XML into a JS genotype in JSON
 //pretty simple
 
@@ -12776,10 +8672,10 @@ require.register("optimuslime-neatjs/utility/genomeSharpToJS.js", function(expor
  * Module dependencies.
  */
 
-var NeatGenome = require('../genome/neatGenome.js');
-var NeatNode = require('../genome/neatNode.js');
-var NeatConnection = require('../genome/neatConnection.js');
-var NodeType = require('../types/nodeType.js');
+var NeatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
+var NeatNode = require("optimuslime~neatjs@master/genome/neatNode.js");
+var NeatConnection = require("optimuslime~neatjs@master/genome/neatConnection.js");
+var NodeType = require("optimuslime~neatjs@master/types/nodeType.js");
 
 
 /**
@@ -12849,7 +8745,8 @@ converter.ConvertCSharpToJS = function(xmlGenome)
 };
 
 });
-require.register("optimuslime-win-neat/lib/neatSchema.js", function(exports, require, module){
+
+require.register("optimuslime~win-neat@0.0.1-9/lib/neatSchema.js", function (exports, module) {
 //contains the neat schema setup -- default for neatjs stuff.
 
 //Need a way to override schema inside WIN -- for now, neat comes with its own schema. Will be able to add variations later
@@ -12881,17 +8778,18 @@ module.exports = {
 
 
 });
-require.register("optimuslime-win-neat/lib/win-neat.js", function(exports, require, module){
+
+require.register("optimuslime~win-neat@0.0.1-9", function (exports, module) {
 //here we test the insert functions
 //making sure the database is filled with objects of the schema type
-var neat = require('neatjs');
-var neatSchema = require('./neatSchema.js');
+var neat = require("optimuslime~neatjs@master");
+var neatSchema = require("optimuslime~win-neat@0.0.1-9/lib/neatSchema.js");
 var NodeType = neat.NodeType;
 var neatNode = neat.neatNode;
 var neatConnection = neat.neatConnection;
 var neatGenome = neat.neatGenome;
 
-var wMath = require('win-utils').math;
+var wMath = require("optimuslime~win-utils@master").math;
 
 module.exports = winneat;
 
@@ -13377,7 +9275,8 @@ function genotypeFromJSON(ngJSON)
 
 
 });
-require.register("techjacker-q/q.js", function(exports, require, module){
+
+require.register("techjacker~q@master", function (exports, module) {
 // vim:ts=4:sts=4:sw=4:
 /*!
  *
@@ -15305,11 +11204,12 @@ return Q;
 });
 
 });
-require.register("optimuslime-win-backbone/lib/win-backbone.js", function(exports, require, module){
+
+require.register("optimuslime~win-backbone@0.0.4-5", function (exports, module) {
 
 //Control all the win module! Need emitter for basic usage. 
-var Emitter = (typeof process != "undefined" ?  require('component-emitter') : require('emitter'));
-var Q = require('q');
+var Emitter = (typeof process != "undefined" ?  require("component~emitter@master") : require("component~emitter@master"));
+var Q = require("techjacker~q@master");
 //
 
 module.exports = winBB;
@@ -15582,7 +11482,7 @@ function winBB(homeDirectory)
 		var jsonModules = inputNameOrObject;
 		if(typeof inputNameOrObject == "string")
 		{
-			var fs = require('fs');
+			var fs = require("fs");
 			var fBuffer = fs.readFileSync(inputNameOrObject);
 			jsonModules = JSON.parse(fBuffer);
 		}
@@ -16113,39 +12013,59 @@ function winBB(homeDirectory)
 
 
 });
-require.register("geraintluff-tv4/lang/de.js", function(exports, require, module){
-tv4.addLanguage('de',  {
-    INVALID_TYPE: "Ungültiger Typ: {type} (erwartet wurde: {expected})",
-    ENUM_MISMATCH: "Keine Übereinstimmung mit der Aufzählung (enum) für: {value}",
-    ANY_OF_MISSING: "Daten stimmen nicht überein mit einem der Schemas von \"anyOf\"",
-    ONE_OF_MISSING: "Daten stimmen nicht überein mit einem der Schemas von \"oneOf\"",
-    ONE_OF_MULTIPLE: "Daten sind valid in Bezug auf mehreren Schemas von \"oneOf\": index {index1} und {index2}",
-    NOT_PASSED: "Daten stimmen mit dem \"not\" Schema überein",
-    // Numeric errors
-    NUMBER_MULTIPLE_OF: "Wert {value} ist kein Vielfaches von {multipleOf}",
-    NUMBER_MINIMUM: "Wert {value} ist kleiner als das Minimum {minimum}",
-    NUMBER_MINIMUM_EXCLUSIVE: "Wert {value} ist gleich dem Exklusiven Minimum {minimum}",
-    NUMBER_MAXIMUM: "Wert {value} ist größer als das Maximum {maximum}",
-    NUMBER_MAXIMUM_EXCLUSIVE: "Wert {value} ist gleich dem Exklusiven Maximum {maximum}",
-    // String errors
-    STRING_LENGTH_SHORT: "Zeichenkette zu kurz ({length} chars), minimum {minimum}",
-    STRING_LENGTH_LONG: "Zeichenkette zu lang ({length} chars), maximum {maximum}",
-    STRING_PATTERN: "Zeichenkette entspricht nicht dem Muster: {pattern}",
-    // Object errors
-    OBJECT_PROPERTIES_MINIMUM: "Zu wenige Attribute definiert ({propertyCount}), minimum {minimum}",
-    OBJECT_PROPERTIES_MAXIMUM: "Zu viele Attribute definiert ({propertyCount}), maximum {maximum}",
-    OBJECT_REQUIRED: "Notwendiges Attribut fehlt: {key}",
-    OBJECT_ADDITIONAL_PROPERTIES: "Zusätzliche Attribute nicht erlaubt",
-    OBJECT_DEPENDENCY_KEY: "Abhängigkeit fehlt - Schlüssel nicht vorhanden: {missing} (wegen Schlüssel: {key})",
-    // Array errors
-    ARRAY_LENGTH_SHORT: "Array zu kurz ({length}), minimum {minimum}",
-    ARRAY_LENGTH_LONG: "Array zu lang ({length}), maximum {maximum}",
-    ARRAY_UNIQUE: "Array Einträge nicht eindeutig (Index {match1} und {match2})",
-    ARRAY_ADDITIONAL_ITEMS: "Zusätzliche Einträge nicht erlaubt"
-});
+
+require.register("geraintluff~tv4@master/lang/de.js", function (exports, module) {
+(function (global) {
+	var lang = {
+		INVALID_TYPE: "Ungültiger Typ: {type} (erwartet wurde: {expected})",
+		ENUM_MISMATCH: "Keine Übereinstimmung mit der Aufzählung (enum) für: {value}",
+		ANY_OF_MISSING: "Daten stimmen nicht überein mit einem der Schemas von \"anyOf\"",
+		ONE_OF_MISSING: "Daten stimmen nicht überein mit einem der Schemas von \"oneOf\"",
+		ONE_OF_MULTIPLE: "Daten sind valid in Bezug auf mehreren Schemas von \"oneOf\": index {index1} und {index2}",
+		NOT_PASSED: "Daten stimmen mit dem \"not\" Schema überein",
+		// Numeric errors
+		NUMBER_MULTIPLE_OF: "Wert {value} ist kein Vielfaches von {multipleOf}",
+		NUMBER_MINIMUM: "Wert {value} ist kleiner als das Minimum {minimum}",
+		NUMBER_MINIMUM_EXCLUSIVE: "Wert {value} ist gleich dem Exklusiven Minimum {minimum}",
+		NUMBER_MAXIMUM: "Wert {value} ist größer als das Maximum {maximum}",
+		NUMBER_MAXIMUM_EXCLUSIVE: "Wert {value} ist gleich dem Exklusiven Maximum {maximum}",
+		// String errors
+		STRING_LENGTH_SHORT: "Zeichenkette zu kurz ({length} chars), minimum {minimum}",
+		STRING_LENGTH_LONG: "Zeichenkette zu lang ({length} chars), maximum {maximum}",
+		STRING_PATTERN: "Zeichenkette entspricht nicht dem Muster: {pattern}",
+		// Object errors
+		OBJECT_PROPERTIES_MINIMUM: "Zu wenige Attribute definiert ({propertyCount}), minimum {minimum}",
+		OBJECT_PROPERTIES_MAXIMUM: "Zu viele Attribute definiert ({propertyCount}), maximum {maximum}",
+		OBJECT_REQUIRED: "Notwendiges Attribut fehlt: {key}",
+		OBJECT_ADDITIONAL_PROPERTIES: "Zusätzliche Attribute nicht erlaubt",
+		OBJECT_DEPENDENCY_KEY: "Abhängigkeit fehlt - Schlüssel nicht vorhanden: {missing} (wegen Schlüssel: {key})",
+		// Array errors
+		ARRAY_LENGTH_SHORT: "Array zu kurz ({length}), minimum {minimum}",
+		ARRAY_LENGTH_LONG: "Array zu lang ({length}), maximum {maximum}",
+		ARRAY_UNIQUE: "Array Einträge nicht eindeutig (Index {match1} und {match2})",
+		ARRAY_ADDITIONAL_ITEMS: "Zusätzliche Einträge nicht erlaubt"
+	};
+
+	if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['../tv4'], function(tv4) {
+			tv4.addLanguage('de', lang);
+			return tv4;
+		});
+	} else if (typeof module !== 'undefined' && module.exports){
+		// CommonJS. Define export.
+		var tv4 = require("geraintluff~tv4@master");
+		tv4.addLanguage('de', lang);
+		module.exports = tv4;
+	} else {
+		// Browser globals
+		global.tv4.addLanguage('de', lang);
+	}
+})(this);
 
 });
-require.register("geraintluff-tv4/tv4.js", function(exports, require, module){
+
+require.register("geraintluff~tv4@master", function (exports, module) {
 /*
 Author: Geraint Luff and others
 Year: 2013
@@ -16277,6 +12197,195 @@ if (!Object.isFrozen) {
 		}
 	};
 }
+// Based on: https://github.com/geraintluff/uri-templates, but with all the de-substitution stuff removed
+
+var uriTemplateGlobalModifiers = {
+	"+": true,
+	"#": true,
+	".": true,
+	"/": true,
+	";": true,
+	"?": true,
+	"&": true
+};
+var uriTemplateSuffices = {
+	"*": true
+};
+
+function notReallyPercentEncode(string) {
+	return encodeURI(string).replace(/%25[0-9][0-9]/g, function (doubleEncoded) {
+		return "%" + doubleEncoded.substring(3);
+	});
+}
+
+function uriTemplateSubstitution(spec) {
+	var modifier = "";
+	if (uriTemplateGlobalModifiers[spec.charAt(0)]) {
+		modifier = spec.charAt(0);
+		spec = spec.substring(1);
+	}
+	var separator = "";
+	var prefix = "";
+	var shouldEscape = true;
+	var showVariables = false;
+	var trimEmptyString = false;
+	if (modifier === '+') {
+		shouldEscape = false;
+	} else if (modifier === ".") {
+		prefix = ".";
+		separator = ".";
+	} else if (modifier === "/") {
+		prefix = "/";
+		separator = "/";
+	} else if (modifier === '#') {
+		prefix = "#";
+		shouldEscape = false;
+	} else if (modifier === ';') {
+		prefix = ";";
+		separator = ";";
+		showVariables = true;
+		trimEmptyString = true;
+	} else if (modifier === '?') {
+		prefix = "?";
+		separator = "&";
+		showVariables = true;
+	} else if (modifier === '&') {
+		prefix = "&";
+		separator = "&";
+		showVariables = true;
+	}
+
+	var varNames = [];
+	var varList = spec.split(",");
+	var varSpecs = [];
+	var varSpecMap = {};
+	for (var i = 0; i < varList.length; i++) {
+		var varName = varList[i];
+		var truncate = null;
+		if (varName.indexOf(":") !== -1) {
+			var parts = varName.split(":");
+			varName = parts[0];
+			truncate = parseInt(parts[1], 10);
+		}
+		var suffices = {};
+		while (uriTemplateSuffices[varName.charAt(varName.length - 1)]) {
+			suffices[varName.charAt(varName.length - 1)] = true;
+			varName = varName.substring(0, varName.length - 1);
+		}
+		var varSpec = {
+			truncate: truncate,
+			name: varName,
+			suffices: suffices
+		};
+		varSpecs.push(varSpec);
+		varSpecMap[varName] = varSpec;
+		varNames.push(varName);
+	}
+	var subFunction = function (valueFunction) {
+		var result = "";
+		var startIndex = 0;
+		for (var i = 0; i < varSpecs.length; i++) {
+			var varSpec = varSpecs[i];
+			var value = valueFunction(varSpec.name);
+			if (value === null || value === undefined || (Array.isArray(value) && value.length === 0) || (typeof value === 'object' && Object.keys(value).length === 0)) {
+				startIndex++;
+				continue;
+			}
+			if (i === startIndex) {
+				result += prefix;
+			} else {
+				result += (separator || ",");
+			}
+			if (Array.isArray(value)) {
+				if (showVariables) {
+					result += varSpec.name + "=";
+				}
+				for (var j = 0; j < value.length; j++) {
+					if (j > 0) {
+						result += varSpec.suffices['*'] ? (separator || ",") : ",";
+						if (varSpec.suffices['*'] && showVariables) {
+							result += varSpec.name + "=";
+						}
+					}
+					result += shouldEscape ? encodeURIComponent(value[j]).replace(/!/g, "%21") : notReallyPercentEncode(value[j]);
+				}
+			} else if (typeof value === "object") {
+				if (showVariables && !varSpec.suffices['*']) {
+					result += varSpec.name + "=";
+				}
+				var first = true;
+				for (var key in value) {
+					if (!first) {
+						result += varSpec.suffices['*'] ? (separator || ",") : ",";
+					}
+					first = false;
+					result += shouldEscape ? encodeURIComponent(key).replace(/!/g, "%21") : notReallyPercentEncode(key);
+					result += varSpec.suffices['*'] ? '=' : ",";
+					result += shouldEscape ? encodeURIComponent(value[key]).replace(/!/g, "%21") : notReallyPercentEncode(value[key]);
+				}
+			} else {
+				if (showVariables) {
+					result += varSpec.name;
+					if (!trimEmptyString || value !== "") {
+						result += "=";
+					}
+				}
+				if (varSpec.truncate != null) {
+					value = value.substring(0, varSpec.truncate);
+				}
+				result += shouldEscape ? encodeURIComponent(value).replace(/!/g, "%21"): notReallyPercentEncode(value);
+			}
+		}
+		return result;
+	};
+	subFunction.varNames = varNames;
+	return {
+		prefix: prefix,
+		substitution: subFunction,
+	};
+}
+
+function UriTemplate(template) {
+	if (!(this instanceof UriTemplate)) {
+		return new UriTemplate(template);
+	}
+	var parts = template.split("{");
+	var textParts = [parts.shift()];
+	var prefixes = [];
+	var substitutions = [];
+	var varNames = [];
+	while (parts.length > 0) {
+		var part = parts.shift();
+		var spec = part.split("}")[0];
+		var remainder = part.substring(spec.length + 1);
+		var funcs = uriTemplateSubstitution(spec);
+		substitutions.push(funcs.substitution);
+		prefixes.push(funcs.prefix);
+		textParts.push(remainder);
+		varNames = varNames.concat(funcs.substitution.varNames);
+	}
+	this.fill = function (valueFunction) {
+		var result = textParts[0];
+		for (var i = 0; i < substitutions.length; i++) {
+			var substitution = substitutions[i];
+			result += substitution(valueFunction);
+			result += textParts[i + 1];
+		}
+		return result;
+	};
+	this.varNames = varNames;
+	this.template = template;
+}
+UriTemplate.prototype = {
+	toString: function () {
+		return this.template;
+	},
+	fillFromObject: function (obj) {
+		return this.fill(function (varName) {
+			return obj[varName];
+		});
+	}
+};
 var ValidatorContext = function ValidatorContext(parent, collectMultiple, errorMessages, checkRecursive, trackUnknownProperties) {
 	this.missing = [];
 	this.missingMap = {};
@@ -16442,7 +12551,7 @@ ValidatorContext.prototype.addSchema = function (url, schema) {
 			return;
 		}
 	}
-	if (url = getDocumentUri(url) + "#") {
+	if (url === getDocumentUri(url) + "#") {
 		// Remove empty fragment
 		url = getDocumentUri(url);
 	}
@@ -16561,6 +12670,7 @@ ValidatorContext.prototype.validateAll = function (data, schema, dataPathParts, 
 		|| this.validateArray(data, schema, dataPointerPath)
 		|| this.validateObject(data, schema, dataPointerPath)
 		|| this.validateCombinations(data, schema, dataPointerPath)
+		|| this.validateHypermedia(data, schema, dataPointerPath)
 		|| this.validateFormat(data, schema, dataPointerPath)
 		|| this.validateDefinedKeywords(data, schema, dataPointerPath)
 		|| null;
@@ -17129,7 +13239,7 @@ ValidatorContext.prototype.validateOneOf = function validateOneOf(data, schema, 
 				}
 			}
 		} else if (error) {
-			errors.push(error.prefixWith(null, "" + i).prefixWith(null, "oneOf"));
+			errors.push(error);
 		}
 	}
 	if (this.trackUnknownProperties) {
@@ -17169,6 +13279,33 @@ ValidatorContext.prototype.validateNot = function validateNot(data, schema, data
 		return this.createError(ErrorCodes.NOT_PASSED, {}, "", "/not");
 	}
 	return null;
+};
+
+ValidatorContext.prototype.validateHypermedia = function validateCombinations(data, schema, dataPointerPath) {
+	if (!schema.links) {
+		return null;
+	}
+	var error;
+	for (var i = 0; i < schema.links.length; i++) {
+		var ldo = schema.links[i];
+		if (ldo.rel === "describedby") {
+			var template = new UriTemplate(ldo.href);
+			var allPresent = true;
+			for (var j = 0; j < template.varNames.length; j++) {
+				if (!(template.varNames[j] in data)) {
+					allPresent = false;
+					break;
+				}
+			}
+			if (allPresent) {
+				var schemaUrl = template.fillFromObject(data);
+				var subSchema = {"$ref": schemaUrl};
+				if (error = this.validateAll(data, subSchema, [], ["links", i], dataPointerPath)) {
+					return error;
+				}
+			}
+		}
+	}
 };
 
 // parseURI() and resolveUrl() are from https://gist.github.com/1088850
@@ -17534,10 +13671,11 @@ return tv4; // used by _header.js to globalise.
 
 }));
 });
-require.register("optimuslime-win-schema/lib/addSchema.js", function(exports, require, module){
+
+require.register("optimuslime~win-schema@master/lib/addSchema.js", function (exports, module) {
 //pull in traverse object for this guy
-var traverse = require('optimuslime-traverse');
-var schemaSpec = require('./schemaSpec');
+var traverse = require("optimuslime~traverse@master");
+var schemaSpec = require("optimuslime~win-schema@master/lib/schemaSpec.js");
 
 
 module.exports = extendAddSchema;
@@ -18190,7 +14328,8 @@ function extendAddSchema(self)
 
 
 });
-require.register("optimuslime-win-schema/lib/schemaSpec.js", function(exports, require, module){
+
+require.register("optimuslime~win-schema@master/lib/schemaSpec.js", function (exports, module) {
 module.exports = 
 {
     "id": "http://json-schema.org/draft-04/schema#",
@@ -18343,16 +14482,17 @@ module.exports =
     "default": {}
 }
 });
-require.register("optimuslime-win-schema/lib/win-schema.js", function(exports, require, module){
+
+require.register("optimuslime~win-schema@master", function (exports, module) {
 //pull in the validating workhorse -- checks schema and stuff
-var tv4 = require('tv4');
+var tv4 = require("geraintluff~tv4@master");
 //pull in traverse object from the repo please!
-var traverse = require('optimuslime-traverse');
+var traverse = require("optimuslime~traverse@master");
 
 //pull in the object that knows what all schema look like!
-var schemaSpec = require('./schemaSpec.js');
+var schemaSpec = require("optimuslime~win-schema@master/lib/schemaSpec.js");
 
-var addSchemaSupport = require('./addSchema');
+var addSchemaSupport = require("optimuslime~win-schema@master/lib/addSchema.js");
 
 module.exports = winSchema;
 
@@ -18863,14 +15003,1347 @@ function winSchema(winback, globalConfiguration, localConfiguration)
 
 
 });
-require.register("optimuslime-win-gen/lib/wingen.js", function(exports, require, module){
+
+require.register("optimuslime~win-schema@0.0.5-4/lib/addSchema.js", function (exports, module) {
+//pull in traverse object for this guy
+var traverse = require("optimuslime~traverse@master");
+var schemaSpec = require("optimuslime~win-schema@0.0.5-4/lib/schemaSpec.js");
+
+
+module.exports = extendAddSchema;
+
+function extendAddSchema(self)
+{
+
+  var pathDelim = self.pathDelimiter;
+
+  var defaultWINAdd = {
+    wid : "string",
+    dbType : "string",
+    parents : {
+      type: "array",
+      items : {
+        type : "string"
+      }
+    }
+  }
+
+  var winTypeRegExp = [];
+  for(var key in defaultWINAdd)
+  {
+    winTypeRegExp.push(key);
+  }
+  self.log("--All WIN keywords: ", winTypeRegExp);
+
+  winTypeRegExp = new RegExp("\\b" + winTypeRegExp.join("\\b|\\b") + "\\b");
+
+  //everything we need to do to add a schema inside
+  //this requires checking if it's properly formatted, pulling references, and moving
+  //around things if it's not formatted but we would like to make it less wordy to make schema
+    self.internalAddSchema = function(type, schemaJSON, options, finished)
+    {
+      if(typeof options == "function")
+      {
+        finished = options;
+        options = {};
+      }
+      else
+        options = options || {};
+
+      if((schemaJSON.type == "array" || schemaJSON.items) && !options.skipWINAdditions)
+      {
+        finished("Array-types for schema cannot have WIN additions. It doesn't make any sense. The object must be an array, but also have a wid property? Failed: " + type);
+        return;
+      }
+
+      //make a clone of the object 
+      schemaJSON = JSON.parse(JSON.stringify(schemaJSON)); 
+
+      //force all types to lower case -- always -- deal with weird validation errors otherwise
+      traverse(schemaJSON).forEach(function(node)
+      {
+          if(this.key == "type" && typeof this.node == "string")
+            this.update(this.node.toLowerCase());
+      })
+
+      //we add or move objects inside the schema to make it conform to expected v4 JSON schema validation
+      appendSchemaInformation(schemaJSON, options);      
+
+      //check our schema for wacky errors!
+      var schemaCheck = checkSchemaErrors(schemaJSON);
+      if(schemaCheck && schemaCheck.errors)
+      {
+        finished("Improper schema format for " + type + " - " + JSON.stringify(schemaCheck));
+        return;
+      }
+
+      if(schemaCheck && schemaCheck.warnings)
+      {
+        self.log("Warnings: ".yellow, schemaCheck.warnings);
+      }
+
+      //save it in our map
+      self.allSchema[type] = schemaJSON;
+
+      if(!schemaJSON.id || schemaJSON.id != type)
+        schemaJSON.id = type;
+
+      if(!schemaJSON['$schema'])
+        schemaJSON['$schema'] = "http://json-schema.org/draft-04/schema#";
+      
+      if(!schemaJSON.type)
+        schemaJSON.type = "object";
+
+      //add the schema to our validator -- this does most heavy lifting for us
+      self.validator.addSchema(schemaJSON);
+
+      //failed to add schema for some reason?
+      if(self.validator.error){
+        finished(self.validator.error);
+      }
+      else
+      {
+        //no error from validator, store the references inside
+        storeSchemaReferences(type, schemaJSON);
+
+        //when we create it 
+        setSchemaProperties(type, schemaJSON, options);
+        //take what you want, and give nothing back! The pirates way for us!
+        finished();
+      }
+    }
+    function setSchemaProperties(type, schemaJSON, options)
+    {
+      var props = {};
+      if(options.skipWINAdditions)
+        props.isWIN = false;
+      else
+        props.isWIN = true;
+      
+      var primePaths = {};
+
+      var tJSON = traverse(schemaJSON);
+
+      var references = self.requiredReferences[type];
+      var refMap = {};
+
+      for(var refType in references)
+      {
+          var locations = references[refType];
+          for(var l =0; l < locations.length; l++)
+          {
+              var refInfo = locations[l];
+              refMap[refInfo.typePath] = refInfo;
+          }
+      }
+      // self.log("Refmap: ", refMap);
+      function isRef(path){ return refMap[path.join(pathDelim)]}
+
+      tJSON.forEach(function(node)
+      {
+        if(this.isRoot || this.isLeaf)
+          return;
+
+        //kill the future investigation of references
+        if(isRef(this.path))
+            this.keys = [];
+
+          //if we are a known keyword -- that's not properties or items, we skip you!
+        if(this.key != "properties" && this.key != "items" && self.keywordRegExp.test(this.key))
+          this.keys = [];
+
+        //we also ignore this as well
+        if(winTypeRegExp.test(this.key))
+          this.keys = [];
+
+        // self.log("Isref?".green, isRef(this.path));
+
+        // if(this.keys.length)
+          // self.log("Potential PrimePath: ".green, this.key, " node: ", this.node);
+
+        if(this.keys.length){
+
+          var objPath = self.stripObjectPath(this.path);
+
+          //we're an array, or we're inisde an array!
+          if(this.node.type == "array" || this.node.items || this.key =="items")
+          {
+              //we are an array, we'll pull the array info -- and then we close off this array -- forever!
+              //remember, primary paths are all about the objects, and the FIRST layer of array
+              primePaths[objPath] = {type: "array"};
+              this.keys = [];
+          }
+          else
+          {
+            //you must be a properties object
+            //either you have a type, or you're an object
+            primePaths[objPath] = {type: this.node.type || "object"};
+          }
+        }
+        
+
+      })
+
+      // self.log("\n\tprimaryPaths: ".cyan, primePaths);
+
+      self.primaryPaths[type] = primePaths;
+      self.typeProperties[type] = props;
+
+    }
+    function hasNonKeywords(obj)
+    {
+      var hasNonKeywords = false;
+        
+      if(Array.isArray(obj))
+      {
+        //loop through object to grab keys
+        for(var i=0; i < obj.length; i++)
+        {
+          var iKey = obj[i];
+          //check if you're not a keyword
+          if(!self.keywordRegExp.test(iKey))
+          {
+            //just one is enough
+            hasNonKeywords = true;
+            break;
+          }
+        }
+      }
+      else
+      {
+        for(var iKey in obj)
+        {
+          if(!self.keywordRegExp.test(iKey))
+          {
+            //just one is enough
+            hasNonKeywords = true;
+            break;
+          }
+        }
+      }
+
+      return hasNonKeywords;           
+    }
+
+  //handle everything associated with adding a schema
+    function checkSchemaErrors(schemaJSON)
+    {
+
+      //check against the proper schema definition
+      // var vck = self.validator.validateMultiple(schemaJSON, schemaSpec, true);
+       var valCheck = self.validateFunction.apply(self.validator, [schemaJSON, schemaSpec, true]);
+       
+       //grab all possible errors
+       var checkErrors = {length: 0};
+       var checkWarnings = {length: 0};
+
+       //if we're valid -- which we almost certainly are -- just keep going
+       if(!valCheck.valid)
+       {
+          //let it be known -- this is a weird error
+          self.log("Invalid from v4 JSON schema perspective: ", valCheck[errorKey]);
+
+          checkErrors["root"] = valCheck[errorKey];
+          checkErrors.length++;
+
+          //not valid, throw it back
+          return checkErrors;
+       }
+
+
+       //make sure we have some properties -- otherwise there is literally no validation/
+       //during the move process, this is overridden, but it's a good check nonetheless
+       if(!schemaJSON.properties && !schemaJSON.items)
+       {
+          checkErrors["root"] = "No properties/items defined at root. Schema has no validation without properties!";
+          checkErrors.length++;
+       }
+
+       //going to need to traverse our schema object
+       var tJSON = traverse(schemaJSON);
+
+       tJSON.forEach(function(node)
+       {
+        //skip the root please
+        if(this.isRoot || this.path.join(pathDelim).indexOf('required') != -1)
+          return;
+
+        //this should be a warning
+        if(!self.requireByDefault && !this.isLeaf && !this.node.required)
+        {
+            //if you don't have a required object, then you're gonna have a bad time
+            //this is a warning
+            checkWarnings[this.path.join(pathDelim)] = "warning: if you disable requireByDefault and don't put require arrays, validation will ignore those properties.";
+            checkWarnings.length++;
+
+        }
+        if(this.key == "properties" && this.node.properties)
+        {
+           checkErrors[this.path.join(pathDelim)] = "Properties inside properties is meaningless.";
+           checkErrors.length++;
+        }
+        if(this.key == "type" && typeof this.node != "string")
+        {
+            //for whatever reason, there is a type defined, but not a string in it's place? Waa?
+            checkErrors[this.path.join(pathDelim)] = "Types must be string";
+            checkErrors.length++;
+        }
+        if(this.key == "type" && !self.typeRegExp.test(this.node.toLowerCase()))
+        {
+           checkErrors[this.path.join(pathDelim)] = "Types must be one of " + self.validTypes + " not " + this.node;
+           checkErrors.length++;
+        }
+        if(this.isLeaf)
+        {
+          //if you don't have a type, and there is no ref object
+          if(!this.parent.node.properties && (this.key != "type" && this.key != "$ref") && !this.parent.node.type && !this.parent.node["$ref"])
+          {
+              checkErrors[this.path.join(pathDelim)] = "Object doesn't have any properties, a valid type, or a reference, therefore it is invalid in the WIN spec.";
+              checkErrors.length++;
+          }
+        }
+        //not a leaf, you don't have a reference
+        if(!self.allowAnyObjects && !this.isLeaf && !this.node["$ref"] )
+        {
+          //special case for items -- doesn't apply
+          if(this.node.type == "object" && this.key != "items")
+          {
+            //we're going to check if the list of keys to follow have any non keywords
+            //for instance if {type: "object", otherThing: "string"} keys = type, otherThing
+            //if instead it's just {type : "object", required : []}, keys = type, required 
+            //notice that the top has non-keyword keys, and the bottom example does not 
+            //we're looking for the bottom example and rejecting it
+            var bHasNonKeywords = hasNonKeywords(this.keys);
+            
+            //if you ONLY have keywords -- you don't have any other object types
+            //you are a violation of win spec and you allow any object or array to be passed in
+            if(!bHasNonKeywords){
+              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
+              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'object' type with no inner properties";
+              checkErrors.length++;
+            }
+          }
+          else if(this.node.type == "array")
+          {
+            //if you are an array and you have no items -- not allowed!
+            if(!this.node.items){
+              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
+              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no inner items";
+              checkErrors.length++;
+            }
+            else
+            {
+              //if you have a ref -- you're okay for us!
+              var bIemsHaveNonKey = this.node.items["$ref"] || this.node.items["type"] || hasNonKeywords(this.node.items.properties || {});
+               if(!bIemsHaveNonKey){
+                // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
+                checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no non-keyword inner items";
+                checkErrors.length++;
+              }
+            }
+          }
+        
+        }
+        //if you're an array
+        if(this.node.type == "array")
+        {
+          //grab your items
+          var items = this.node.items;
+          if(!items && !self.allowAnyObjects)
+          {
+             checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off for arrays, therefore you cannot simple have an 'array' type with no inner items";
+              checkErrors.length++;
+          }
+          else
+          {
+            items = items || {};
+            //we have items -- we shouldn't have a reference type && other items
+            if(items.properties && items["$ref"])
+            {
+              checkErrors[this.path.join(pathDelim)] = "Array items in WIN cannot have properties AND a reference type. One or the other.";
+              checkErrors.length++;
+            }
+          }
+        }
+
+
+       });
+
+       if(checkErrors.length || checkWarnings.length)
+        return {errors: checkErrors, warnings: checkWarnings};
+      else
+        return null;
+
+    }
+
+    self.stripObjectPath = function(path)
+    {
+      //obj path will be returned
+      var objectPath = [];
+
+      //travere this path, yo
+      traverse(path).forEach(function()
+      {
+        //no routes including properties or items -- made up schema info!
+        if(!this.isRoot && (this.node != "properties" && this.node != "items"))
+          objectPath.push(this.node);
+      });
+
+      return objectPath.join(pathDelim);
+    }
+
+    //storing the references inside of a schema object (if we don't already know them)
+    function parseSchemaReferences(schemaJSON)
+    {
+    	//first we wrap our object with traverse methods
+    	var tJSON = traverse(schemaJSON);
+
+    	var references = {};
+
+    	self.log('--  Parsing refs -- ');
+      // self.log(schemaJSON);
+    	//now we step through pulling the path whenever we hit a reference
+    	tJSON.forEach(function(node)
+    	{
+    		//we are at a reference point
+        //we make an exception for arrays -- since the items object can hold references!
+        if(this.node["$ref"] && (this.key == "items" || !self.keywordRegExp.test(this.key)))
+    		// if(this.isLeaf && this.key == "$ref")
+    		{
+    			//todo logic for when it's "oneOf" or other valid JSON schema things
+    			var fullPath = this.path.join(pathDelim);//this.path.slice(0, this.path.length-1).join(pathDelim);
+    			var referenceType = this.node["$ref"];
+
+          
+          var objectPath = self.stripObjectPath(this.path);
+
+          //pull the "items" piece out of the path -- otherwise, if you're just a normal object -- it's the same as fullPath
+          var typePath = this.key == "items" ? this.path.slice(0, this.path.length-1).join(pathDelim) : fullPath;
+
+
+
+    			if(references[fullPath])
+    			{
+    				throw new Error("Not yet supported reference behavior, arrays of references: ", fullPath);
+    			}
+
+          //assuming type is defined here!
+    			references[fullPath] = {schemaType: referenceType, schemaPath: fullPath, objectPath: objectPath, typePath: typePath};
+          self.log(self.log.testing, 'Reference detected @ '+fullPath+': ', references[fullPath]);
+    		}
+    	});
+
+    	self.log("-- Full refs -- ", references);
+
+    	return references;
+    } 
+
+    function storeSchemaReferences(type, schemaJSON)
+    {
+    	self.schemaReferences[type] = parseSchemaReferences(schemaJSON);
+
+      self.requiredReferences[type] = {};
+
+      for(var path in self.schemaReferences[type])
+      {
+        var schemaInfo = self.schemaReferences[type][path];
+        var refType = schemaInfo.schemaType;
+        var aReqRefs = self.requiredReferences[type][refType];
+
+        if(!aReqRefs)
+        {
+          aReqRefs = [];
+          self.requiredReferences[type][refType] = aReqRefs;
+        }
+        //value is the reference type 
+        aReqRefs.push(schemaInfo);
+      }
+
+
+      //now we know all the references, their paths, and what type needs what references
+    }
+    function moveAllToProperties(tJSON)
+    {
+       tJSON.forEach(function(node)
+       {          
+
+          // self.log("Investigating: ", this.key, " @ ", this.path.join(pathDelim), " all keys: ", this.keys);
+          //for all non-arrays and non-leafs and non-properties object -- move to a properties object if not a keyword!
+          if(!this.isLeaf && this.key != "properties" && !Array.isArray(this.node))
+          {
+
+            //movement dpeends on what type you are -- arrays move to items, while objects move to properties
+            var moveLocation = "properties";
+            if(this.node.type == "array")
+              moveLocation = "items";
+
+            // self.log('Movement: ', this.key, " @ ", this.path.join(pathDelim) + " : ", this.node);
+            // self.log("Move to : ".green + moveLocation);
+
+
+            // self.log("Move innitiated: ".magenta, this.node);
+            // self.log('Original node: '.green, node);
+            var empty = true;
+            var move = {};
+            //any key that isn't one of our keywords is getting moved inside!
+            for(var key in this.node){
+                if(!self.keywordRegExp.test(key)){
+                  // self.log('Moving key @ ', this.path.join(pathDelim) || "Is root? ", " : ", this.key || this.isRoot); 
+                  move[key] = this.node[key];
+                  empty = false;
+                }
+            }
+
+            //don't move nothing derrr
+            if(!empty)
+            {
+               // self.log('Moving: '.red, move);
+
+              //create proeprties if it doesn't exist
+              node[moveLocation] = node[moveLocation] || {};
+
+              for(var key in move)
+              {
+                //move to its new home
+                node[moveLocation][key] = move[key];
+                //remove from previous location 
+                delete node[key];
+              }
+
+              //make sure to update, thank you
+              this.update(node);
+
+              //we need to investigate the newly created properties/items object -- to continue down the rabbit hole
+              this.keys.push(moveLocation);
+            }
+           
+
+          }
+       });
+    }
+    function addWINTypes(schemaJSON, options)
+    {
+      for(var key in defaultWINAdd)
+      {
+        var winAdd = defaultWINAdd[key];
+        
+        //if it's just a shallow string -- add it directly
+        if(typeof winAdd == "string")
+          schemaJSON[key] = winAdd;
+        else //otehrwise, we should clone the larger object
+          schemaJSON[key] = traverse(defaultWINAdd[key]).clone();
+      }
+    }
+    function appendSchemaInformation(schemaJSON, options)
+    {
+      //add in default win types
+      if(!options.skipWINAdditions)
+        addWINTypes(schemaJSON, options);
+
+      //build a traverse object for navigating and updating the object
+      var tJSON = traverse(schemaJSON);
+
+      //step one convert string to types
+      tJSON.forEach(function(node)
+      {
+        var needsUpdate = false;
+          //if you are a leaf -- and you only dictate the type e.g. string/number/array etc -- we'll convert you to proper type
+        if(this.isLeaf && typeof this.node == "string")
+        {
+          //if the key is not a known keyword, and the node string is a proper type
+          if(!self.keywordRegExp.test(this.key) && self.typeRegExp.test(node.toLowerCase()))
+          {
+            //node is a type! make sure it's a lower case type being stored.
+            node = {type: node.toLowerCase()};
+            needsUpdate = true;
+          }
+        }
+
+        if(this.node)
+        {
+
+         if(this.node.items && !this.node.type)
+          {
+            this.node.type = "array";
+            needsUpdate = true;
+          }
+
+          //rewrite {type : "array", "$ref" : "something"} => {type : "array", items : {"$ref" : "something"}}
+          if(this.node.type == "array" && this.node["$ref"])
+          {
+            this.node.items = this.node.items || {};
+            this.node.items["$ref"] = this.node["$ref"];
+            delete this.node["$ref"];
+            needsUpdate = true;
+          }
+
+        }
+
+
+        if(needsUpdate)
+          this.update(node);
+
+      })
+
+      //update location of objects to match validation issues
+      //json schema won't validate outside of properties object -- which some people may forget
+      //this is basically a correct method
+      moveAllToProperties(tJSON);
+
+      // var util = require('util');
+      // self.log("Post move schema: ".cyan, util.inspect(schemaJSON, false, 10));
+
+      tJSON.forEach(function(node)
+      {
+        var needsUpdate = false;
+
+
+       
+          //if we aren't a leaf object, we are a full object
+          //therefore, we must have required (since we're in default mode)
+          //since we cover the properties object inside, we don't need to go indepth for that key too!
+        if(self.requireByDefault && !this.isLeaf && !this.node.required && !Array.isArray(this.node))
+        {
+          //the require needs to be filled iwth all the properties of this thing, except
+          //for anything defined by v4 json schema -- so we run a regex to reject those keys
+          var reqProps = [];
+
+          // self.log("Not leaf: ".magenta, this.node, " Key : ", this.key);
+
+          //do not do this if you're in the properties object
+          //since the prop keys belong to the PARENT not the node
+          if(this.key != "properties")
+          {
+            for(var key in this.node){
+              if(!self.keywordRegExp.test(key)){
+              // self.log('Key added: '.red, key);
+
+                reqProps.push(key);
+              }
+            }
+            // self.log('Post not props: '.blue, reqProps);
+          }
+          
+          //for every object, you can also have a properties object too
+          //required applies to the subling property object as well
+          //so we loop through the properties object as well
+         for(var key in this.node.properties){
+            if(!self.keywordRegExp.test(key)){
+              reqProps.push(key);
+            }
+          }
+
+          if(reqProps.length)
+          {
+            node.required = reqProps;
+            needsUpdate = true;
+          }        
+        }
+
+     
+       if(needsUpdate){
+          // self.log('New required - : ', this.node, ' : ', reqProps);
+          this.update(node);
+        }
+      });
+
+
+
+        // self.log("--post traverse -- ", schemaJSON);
+
+    }
+
+	return self;
+}
+
+
+
+
+});
+
+require.register("optimuslime~win-schema@0.0.5-4/lib/schemaSpec.js", function (exports, module) {
+module.exports = 
+{
+    "id": "http://json-schema.org/draft-04/schema#",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "description": "Core schema meta-schema",
+    "definitions": {
+        "schemaArray": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#" }
+        },
+        "positiveInteger": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "positiveIntegerDefault0": {
+            "allOf": [ { "$ref": "#/definitions/positiveInteger" }, { "default": 0 } ]
+        },
+        "simpleTypes": {
+            "enum": [ "array", "boolean", "integer", "null", "number", "object", "string" ]
+        },
+        "stringArray": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "uniqueItems": true
+        }
+    },
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "string",
+            "format": "uri"
+        },
+        "$schema": {
+            "type": "string",
+            "format": "uri"
+        },
+        "title": {
+            "type": "string"
+        },
+        "description": {
+            "type": "string"
+        },
+        "default": {},
+        "multipleOf": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+        },
+        "maximum": {
+            "type": "number"
+        },
+        "exclusiveMaximum": {
+            "type": "boolean",
+            "default": false
+        },
+        "minimum": {
+            "type": "number"
+        },
+        "exclusiveMinimum": {
+            "type": "boolean",
+            "default": false
+        },
+        "maxLength": { "$ref": "#/definitions/positiveInteger" },
+        "minLength": { "$ref": "#/definitions/positiveIntegerDefault0" },
+        "pattern": {
+            "type": "string",
+            "format": "regex"
+        },
+        "additionalItems": {
+            "anyOf": [
+                { "type": "boolean" },
+                { "$ref": "#" }
+            ],
+            "default": {}
+        },
+        "items": {
+            "anyOf": [
+                { "$ref": "#" },
+                { "$ref": "#/definitions/schemaArray" }
+            ],
+            "default": {}
+        },
+        "maxItems": { "$ref": "#/definitions/positiveInteger" },
+        "minItems": { "$ref": "#/definitions/positiveIntegerDefault0" },
+        "uniqueItems": {
+            "type": "boolean",
+            "default": false
+        },
+        "maxProperties": { "$ref": "#/definitions/positiveInteger" },
+        "minProperties": { "$ref": "#/definitions/positiveIntegerDefault0" },
+        "required": { "$ref": "#/definitions/stringArray" },
+        "additionalProperties": {
+            "anyOf": [
+                { "type": "boolean" },
+                { "$ref": "#" }
+            ],
+            "default": {}
+        },
+        "definitions": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#" },
+            "default": {}
+        },
+        "properties": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#" },
+            "default": {}
+        },
+        "patternProperties": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#" },
+            "default": {}
+        },
+        "dependencies": {
+            "type": "object",
+            "additionalProperties": {
+                "anyOf": [
+                    { "$ref": "#" },
+                    { "$ref": "#/definitions/stringArray" }
+                ]
+            }
+        },
+        "enum": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true
+        },
+        "type": {
+            "anyOf": [
+                { "$ref": "#/definitions/simpleTypes" },
+                {
+                    "type": "array",
+                    "items": { "$ref": "#/definitions/simpleTypes" },
+                    "minItems": 1,
+                    "uniqueItems": true
+                }
+            ]
+        },
+        "allOf": { "$ref": "#/definitions/schemaArray" },
+        "anyOf": { "$ref": "#/definitions/schemaArray" },
+        "oneOf": { "$ref": "#/definitions/schemaArray" },
+        "not": { "$ref": "#" }
+    },
+    "dependencies": {
+        "exclusiveMaximum": [ "maximum" ],
+        "exclusiveMinimum": [ "minimum" ]
+    },
+    "default": {}
+}
+});
+
+require.register("optimuslime~win-schema@0.0.5-4", function (exports, module) {
+//pull in the validating workhorse -- checks schema and stuff
+var tv4 = require("geraintluff~tv4@master");
+//pull in traverse object from the repo please!
+var traverse = require("optimuslime~traverse@master");
+
+//pull in the object that knows what all schema look like!
+var schemaSpec = require("optimuslime~win-schema@0.0.5-4/lib/schemaSpec.js");
+
+var addSchemaSupport = require("optimuslime~win-schema@0.0.5-4/lib/addSchema.js");
+
+module.exports = winSchema;
+
+function winSchema(winback, globalConfiguration, localConfiguration)
+{
+	//load up basic win-module stufffff
+	var self = this;
+  self.winFunction = "schema";
+  self.log = winback.getLogger(self);
+
+  //limited only by global -- or we could limit our own verboseness
+  self.log.logLevel = localConfiguration.logLevel || self.log.normal;
+
+  self.pathDelimiter = "///";
+
+  //this creates "internalAddSchema" to handle the weighty add logic
+  //need to thoroughly test and modify incoming schema to align with 
+  //logical schema setup for WIN
+  addSchemaSupport(self, globalConfiguration, localConfiguration);
+
+	self.validator = tv4.freshApi();
+
+ //set the backbone and our logging function
+  self.bbEmit = winback.getEmitter(self);
+
+  //config setups
+
+  self.multipleErrors = (localConfiguration.multipleErrors == true || localConfiguration.multipleErrors == "true");
+  //by default you can have unknown keys -- the server environment may desire to change this
+  //if you don't want to be storing extra info
+  //by default, on lockdown -- better that way -- no sneaky stuff
+  self.allowUnknownKeys = localConfiguration.allowUnknownKeys || false;
+
+  //all keys are required by default -- this adds in required objects for everything
+  self.requireByDefault = localConfiguration.requireByDefault || true;
+
+  //do we allow properties with just the type "object" or "array"
+  //this would allow ANY data to be fit in there with no validation checks (other than it is an object or array)
+  //shouldn't allow this because people could slip in all sorts of terrible things without validation
+  self.allowAnyObjects = localConfiguration.allowAnyObjects || false;
+
+  self.eventCallbacks = function()
+  {
+        var callbacks = {};
+
+        //add callbacks to the object-- these are the functions called when the full event is emitted
+        callbacks["schema:validate"] = self.validateData;
+        callbacks["schema:validateMany"] = self.validateDataArray;
+        callbacks["schema:addSchema"] = self.addSchema;
+        callbacks["schema:getSchema"] = self.getSchema;
+        callbacks["schema:getSchemaReferences"] = self.getSchemaReferences;
+        callbacks["schema:getFullSchema"] = self.getFullSchema;
+        callbacks["schema:getSchemaProperties"] = self.getSchemaProperties;
+
+        //these are for deealing with pulling references from a specific object -- it's easier done in this module
+        callbacks["schema:getReferencesAndParents"] = self.getReferencesAndParents;
+        callbacks["schema:replaceParentReferences"] = self.replaceParentReferences;
+
+        //send back our callbacks
+        return callbacks;
+  }
+  self.requiredEvents = function()
+  {
+  	//don't need no one for nuffin'
+  	return [];
+  }
+
+  self.initialize = function(done)
+  {
+  	setTimeout(function()
+  	{
+  		done();
+  	}, 0);
+  }
+
+    //cache all our schema by type
+    self.allSchema = {};
+    self.schemaReferences = {};
+    self.requiredReferences = {};
+    self.fullSchema = {};
+    self.primaryPaths = {};
+    self.typeProperties = {};
+
+    self.validTypes = "\\b" + schemaSpec.definitions.simpleTypes.enum.join('\\b|\\b') + "\\b"; //['object', 'array', 'number', 'string', 'boolean', 'null'].join('|');
+    self.typeRegExp = new RegExp(self.validTypes);
+
+    self.specKeywords = ["\\$ref|\\babcdefg"];
+    for(var key in schemaSpec.properties)
+      self.specKeywords.push(key.replace('$', '\\$'));
+
+    //join using exact phrasing checks
+    self.specKeywords = self.specKeywords.join('\\b|\\b') + "\\b";
+    self.keywordRegExp = new RegExp(self.specKeywords);
+
+    self.log(self.log.testing, "--Specced types: ".green, self.validTypes);
+    self.log(self.log.testing, "--Specced keywords: ".green, self.specKeywords);
+
+    self.validateFunction = (self.multipleErrors ? self.validator.validateMultiple : self.validator.validateResult);
+    self.errorKey = self.multipleErrors ? "errors" : "error";
+
+    function listTypeIssues(type)
+    {
+      if(!self.allSchema[type]){
+        return "Schema type not loaded: " + type;
+      }
+
+      //we have to manually detect missing references -- since the validator is not concerned with such things
+      //FOR WHATEVER REASON
+      var missing = self.validator.getMissingUris();
+      for(var i=0; i < missing.length; i++)
+      {
+        //if we have this type inside our refernces for this object, it means we're missing a ref schema for this type!
+        if(self.requiredReferences[type][missing[i]])
+        {
+          return "Missing at least 1 schema definition: " + missing[i];
+        }
+      }
+    }
+
+    function internalValidate(schema, object)
+    {
+      //validate against what type?
+      var result = self.validateFunction.apply(self.validator, [object, schema, true, !self.allowUnknownKeys]);
+
+       //if it's not an array, make it an array
+      //if it's empty, make it a damn array
+      var errors = result[self.errorKey];
+
+      //if you are multiple errors, then you are a non-undefined array, just return as usual
+      //otherwise, you are an error but not in an array
+      //if errors is undefined then this will deefault to []
+      errors = (errors && !Array.isArray(errors)) ? [errors] : errors || [];
+
+      return {valid : result.valid, errors : errors};
+    }
+    self.validateDataArray = function(type, objects, finished)
+    {
+      var typeIssues = listTypeIssues(type);
+
+      //stop if we have type issues
+      if(typeIssues)
+      {
+        finished(typeIssues);
+        return;
+      }
+      else if(typeof type != "string" || !Array.isArray(objects))
+      {
+        finished("ValidateMany requires type [string], objects [array]");
+        return;
+      }
+
+      var schema = self.validator.getSchema(type);
+      // self.log('validate many against: ', schema);
+
+      var allValid = true;
+      var allErrors = [];
+      for(var i=0; i < objects.length; i++)
+      {
+        var result = internalValidate(schema, objects[i]);
+
+        if(!result.valid){
+          allValid = false;
+          allErrors.push(result.errors);
+        }
+        else //no error? just push empty array!
+          allErrors.push([]);
+      }
+
+      //if we have errors during validation, they'll be passed on thank you!
+      //if you're valid, and there are no errors, then don't send nuffin
+      finished(undefined, allValid, (!allValid ? allErrors : undefined));
+    }
+    self.validateData = function(type, object, finished)
+    {
+      var typeIssues = listTypeIssues(type);
+
+      //stop if we have type issues
+      if(typeIssues)
+      {
+        finished(typeIssues);
+        return;
+      }
+
+      //log object being checked
+      self.log("Validate: ", object);
+
+      //now we need to validate, we definitely have all the refs we need
+      var schema = self.validator.getSchema(type);
+
+      //log what's being validated
+      self.log('validate against: ', schema);
+    	 
+      var result = internalValidate(schema, object);
+
+      //if we have errors during validation, they'll be passed on thank you!
+      //if you're valid, and there are no errors, then don't send nuffin
+      finished(undefined, result.valid, (result.errors.length ? result.errors : undefined));
+    }
+
+    //todo: pull reference objects from schema -- make sure those exist as well?
+   	self.addSchema = function(type, schemaJSON, options, finished)
+   	{
+      //pass args into internal adds
+      return self.internalAddSchema.apply(self, arguments);
+   	}
+
+   	    //todo: pull reference objects from schema -- make sure those exist as well?
+   	self.getSchema = function(typeOrArray, finished)
+   	{   	
+      //did we request one or many?
+      var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var refArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+      //failed to get schema for some very odd reason?
+        if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+        //push our reference information as a clone
+        refArray.push(traverse(self.validator.getSchema(sType)).clone());
+        //if you hit an error -send back
+        if(self.validator.error){
+          finished(self.validator.error);
+          return;
+        }
+      }
+
+      //send the schema objects back
+      //send an array regardless of how many requested -- standard behavior
+      finished(undefined, refArray);    
+
+   	}
+
+   	self.getSchemaReferences = function(typeOrArray, finished)
+   	{
+      var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var refArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+        if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+        //push our reference information as a clone
+        refArray.push(traverse(self.requiredReferences[sType]).clone());
+      }
+
+  		//send the refernece objects back
+      //if you are a single object, just send the one -- otherwise send an array
+      finished(undefined, refArray); 		
+   	}
+
+    var buildFullSchema = function(type)
+    {
+      var schema = self.validator.getSchema(type);
+      var tSchema = traverse(schema);
+
+      var clone = tSchema.clone();
+      var tClone = traverse(clone);
+      var references = self.schemaReferences[type];
+
+      for(var path in references)
+      {
+        //we get the type of reference
+        var schemaInfo = references[path];
+        var refType = schemaInfo.schemaType;
+
+        //this is recursive behavior -- itwill call buidl full schema if not finished yet
+        var fullRefSchema = internalGetFullSchema(refType);
+
+        if(!fullRefSchema)
+          throw new Error("No schema could be created for: " + refType + ". Please check it's defined.");
+
+        //now we ahve teh full object to replace
+        var tPath = path.split(self.pathDelimiter);
+
+        // self.log(self.log.testing, 'Path to ref: ', tPath, " replacement: ", fullRefSchema);
+
+        //use traverse to set the path object as our full ref object
+        tClone.set(tPath, fullRefSchema);
+      }
+
+      // self.log(self.log.testing, "Returning schema: ", type, " full: ", clone);
+
+      return clone;
+    }
+    var inprogressSchema = {};
+
+    function internalGetFullSchema(type)
+    {
+      if(inprogressSchema[type])
+      {
+          throw new Error("Infinite schema reference loop: " + JSON.stringify(Object.keys(inprogressSchema)));    
+      }
+
+      inprogressSchema[type] = true;
+
+       //if we don't have a full type yet, we build it
+      if(!self.fullSchema[type])
+      {
+        //need to build a full schema object
+        var fSchema = buildFullSchema(type);
+
+        self.fullSchema[type] = fSchema;
+      }
+
+      //mark the in progress as false!
+      delete inprogressSchema[type];
+
+      return self.fullSchema[type];
+    }
+
+    self.getFullSchema = function(typeOrArray, finished)
+    { 
+      var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var fullArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+         if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+
+        try
+        {
+          //get the full schema from internal function
+          //throws error if something is wrong
+          var fullSchema = internalGetFullSchema(sType);
+         
+          //pull the full object -- guaranteed to exist -- send a clone
+           fullArray.push(traverse(fullSchema).clone());
+        }
+        catch(e)
+        {
+          //send the error if we have one
+          finished(e);
+          return;
+        }
+      }
+
+      //send the refernece objects back
+      //if you are a single object, just send the one -- otherwise send an array
+      finished(undefined, fullArray);
+    }
+
+    self.getSchemaProperties = function(typeOrArray, finished)
+    {
+       var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var propArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+         if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+
+        //get our schema properties
+        propArray.push({type: sType, primaryPaths: traverse(self.primaryPaths[sType]).clone(), properties: traverse(self.typeProperties[sType]).clone()});
+
+      }
+
+
+      //send the refernece objects back
+      //if you are a single object, just send the one -- otherwise send an array
+      finished(undefined, propArray);
+    }
+
+    //we're going to clone the object, then replace all of the reference wids with new an improved parents
+    self.replaceParentReferences = function(type, object, parentMapping, finished)
+    {
+      var tClone = traverse(object).clone();
+
+      traverse(tClone).forEach(function(node)
+      {
+         //if we have a wid object and parents object -- likely we are a tracked reference
+        if(this.node.wid && this.node.parents)
+        {
+          var replaceParents = parentMapping[this.node.wid];
+
+          if(replaceParents)
+          {
+            //straight up replacement therapy yo
+            this.node.parents = replaceParents;
+
+            //then make sure to update and continue onwards!
+            this.update(this.node);
+          }
+        }
+      })
+
+      //we've replaced the innards of the object with a better future!
+      finished(undefined, tClone);
+    }
+
+    self.getReferencesAndParents = function(type, widObjects, finished)
+    {
+
+        //listed by some identifier, then the object, we need to look through the type, and pull references
+        var fSchema = internalGetFullSchema(type);
+        // self.log("Full schema: ", fSchema);
+        if(!fSchema)
+        {
+          finished("Full schema undefined, might be missing a reference type within " + type);
+          return;
+        } 
+        var widToParents = {};
+        var traverseObjects = {};
+
+        for(var wid in widObjects){
+          widToParents[wid] = {};
+          traverseObjects[wid] = traverse(widObjects[wid]);
+        }
+
+        
+        //for every wid object we see, we loop through and pull that 
+        traverse(fSchema).forEach(function(node)
+        {
+          // self.log("Node: ", this.node, "", " key: ", this.key);
+          //if we have a wid object and parents object -- likely we are a tracked reference
+          if(this.node.wid && this.node.parents)
+          {
+            //let's pull these bad boys our of our other objects
+            var pathToObject = self.stripObjectPath(this.path);
+            
+            //if you aren't root, split it up!
+            if(pathToObject != "")
+              pathToObject = pathToObject.split(self.pathDelimiter);
+
+            // self.log("\nKey before :", this.key, " node-p: ", this.parent.node, " path: ", this.path);
+            
+            var isArray = (this.key == "properties" && this.path[this.path.length - 2] == "items");
+            // self.log("Is array? : ", isArray);
+            for(var wid in traverseObjects)
+            {
+
+              var wtp = widToParents[wid];
+              var tob = traverseObjects[wid];
+
+
+              //fetch object from our traverse thing using this path
+              var arrayOrObject = tob.get(pathToObject);
+
+              // self.log("Path to obj: ", pathToObject, " get: ", arrayOrObject);
+
+              //grab wid to parent mappings, always cloning parent arrays
+              if(isArray)
+              {
+                for(var i=0; i < arrayOrObject.length; i++)
+                {
+                  var aobj = arrayOrObject[i];
+                  //map wid objects to parent wids always thank you
+                  wtp[aobj.wid] = aobj.parents.slice(0);
+                }
+              }
+              else
+                wtp[arrayOrObject.wid] = arrayOrObject.parents.slice(0);
+
+              //now we've aded a mapping from the objects wid to the parents for that wid
+
+            }
+          }
+        });
+
+        //we send back the wids of the original widObjects mapped to the wid internal reference && the corresponding parents
+        //so many damn layers -- it gets confusing
+        finished(undefined, widToParents);
+
+    }
+
+
+	return self;
+}
+
+
+
+
+});
+
+require.register("optimuslime~win-gen@0.0.2-6", function (exports, module) {
 //need our general utils functions
-var winutils = require('win-utils');
-var extendModuleDefinitions = require('./module/backbone.js');
-var traverse = require('optimuslime-traverse');
-var uuid = require('win-utils').cuid;
+var winutils = require("optimuslime~win-utils@master");
+var extendModuleDefinitions = require("optimuslime~win-gen@0.0.2-6/lib/module/backbone.js");
+var traverse = require("optimuslime~traverse@master");
+var uuid = require("optimuslime~win-utils@master").cuid;
 //for component: techjacker/q
-var Q = require('q');
+var Q = require("techjacker~q@master");
 
 var cuid = winutils.cuid;
 var wMath = winutils.math;
@@ -19733,7 +17206,8 @@ function wingen(winBackbone, globalConfiguration, localConfiguration)
 
 
 });
-require.register("optimuslime-win-gen/lib/module/backbone.js", function(exports, require, module){
+
+require.register("optimuslime~win-gen@0.0.2-6/lib/module/backbone.js", function (exports, module) {
 //need our general utils functions
 module.exports = extendObject;
 
@@ -19819,8 +17293,9 @@ function extendObject(self, globalConfiguration, localConfiguration)
 
 
 });
-require.register("optimuslime-win-data/lib/win-data.js", function(exports, require, module){
-var request = require('superagent');
+
+require.register("optimuslime~win-data@0.0.1-3", function (exports, module) {
+var request = require("visionmedia~superagent@master");
 
 module.exports = windata;
 
@@ -19927,9 +17402,10 @@ function windata(backbone, globalConfig, localConfig)
 
 
 });
-require.register("optimuslime-win-phylogeny/lib/win-phylogeny.js", function(exports, require, module){
+
+require.register("optimuslime~win-phylogeny@0.0.1-1", function (exports, module) {
 //this will help us navigate complicated json tree objects
-var traverse = require('optimuslime-traverse');
+var traverse = require("optimuslime~traverse@master");
 
 module.exports = winphylogeny;
 
@@ -20328,5636 +17804,13 @@ function winphylogeny(backbone, globalConfig, localConfig)
 
 
 });
-require.register("optimuslime-win-utils/winutils.js", function(exports, require, module){
 
-var winutils = {};
-
-module.exports = winutils;
-
-//right now, it's all we have setup -- later there will be more utilities
-winutils.cuid = require('./uuid/cuid.js');
-
-winutils.math = require('./math/winmath.js');
-
-
-});
-require.register("optimuslime-win-utils/uuid/cuid.js", function(exports, require, module){
-/**
- * cuid.js
- * Collision-resistant UID generator for browsers and node.
- * Sequential for fast db lookups and recency sorting.
- * Safe for element IDs and server-side lookups.
- *
- * Extracted from CLCTR
- * 
- * Copyright (c) Eric Elliott 2012
- * MIT License
- */
-//From: https://github.com/dilvie/cuid
-
-//note that module.exports is at the end -- it exports the api variable
-
-/*global window, navigator, document, require, process, module */
-var c = 0,
-    blockSize = 4,
-    base = 36,
-    discreteValues = Math.pow(base, blockSize),
-
-    pad = function pad(num, size) {
-      var s = "000000000" + num;
-      return s.substr(s.length-size);
-    },
-
-    randomBlock = function randomBlock() {
-      return pad((Math.random() *
-            discreteValues << 0)
-            .toString(base), blockSize);
-    },
-
-    api = function cuid() {
-      // Starting with a lowercase letter makes
-      // it HTML element ID friendly.
-      var letter = 'c', // hard-coded allows for sequential access
-
-        // timestamp
-        // warning: this exposes the exact date and time
-        // that the uid was created.
-        timestamp = (new Date().getTime()).toString(base),
-
-        // Prevent same-machine collisions.
-        counter,
-
-        // A few chars to generate distinct ids for different
-        // clients (so different computers are far less
-        // likely to generate the same id)
-        fingerprint = api.fingerprint(),
-
-        // Grab some more chars from Math.random()
-        random = randomBlock() + randomBlock() + randomBlock() + randomBlock();
-
-        c = (c < discreteValues) ? c : 0;
-        counter = pad(c.toString(base), blockSize);
-
-      c++; // this is not subliminal
-
-      return  (letter + timestamp + counter + fingerprint + random);
-    };
-
-api.slug = function slug() {
-  var date = new Date().getTime().toString(36),
-    counter = c.toString(36).slice(-1),
-    print = api.fingerprint().slice(0,1) +
-      api.fingerprint().slice(-1),
-    random = randomBlock().slice(-1);
-
-  c++;
-
-  return date.slice(2,4) + date.slice(-2) + 
-    counter + print + random;
-};
-
-//fingerprint changes based on nodejs or component setup
-var isBrowser = (typeof process == 'undefined');
-
-api.fingerprint = isBrowser ?
-  function browserPrint() {
-      return pad((navigator.mimeTypes.length +
-          navigator.userAgent.length).toString(36) +
-          api.globalCount().toString(36), 4);
-  }
-: function nodePrint() {
-  var os = require('os'),
-
-  padding = 2,
-  pid = pad((process.pid).toString(36), padding),
-  hostname = os.hostname(),
-  length = hostname.length,
-  hostId = pad((hostname)
-    .split('')
-    .reduce(function (prev, char) {
-      return +prev + char.charCodeAt(0);
-    }, +length + 36)
-    .toString(36),
-  padding);
-return pid + hostId;
-};
-
-api.globalCount = function globalCount() {
-    // We want to cache the results of this
-    var cache = (function calc() {
-        var i,
-            count = 0;
-
-            //global count only ever called inside browser environment
-            //lets loop through and count the keys in window -- then cahce that as part of our fingerprint
-        for (i in window) {
-            count++;
-        }
-
-        return count;
-    }());
-
-    api.globalCount = function () { return cache; };
-    return cache;
-};
-
-api.isLessThan = function(first, second)
-{
-  var fParse= parseInt(first);
-  var sParse = parseInt(second);
-  if(isNaN(fParse) && isNaN(sParse))
-  {
-     //tease apart first, second to determine which ID came first
-    //counter + fingerprint + random = 6 blocks of 4 = 24
-    var dateEnd = 6*blockSize;
-    var counterEnd = 5*blockSize;
-    var charStart = 1;
-
-    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
-    var firstTime = parseInt(first.slice(charStart, first.length - dateEnd), base);
-    //ditto for counter
-    var firstCounter = parseInt(first.slice(first.length - dateEnd, first.length - counterEnd),base);
-
-    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
-    var secondTime =  parseInt(second.slice(charStart, second.length - dateEnd), base);
-    
-    //ditto for counter 
-    var secondCounter = parseInt(second.slice(second.length - dateEnd, second.length - counterEnd), base);
-
-    //either the first time is less than the second time, and we answer this question immediately
-    //or the times are equal -- then we pull the lower counter
-    //techincially counters can wrap, but this won't happen very often AND this is all for measuring disjoint/excess behavior
-    //the time should be enough of an ordering principal for this not to matter
-    return firstTime < secondTime || (firstTime == secondTime && firstCounter < secondCounter);
-
-  }
-  else if(isNaN(sParse))
-  {
-    //if sParse is a string, then the first is a number and the second is a string UUID
-    //to maintain backwards compat -- number come before strings in neatjs ordering
-    return true;
-  }//both are not NaN -- we have two numbers to compare
-  else
-  {
-    return fParse < sParse;
-  }
-}
-
-//we send out API
-module.exports = api;
-
-
-
-
-});
-require.register("optimuslime-win-utils/math/winmath.js", function(exports, require, module){
-
-var mathHelper = {};
-
-module.exports = mathHelper;
-
-mathHelper.next = function(max)
-{
-    return Math.floor(Math.random()*max);
-};
-
-});
-require.register("win-home-ui/main.js", function(exports, require, module){
-
-var emitter = require('emitter');
-var element = require('el.js');
-// var dimensions = require('dimensions');
-
-module.exports = winhome; 
-
-var uFlexID = 0;
-
-function winhome(backbone, globalConfig, localConfig)
-{
-	// console.log(divValue); 
-	var self = this;
-
-	self.winFunction = "ui";
-
-	self.backEmit = backbone.getEmitter(self);
-	self.log = backbone.getLogger(self);
-
-	//add appropriate classes to our given div
-
-	self.uid = "home" + uFlexID++;
-
-	var emitterIDs = 0;
-	self.uiEmitters = {};
-	self.homeElements = {};
-
-
-	self.requiredEvents = function(){return ["query:getHomeQuery"];};
-
-	self.eventCallbacks = function()
-	{
-		return {
-			"ui:home-initializeDisplay" : self.initializeDisplay,
-			"ui:home-ready" : self.ready
-		}
-
-	}
-
-	self.initializeDisplay = function(div, options, finished)
-	{
-		if(typeof options == "function")
-		{
-			finished = options;
-			options = {};
-		}
-		else //make sure it exists
-			options = options || {};
-
-		var homeHolder = element('div.winhome.og-grid');
-
-		var title = options.title || "WIN Domain (customize with title option)"; 
-
-
-		var th2 = document.createElement('h1');
-		th2.innerHTML = title;
-
-	
-
-		var tEl = element('div', {style: "font-size: 2em;"}, th2);
-		
-		var phyloTitle = options.phylogenyLocation;
-
-		//if specified, link out to a new site!
-		if(phyloTitle){
-			var phyloLink = document.createElement('h3');
-			var link = element('a', {href: phyloTitle, class: "phyloLink"}, 'Browse full phylogeny here');
-			phyloLink.appendChild(link)
-
-			tEl.appendChild(phyloLink);
-		}
-
-		var loading = element('div', "(images loading...)");
-		
-
-		homeHolder.appendChild(tEl);
-		homeHolder.appendChild(loading);
-		
-		var uID = emitterIDs++;
-		var uie = {uID: uID};
-		emitter(uie);
-
-		self.uiEmitters[uID] = uie;
-		self.homeElements[uID] = homeHolder;
-
-		div.appendChild(homeHolder);
-
-
-		//all done making the display -- added a title and some stuff dooooooop
-		finished(undefined, {ui: homeHolder, emitter: uie, uID: uID});
-		
-	}
-
-	self.createElement = function(wid, category, options)
-	{
-
-		var size = options.objectSize || {width: 150, height: 150};
-
-		var addWidth = options.additionalElementWidth || 0;
-		var addHeight = options.additionalElementHeight || 50;
-
-		var trueElementSize = "width: " + (size.width) + "px; height: " + (size.height) + "px;"; 
-		var fullWidthAndHeight = "width: " + (size.width + addWidth) + "px; height: " + (size.height + addHeight) + "px;"; 
-		var id = category + "-" + wid;
-
-		//for now, everything has a border! 
-
-		//now we add some buttons
-		var aImg = element('div', {style: trueElementSize, class: "border"});
-		var evoBut = element('div', {style: "", class: "homeElementButton"}, "Branch");
-		// var history = element('div', {style: "", class: "homeElementButton border"}, "Ancestors");
-
-		//this is where the artifact stuff goes
-		var aElement = element('a', {style: fullWidthAndHeight, class: "border"}, 
-			[aImg, 
-			evoBut
-			// , history
-			]); 
-
-		var simpleElement = element('li', {id:id, class: "home"}, [aElement]);
-
-
-
-		//we also need to add on some extra space for buttons buttons buttons ! need to branch and stuff
-
-		return {full: simpleElement, artifactElement: aImg, branch: evoBut, ancestors: history};
-	}
-
-	self.emitElementCreation = function(emit, wid, artifact, eDiv)
-	{
-		//let 
-		emit.emit("elementCreated", wid, artifact, eDiv, function()
-		{
-			//maybe we do somehitng her in the future -- nuffin' for now gov'nor
-		});
-	}
-
-	self.clickBranchButton  = function(emit, wid, artifact, eDiv)
-	{
-		eDiv.addEventListener('click', function()
-		{
-			emit.emit("artifactBranch", wid, artifact, eDiv);
-		});
-	}
-
-	self.clickAncestorsButton  = function(emit, wid, artifact, eDiv)
-	{
-		eDiv.addEventListener('click', function()
-		{
-			emit.emit("artifactAncestors", wid, artifact, eDiv);
-		});
-	}
-
-
-	self.ready = function(uID, options, finished)
-	{
-		if(typeof options == "function")
-		{
-			finished = options;
-			options = {};
-		}
-		else //make sure it exists
-			options = options || {};
-
-
-		//pull the emitter for letting know about new objects
-		var emit = self.uiEmitters[uID];
-		var home = self.homeElements[uID];
-
-		//okay let's setup up everything for real
-		var itemStart = options.itemStart || 0;
-		var itemsToDisplay = options.itemsToDisplay || 10;
-
-		self.log("Item query - start: ", itemStart, " end: ", (itemStart + itemsToDisplay));
-
-
-		//then we make a query request
-		self.backEmit("query:getHomeQuery", itemStart, (itemStart + itemsToDisplay), function(err, categories)
-		{
-			//all the categories returned from the home query, and associated objects
-			if(err)
-			{
-				finished(err);
-				return;
-			}
-
-			console.log("Ready home query ret: ", categories);
-
-			var singleCatID;
-
-			for(var cat in categories)
-			{
-				singleCatID = cat + "-" + uID ;
-				//set up the category title section
-				var elWrapper = element('ul#' + singleCatID + ".og-grid", {class: "thumbwrap"});
-
-				var catTitle = document.createElement('h2');
-					catTitle.innerHTML = cat;
-				var catTitle = element('div', {}, [catTitle, elWrapper]);
-
-				home.appendChild(catTitle);
-
-				//now we let it be known we're creeating elelemtns
-				var arts = categories[cat].artifacts;
-
-				for(var i=0; i < arts.length; i++)
-				{
-					var artifact = arts[i];
-					var wid = artifact.wid;
-
-					var elObj = self.createElement(wid, cat, options);
-
-					//add this object to our other elements in the category list
-					elWrapper.appendChild(elObj.full);
-
-					self.clickBranchButton(emit, wid, artifact, elObj.branch);
-					// self.clickAncestorsButton(emit, wid, artifact, elObj.ancestors);
-
-					self.emitElementCreation(emit, wid, artifact, elObj.artifactElement);
-				}
-			}
-
-			//only 1 grid right now
-			// var Grid = require('thumbnail-grid');
-
-			// var grid = new Grid(document.getElementById(singleCatID));
-			// grid.init();
-
-			if(finished)
-				finished();
-
-		});
-	}
-
-	return self;
-}
-
-
-
-
-});
-require.register("webworker-queue/webworker-queue.js", function(exports, require, module){
-
-var WebWorkerClass = require('worker');
-
-module.exports = webworkerqueue;
-
-function webworkerqueue(scriptName, workerCount)
-{ 
-    var self = this;
-
-    self.nextWorker = 0;
-    
-    //queue to pull from 
-    self.taskQueue = [];
-    self.taskCallbacks = {};
-
-    //store the web workers
-    self.workers = [];
-
-    //how many workers available
-    self.availableWorkers = workerCount;
-
-    //note who is in use
-    self.inUseWorkers = {};
-    
-    //and the full count of workers
-    self.totalWorkers = workerCount;
-
-    for(var i=0; i < workerCount; i++){
-
-        var webworker = new WebWorkerClass(scriptName);
-
-        //create a new worker id (simply the index will do)
-        var workerID = i;
-
-        //label our workers
-        webworker.workerID = workerID;
-
-        //create a webworker message callback unique for this worker
-        //webworker in this case is not a raw webworker, but an emitter object -- so we attach to the message object
-        webworker.on('message', uniqueWorkerCallback(workerID));
-
-        //store the worker inside here
-        self.workers.push(webworker);
-    }
-
-
-    function uniqueWorkerCallback(workerID)
-    {
-        return function(data){
-            //simply pass on the message with the tagged worker
-            workerMessage(workerID, data);
-        }
-    }
-
-    function getNextAvailableWorker()
-    {
-        //none available, return null
-        if(self.availableWorkers == 0)
-            return;
-
-        //otherwise, we know someone is available
-        setNextAvailableIx();
-
-        //grab the next worker available
-        var worker = self.workers[self.nextWorker];
-
-        //note that it's now in use
-        self.inUseWorkers[self.nextWorker] = true;
-
-        //less workers available
-        self.availableWorkers--;
-
-        //send back the worker
-        return worker;
-    }
-
-    function setNextAvailableIx()
-    {
-        for(var i=0; i < self.totalWorkers; i++)
-        {
-            //check if it's in use
-            if(!self.inUseWorkers[i])
-            {
-                self.nextWorker = i;
-                break;
-            }
-        }
-    }
-
-    //this function takes a workerID and a data object -- called from the worker
-    function workerMessage(workerID, data)
-    {
-        //we got our message, we pass it for callback
-
-        //we know what workerID, so pull the associated callback
-        var cb = self.taskCallbacks[workerID];
-
-        //now remove all things associated with the task
-        delete self.taskCallbacks[workerID];
-
-        //free the worker
-        delete self.inUseWorkers[workerID];
-
-        //now on the market :)
-        self.availableWorkers++;
-
-        //prepare the callback -- if it exists
-        if(cb)
-        {
-            //send the data back, pure and simple
-            cb(data);
-        }
-
-        //now, do we have any queue events waiting?
-        if(self.taskQueue.length > 0)
-        {
-            //now we need to process the task
-            var taskObject = self.taskQueue.shift();
-
-            //okay, queue it up! -- this should work immediately becuase we just freed a worker
-            self.queueJob(taskObject.data, taskObject.callback);
-        }
-    }
-
-
-    self.queueJob = function(data, callback)
-    {
-
-        //if we have any available workers, just assign it directly, with a callback stored
-        var worker = getNextAvailableWorker();
-
-        if(worker)
-        {
-            //we have a worker to issue commands to now
-            //this is the callback we engage once the message comes back
-            self.taskCallbacks[worker.workerID] = callback;
-
-            //send the data now, thanks -- we'll handle callback in workerMessage function
-            worker.send(data);
-        }
-        else
-        {   
-            //otherwise, we need to add the item to the queue
-            self.taskQueue.push({data: data, callback: callback});
-            //the queue is cleared when the other workers return from their functions
-        }
-    }
-
-}
-
-});
-require.register("geno-to-picture/geno-to-picture.js", function(exports, require, module){
-//here we test the insert functions
-//making sure the database is filled with objects of the schema type
-// var wMath = require('win-utils').math;
-
-module.exports = genoToPicture;
-
-var cppnjs = require('cppnjs');
-//need to add the pure cppn functions -- for enclosure stuff
-cppnjs.addPureCPPN();
-
-var neatjs = require('neatjs');
-var winneat = require('win-neat');
-
-var generateBitmap = require('./generateBitmap.js');
-
-function genoToPicture(size, ngJSON)
-{ 
-    var ngObject = winneat.genotypeFromJSON(ngJSON);
-
-    //then we are going to do this crazy thing where we grab the function representing the genome
-    //then we run the function a bunch of times looping over our image, compiling the data
-    //that data is then turned into a string which is sent to the dataurl object of a picture
-
-    return createImageFromGenome(size, ngObject);
-}
-
-function createImageFromGenome(size, ng)
-{
-    var cppn = ng.networkDecode();
-
-    // console.log('Decoded now recrusive processing!');
-    // console.log(ng);
-
-    var dt = Date.now();
-
-    console.log(cppn);
-
-    var functionObject = cppn.createPureCPPNFunctions();
-    console.log("Pure cppn: ", functionObject);
-    var activationFunction= functionObject.contained;
-
-
-    var inSqrt2 = Math.sqrt(2);
-
-    var allX = size.width, allY = size.height;
-    var width = size.width, height= size.height;
-
-    var startX = -1, startY = -1;
-    var dx = 2.0/(allX-1), dy = 2.0/(allY-1);
-
-    var currentX = startX, currentY = startY;
-
-    var newRow;
-    var rows = [];
-
-    var clampZeroOne = function(val)
-    {
-        return Math.max(0.0, Math.min(val,1.0));
-    };
-    // 0 to 1
-    var zeroToOne = function(val) {
-        return (val+1)/2;//Math.floor(Math.max(0, Math.min(255, (val + 1)/2*255)));
-    };
-
-    var inRange = function(val) {
-        if(val < 0) return (val+1);
-
-        return val;//Math.floor(Math.max(0, Math.min(255, (val + 1)/2*255)));
-    };
-
-
-    var oCount = 0;
-    var inputs = [];
-
-    //we go by the rows
-    for(var y=allY-1; y >=0; y--){
-
-        //init and push new row
-        var newRow = [];
-        rows.push(newRow);
-        for(var x=0; x < allX; x++){
-
-            //just like in picbreeder!
-            var currentX = ((x << 1) - width + 1) / width;
-            var currentY = ((y << 1) - height + 1) / height;
-
-
-            var output0, output1, output2;
-            var rgb;
-
-            inputs = [currentX, currentY, Math.sqrt(currentX*currentX + currentY*currentY)*inSqrt2];
-
-            var newActivation = true;
-            var outputs;
-
-            outputs = activationFunction(inputs);
-
-            if(outputs.length ==1 || ng.phenotype == 'structure')
-            {
-                var singleOutput = ng.phenotype == 'structure' ? outputs[2] : outputs[0];
-                var byte = Math.floor(Math.min(Math.abs(singleOutput), 1.0)*255.0);
-                //var byte = Math.floor(Math.max(0.0, Math.min(1.0, output0))*255.0);
-
-                rgb= [byte,byte,byte];//generateBitmap.HSVtoRGB(zeroToOne(output0), zeroToOne(output0), zeroToOne(output0));
-
-            }
-            else
-            {
-                rgb = generateBitmap.FloatToByte(generateBitmap.PicHSBtoRGB(outputs[0], clampZeroOne(outputs[1]), Math.abs(outputs[2])));
-            }
-
-            newRow.push(rgb);
-
-        }
-
-    }
-
-
-    //let's get our bitmap from rbg results!
-    var imgSrc = generateBitmap.generateBitmapDataURL(rows);
-
-    console.log("Gen time: ", (Date.now() - dt));
-
-    return imgSrc;
-}
-});
-require.register("geno-to-picture/generateBitmap.js", function(exports, require, module){
-
-var base64 = require('./base64');
-
-var generateBitmap = {};
-module.exports = generateBitmap;
-
-/*
-* Code to generate Bitmap images (using data urls) from rows of RGB arrays.
-* Specifically for use with http://mrcoles.com/low-rest-paint/
-*
-* Research:
-*
-* RFC 2397 data URL
-* http://www.xs4all.nl/~wrb/Articles/Article_IMG_RFC2397_P1_01.htm
-*
-* BMP file Format
-* http://en.wikipedia.org/wiki/BMP_file_format#Example_of_a_2.C3.972_Pixel.2C_24-Bit_Bitmap_.28Windows_V3_DIB.29
-*
-* BMP Notes
-*
-* - Integer values are little-endian, including RGB pixels, e.g., (255, 0, 0) -> \x00\x00\xFF
-* - Bitmap data starts at lower left (and reads across rows)
-* - In the BMP data, padding bytes are inserted in order to keep the lines of data in multiples of four,
-*   e.g., a 24-bit bitmap with width 1 would have 3 bytes of data per row (R, G, B) + 1 byte of padding
-*/
-
-function _asLittleEndianHex(value, bytes) {
-    // Convert value into little endian hex bytes
-    // value - the number as a decimal integer (representing bytes)
-    // bytes - the number of bytes that this value takes up in a string
-
-    // Example:
-    // _asLittleEndianHex(2835, 4)
-    // > '\x13\x0b\x00\x00'
-
-    var result = [];
-
-    for (; bytes>0; bytes--) {
-        result.push(String.fromCharCode(value & 255));
-        value >>= 8;
-    }
-
-    return result.join('');
-}
-
-function _collapseData(rows, row_padding) {
-    // Convert rows of RGB arrays into BMP data
-    var i,
-        rows_len = rows.length,
-        j,
-        pixels_len = rows_len ? rows[0].length : 0,
-        pixel,
-        padding = '',
-        result = [];
-
-    for (; row_padding > 0; row_padding--) {
-        padding += '\x00';
-    }
-
-    for (i=0; i<rows_len; i++) {
-        for (j=0; j<pixels_len; j++) {
-            pixel = rows[i][j];
-            result.push(String.fromCharCode(pixel[2]) +
-                String.fromCharCode(pixel[1]) +
-                String.fromCharCode(pixel[0]));
-        }
-        result.push(padding);
-    }
-
-    return result.join('');
-}
-
-function _scaleRows(rows, scale) {
-    // Simplest scaling possible
-    var real_w = rows.length,
-        scaled_w = parseInt(real_w * scale),
-        real_h = real_w ? rows[0].length : 0,
-        scaled_h = parseInt(real_h * scale),
-        new_rows = [],
-        new_row, x, y;
-
-    for (y=0; y<scaled_h; y++) {
-        new_rows.push(new_row = []);
-        for (x=0; x<scaled_w; x++) {
-            new_row.push(rows[parseInt(y/scale)][parseInt(x/scale)]);
-        }
-    }
-    return new_rows;
-}
-
-//generate bitmaps from rows of rgb values
-//from: http://mrcoles.com/low-res-paint/
-//and: http://mrcoles.com/blog/making-images-byte-by-byte-javascript/
-generateBitmap.generateBitmapDataURL = function(rows, scale) {
-    // Expects rows starting in bottom left
-    // formatted like this: [[[255, 0, 0], [255, 255, 0], ...], ...]
-    // which represents: [[red, yellow, ...], ...]
-
-    if (!base64) {
-        alert('Oops, base64 encode fail!!');
-        return false;
-    }
-
-    scale = scale || 1;
-    if (scale != 1) {
-        rows = _scaleRows(rows, scale);
-    }
-
-    var height = rows.length,                                // the number of rows
-        width = height ? rows[0].length : 0,                 // the number of columns per row
-        row_padding = (4 - (width * 3) % 4) % 4,             // pad each row to a multiple of 4 bytes
-        num_data_bytes = (width * 3 + row_padding) * height, // size in bytes of BMP data
-        num_file_bytes = 54 + num_data_bytes,                // full header size (offset) + size of data
-        file;
-
-    height = _asLittleEndianHex(height, 4);
-    width = _asLittleEndianHex(width, 4);
-    num_data_bytes = _asLittleEndianHex(num_data_bytes, 4);
-    num_file_bytes = _asLittleEndianHex(num_file_bytes, 4);
-
-    // these are the actual bytes of the file...
-
-    file = ('BM' +               // "Magic Number"
-        num_file_bytes +     // size of the file (bytes)*
-        '\x00\x00' +         // reserved
-        '\x00\x00' +         // reserved
-        '\x36\x00\x00\x00' + // offset of where BMP data lives (54 bytes)
-        '\x28\x00\x00\x00' + // number of remaining bytes in header from here (40 bytes)
-        width +              // the width of the bitmap in pixels*
-        height +             // the height of the bitmap in pixels*
-        '\x01\x00' +         // the number of color planes (1)
-        '\x18\x00' +         // 24 bits / pixel
-        '\x00\x00\x00\x00' + // No compression (0)
-        num_data_bytes +     // size of the BMP data (bytes)*
-        '\x13\x0B\x00\x00' + // 2835 pixels/meter - horizontal resolution
-        '\x13\x0B\x00\x00' + // 2835 pixels/meter - the vertical resolution
-        '\x00\x00\x00\x00' + // Number of colors in the palette (keep 0 for 24-bit)
-        '\x00\x00\x00\x00' + // 0 important colors (means all colors are important)
-        _collapseData(rows, row_padding)
-        );
-
-    return 'data:image/bmp;base64,' + base64.encode(file);
-};
-
-
-generateBitmap.CMYKtoRGB = function (c,m,y,k)
-{
-    var r = 1 - Math.min( 1, c * ( 1 - k ) + k );
-    var g = 1 - Math.min( 1, m * ( 1 - k ) + k );
-    var b = 1 - Math.min( 1, y * ( 1 - k ) + k );
-
-    r = Math.round( r * 255 );
-    g = Math.round( g * 255 );
-    b = Math.round( b * 255 );
-
-    return [r,g,b];
-};
-
-generateBitmap.HSVtoRGB = function(h,s,v) {
-    //javascript from: http://jsres.blogspot.com/2008/01/convert-hsv-to-rgb-equivalent.html
-    // Adapted from http://www.easyrgb.com/math.html
-    // hsv values = 0 - 1, rgb values = 0 - 255
-    var r, g, b;
-    var RGB = [];
-    if(s==0){
-        var equalRGB = Math.round(v*255);
-        RGB.push(equalRGB); RGB.push(equalRGB); RGB.push(equalRGB);
-    }else{
-
-        var var_r, var_g, var_b;
-        // h must be < 1
-        var var_h = h * 6;
-        if (var_h==6) var_h = 0;
-        //Or ... var_i = floor( var_h )
-        var var_i = Math.floor( var_h );
-        var var_1 = v*(1-s);
-        var var_2 = v*(1-s*(var_h-var_i));
-        var var_3 = v*(1-s*(1-(var_h-var_i)));
-        if(var_i==0){
-            var_r = v;
-            var_g = var_3;
-            var_b = var_1;
-        }else if(var_i==1){
-            var_r = var_2;
-            var_g = v;
-            var_b = var_1;
-        }else if(var_i==2){
-            var_r = var_1;
-            var_g = v;
-            var_b = var_3
-        }else if(var_i==3){
-            var_r = var_1;
-            var_g = var_2;
-            var_b = v;
-        }else if (var_i==4){
-            var_r = var_3;
-            var_g = var_1;
-            var_b = v;
-        }else{
-            var_r = v;
-            var_g = var_1;
-            var_b = var_2
-        }
-        //rgb results = 0 ÷ 255
-        RGB.push(Math.round(var_r * 255));
-        RGB.push(Math.round(var_g * 255));
-        RGB.push(Math.round(var_b * 255));
-    }
-    return RGB;
-};
-
-var count = 0;
-
-generateBitmap.FloatToByte = function(arr)
-{
-    var conv = [];
-
-    arr.forEach(function(col)
-    {
-        conv.push(Math.floor(col*255.0));
-    });
-
-    return conv;
-};
-
-generateBitmap.PicHSBtoRGB = function(h,s,v)
-{
-
-    h = (h*6.0)%6.0;//Math.min(6.0, (h * 6.0));
-
-//        if(++count % 2000 === 0)
-//            console.log(h + ' and mod: ' + (h%6.0));
-
-    var r = 0.0, g = 0.0, b = 0.0;
-
-    if(h < 0.0) h += 6.0;
-    var hi = Math.floor(h);
-    var f = h - hi;
-
-    var vs = v * s;
-    var vsf = vs * f;
-
-    var p = v - vs;
-    var q = v - vsf;
-    var t = v - vs + vsf;
-
-    switch(hi) {
-        case 0: r = v; g = t; b = p; break;
-        case 1: r = q; g = v; b = p; break;
-        case 2: r = p; g = v; b = t; break;
-        case 3: r = p; g = q; b = v; break;
-        case 4: r = t; g = p; b = v; break;
-        case 5: r = v; g = p; b = q; break;
-    }
-
-
-
-    return [r,g,b];
-};
-});
-require.register("geno-to-picture/base64.js", function(exports, require, module){
-
-var base64 = {};
-
-//send out our base64 object!
-module.exports = base64;
-
-//from:
-//https://code.google.com/p/stringencoders/source/browse/trunk/javascript/base64.js?r=230
-
-/*
- * Copyright (c) 2010 Nick Galbreath
- * http://code.google.com/p/stringencoders/source/browse/#svn/trunk/javascript
- *
- * Permission is hereby granted, free of charge, to any person
- * obtaining a copy of this software and associated documentation
- * files (the "Software"), to deal in the Software without
- * restriction, including without limitation the rights to use,
- * copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following
- * conditions:
- *
- * The above copyright notice and this permission notice shall be
- * included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
- * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
- * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
- * OTHER DEALINGS IN THE SOFTWARE.
- */
-
-/* base64 encode/decode compatible with window.btoa/atob
- *
- * window.atob/btoa is a Firefox extension to convert binary data (the "b")
- * to base64 (ascii, the "a").
- *
- * It is also found in Safari and Chrome.  It is not available in IE.
- *
- * if (!window.btoa) window.btoa = base64.encode
- * if (!window.atob) window.atob = base64.decode
- *
- * The original spec's for atob/btoa are a bit lacking
- * https://developer.mozilla.org/en/DOM/window.atob
- * https://developer.mozilla.org/en/DOM/window.btoa
- *
- * window.btoa and base64.encode takes a string where charCodeAt is [0,255]
- * If any character is not [0,255], then an DOMException(5) is thrown.
- *
- * window.atob and base64.decode take a base64-encoded string
- * If the input length is not a multiple of 4, or contains invalid characters
- *   then an DOMException(5) is thrown.
- */
-
-base64.PADCHAR = '=';
-base64.ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-
-base64.makeDOMException = function() {
-    // sadly in FF,Safari,Chrome you can't make a DOMException
-    var e, tmp;
-
-    try {
-        return new DOMException(DOMException.INVALID_CHARACTER_ERR);
-    } catch (tmp) {
-        // not available, just passback a duck-typed equiv
-        // https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Global_Objects/Error
-        // https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Global_Objects/Error/prototype
-        var ex = new Error("DOM Exception 5");
-
-        // ex.number and ex.description is IE-specific.
-        ex.code = ex.number = 5;
-        ex.name = ex.description = "INVALID_CHARACTER_ERR";
-
-        // Safari/Chrome output format
-        ex.toString = function() { return 'Error: ' + ex.name + ': ' + ex.message; };
-        return ex;
-    }
-};
-
-base64.getbyte64 = function(s,i) {
-    // This is oddly fast, except on Chrome/V8.
-    //  Minimal or no improvement in performance by using a
-    //   object with properties mapping chars to value (eg. 'A': 0)
-    var idx = base64.ALPHA.indexOf(s.charAt(i));
-    if (idx === -1) {
-        throw base64.makeDOMException();
-    }
-    return idx;
-};
-
-base64.decode = function(s) {
-    // convert to string
-    s = '' + s;
-    var getbyte64 = base64.getbyte64;
-    var pads, i, b10;
-    var imax = s.length;
-    if (imax === 0) {
-        return s;
-    }
-
-    if (imax % 4 !== 0) {
-        throw base64.makeDOMException();
-    }
-
-    pads = 0
-    if (s.charAt(imax - 1) === base64.PADCHAR) {
-        pads = 1;
-        if (s.charAt(imax - 2) === base64.PADCHAR) {
-            pads = 2;
-        }
-        // either way, we want to ignore this last block
-        imax -= 4;
-    }
-
-    var x = [];
-    for (i = 0; i < imax; i += 4) {
-        b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12) |
-            (getbyte64(s,i+2) << 6) | getbyte64(s,i+3);
-        x.push(String.fromCharCode(b10 >> 16, (b10 >> 8) & 0xff, b10 & 0xff));
-    }
-
-    switch (pads) {
-        case 1:
-            b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12) | (getbyte64(s,i+2) << 6);
-            x.push(String.fromCharCode(b10 >> 16, (b10 >> 8) & 0xff));
-            break;
-        case 2:
-            b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12);
-            x.push(String.fromCharCode(b10 >> 16));
-            break;
-    }
-    return x.join('');
-};
-
-base64.getbyte = function(s,i) {
-    var x = s.charCodeAt(i);
-    if (x > 255) {
-        throw base64.makeDOMException();
-    }
-    return x;
-};
-
-base64.encode = function(s) {
-    if (arguments.length !== 1) {
-        throw new SyntaxError("Not enough arguments");
-    }
-    var padchar = base64.PADCHAR;
-    var alpha   = base64.ALPHA;
-    var getbyte = base64.getbyte;
-
-    var i, b10;
-    var x = [];
-
-    // convert to string
-    s = '' + s;
-
-    var imax = s.length - s.length % 3;
-
-    if (s.length === 0) {
-        return s;
-    }
-    for (i = 0; i < imax; i += 3) {
-        b10 = (getbyte(s,i) << 16) | (getbyte(s,i+1) << 8) | getbyte(s,i+2);
-        x.push(alpha.charAt(b10 >> 18));
-        x.push(alpha.charAt((b10 >> 12) & 0x3F));
-        x.push(alpha.charAt((b10 >> 6) & 0x3f));
-        x.push(alpha.charAt(b10 & 0x3f));
-    }
-    switch (s.length - imax) {
-        case 1:
-            b10 = getbyte(s,i) << 16;
-            x.push(alpha.charAt(b10 >> 18) + alpha.charAt((b10 >> 12) & 0x3F) +
-                padchar + padchar);
-            break;
-        case 2:
-            b10 = (getbyte(s,i) << 16) | (getbyte(s,i+1) << 8);
-            x.push(alpha.charAt(b10 >> 18) + alpha.charAt((b10 >> 12) & 0x3F) +
-                alpha.charAt((b10 >> 6) & 0x3f) + padchar);
-            break;
-    }
-    return x.join('');
-};
-
-
-});
-require.register("cppn-additions/cppn-additions.js", function(exports, require, module){
-//here we test the insert functions
-//making sure the database is filled with objects of the schema type
-// var wMath = require('win-utils').math;
-
-module.exports = cppnAdditions;
-
-var cppnjs = require('cppnjs');
-
-function cppnAdditions()
-{ 
-   var self = this;
-
-
-   self.winFunction = "cppnAdditions";
-   
-   self.requiredEvents = function(){return [];};
-   self.eventCallbacks = function(){return {};};
-
-   self.initialize = function(done)
-   {
-        //we do our damage here!
-         self.addCPPNFunctionsToLibrary();
-         done();
-   };
-
-   //these are the names of our cppn objects
-   var pbActivationFunctions = {sigmoid: 'PBBipolarSigmoid', gaussian: 'PBGaussian', sine: 'Sine', cos: "PBCos", identity: 'pbLinear'};
-
-    //in order to use certain activation functions
-    self.addCPPNFunctionsToLibrary = function()
-    {
-        var actFunctions = cppnjs.cppnActivationFunctions;
-        var actFactory = cppnjs.cppnActivationFactory;
-
-         actFunctions[pbActivationFunctions.sigmoid] = function(){
-                return new actFunctions.ActivationFunction({
-                    functionID: pbActivationFunctions.sigmoid ,
-                    functionString: "2.0/(1.0+(exp(-inputSignal))) - 1.0",
-                    functionDescription: "Plain sigmoid [xrange -5.0,5.0][yrange, 0.0,1.0]",
-                    functionCalculate: function(inputSignal)
-                    {
-                        return 2.0/(1.0+(Math.exp(-inputSignal))) - 1.0;
-                    },
-                    functionEnclose: function(stringToEnclose)
-                    {
-                        return "(2.0/(1.0+(Math.exp(-1.0*" + stringToEnclose + "))) - 1.0)";
-                    }
-                });
-            };
-
-        actFunctions[pbActivationFunctions.gaussian] = function(){
-            return new actFunctions.ActivationFunction({
-                    functionID: pbActivationFunctions.gaussian,
-                    functionString: "2*e^(-(input)^2) - 1",
-                    functionDescription:"bimodal gaussian",
-                    functionCalculate :function(inputSignal)
-                    {
-                        return 2 * Math.exp(-Math.pow(inputSignal, 2)) - 1;
-                    },
-                    functionEnclose: function(stringToEnclose)
-                    {
-                        return "(2.0 * Math.exp(-Math.pow(" + stringToEnclose + ", 2.0)) - 1.0)";
-                    }
-                });
-            };
-
-        actFunctions[pbActivationFunctions.identity] = function(){
-            return new actFunctions.ActivationFunction({
-                functionID: pbActivationFunctions.identity,
-                functionString: "x",
-                functionDescription:"Linear",
-                functionCalculate: function(inputSignal)
-                {
-                    return inputSignal;
-                },
-                functionEnclose: function(stringToEnclose)
-                {
-                    return "(" + stringToEnclose + ")";
-                }
-            });
-        };
-
-        actFunctions[pbActivationFunctions.cos] = function(){
-           return new actFunctions.ActivationFunction({
-                functionID: pbActivationFunctions.cos,
-                functionString: "Cos(inputSignal)",
-                functionDescription: "Cos function with normal period",
-                functionCalculate: function(inputSignal)
-                {
-                    return Math.cos(inputSignal);
-                },
-                functionEnclose: function(stringToEnclose)
-                {
-                    return "(Math.cos(" + stringToEnclose + "))";
-                }
-            });
-        };
-
-        //makes these the only activation functions being generated by picbreeder genotypes
-        var probs = {};
-        probs[pbActivationFunctions.sigmoid] = .22;
-        probs[pbActivationFunctions.gaussian] = .22;
-        probs[pbActivationFunctions.sine] = .22;
-        probs[pbActivationFunctions.cos] = .22;
-        probs[pbActivationFunctions.identity] = .12;
-        actFactory.setProbabilities(probs);
-    };
-
-
-
-    return self;
-}
-});
-require.register("win-setup/win-setup.js", function(exports, require, module){
-//here we test the insert functions
-//making sure the database is filled with objects of the schema type
-// var wMath = require('win-utils').math;
-
-module.exports = winsetup;
-
-function winsetup(requiredEvents, moduleJSON, moduleConfigs, finished)
-{ 
-    var winback = require('win-backbone');
-
-    var Q = require('q');
-
-    var backbone, generator, backEmit, backLog;
-
-    var emptyModule = 
-    {
-        winFunction : "experiment",
-        eventCallbacks : function(){ return {}; },
-        requiredEvents : function() {
-            return requiredEvents;
-        }
-    };
-
-    //add our own empty module onto this object
-    moduleJSON["setupExperiment"] = emptyModule;
-    
-    var qBackboneResponse = function()
-    {
-        var defer = Q.defer();
-        // self.log('qBBRes: Original: ', arguments);
-
-        //first add our own function type
-        var augmentArgs = arguments;
-        // [].splice.call(augmentArgs, 0, 0, self.winFunction);
-        //make some assumptions about the returning call
-        var callback = function(err)
-        {
-            if(err)
-            {
-              backLog("QCall fail: ", err);
-                defer.reject(err);
-            }
-            else
-            {
-                //remove the error object, send the info onwards
-                [].shift.call(arguments);
-                if(arguments.length > 1)
-                    defer.resolve(arguments);
-                else
-                    defer.resolve.apply(defer, arguments);
-            }
-        };
-
-        //then we add our callback to the end of our function -- which will get resolved here with whatever arguments are passed back
-        [].push.call(augmentArgs, callback);
-
-        // self.log('qBBRes: Augmented: ', augmentArgs);
-        //make the call, we'll catch it inside the callback!
-        backEmit.apply(backEmit, augmentArgs);
-
-        return defer.promise;
-    }
-
-    //do this up front yo
-    backbone = new winback();
-
-    backbone.logLevel = backbone.testing;
-
-    backEmit = backbone.getEmitter(emptyModule);
-    backLog = backbone.getLogger({winFunction:"experiment"});
-    backLog.logLevel = backbone.testing;
-
-    //loading modules is synchronous
-    backbone.loadModules(moduleJSON, moduleConfigs);
-
-    var registeredEvents = backbone.registeredEvents();
-    var requiredEvents = backbone.moduleRequirements();
-      
-    backLog('Backbone Events registered: ', registeredEvents);
-    backLog('Required: ', requiredEvents);
-
-    backbone.initializeModules(function(err)
-    {
-      backLog("Finished Module Init");
-      finished(err, {logger: backLog, emitter: backEmit, backbone: backbone, qCall: qBackboneResponse});
-    });
-}
-});
-require.register("pbencoding/picbreeder-encoding.js", function(exports, require, module){
-//here we test the insert functions
-//making sure the database is filled with objects of the schema type
-// var wMath = require('win-utils').math;
-
-var picbreederSchema = require("./picbreederSchema.js");
-
-module.exports = pbEncoding;
-
-function pbEncoding(backbone, globalConfig, localConfig)
-{
-	var self = this;
-
-	//boom, let's get right into the business of encoding
-	self.winFunction = "encoding";
-
-    //for convenience, this is our artifact type
-	self.encodingName = "picArtifact";
-
-	self.log = backbone.getLogger(self);
-	//only vital stuff goes out for normal logs
-	self.log.logLevel = localConfig.logLevel || self.log.normal;
-
-	self.eventCallbacks = function()
-	{ 
-		return {
-			// //easy to handle neat geno full offspring
-			// "encoding:iesor-createNonReferenceOffspring" : function(genProps, parentProps, sessionObject, done) { 
-				
-   //              //session might be undefined -- depending on win-gen behavior
-   //              //make sure session exists
-   //              sessionObject = sessionObject || {};
-
-			// 	//need to engage parent creation here -- could be complicated
-			// 	var parents = parentProps.parents;
-
-   //              //how many to make
-			// 	var count = genProps.count;
-
-   //              //these will be the final objects to return
-			// 	var allParents = [];
-			// 	var children = [];
-
-			// 	//pull potential forced parents
-			// 	var forced = sessionObject.forceParents;
-
-   //              //go through all the children -- using parents or force parents to create the new offspring
-   //              for(var c=0; c < count; c++)
-   //              {
-   //                  //we simply randomly pull environment from a parent
-   //                  var randomParentIx = wMath.next(parents.length);
-
-   //                  //if we have parents that are forced upon us
-   //                  if(forced){
-   //                      //pull random ix
-   //                      var rIx = wMath.next(forced[c].length);
-   //                      //use random index of forced parent as the actual ix
-   //                      randomParentIx = forced[c][rIx];
-   //                  }
-
-   //                  //our child together!
-   //                  var rOffspring = {};
-
-   //                  //all we need to do (for the current schema)
-   //                  //is to copy the environment
-   //                  rOffspring.meta = JSON.parse(JSON.stringify(parents[randomParentIx].meta));
-
-   //                  //just return our simple object with a randomly chosen environment
-   //                  children.push(rOffspring);
-
-   //                  //random parent was involved, make sure to mark who!
-   //                  allParents.push([randomParentIx]);
-   //              }
-
-			// 	//done, send er back
-			// 	done(undefined, children, allParents);
-
-			//  	return; 
-			//  }
-		};
-	};
-
-	//need to be able to add our schema
-	self.requiredEvents = function() {
-		return [
-			"schema:addSchema"
-		];
-	};
-
-	self.initialize = function(done)
-    {
-    	self.log("Init win-iesor encoding: ", picbreederSchema);
-
-		//how we talk to the backbone by emitting events
-    	var emitter = backbone.getEmitter(self);
-
-		//add our neat genotype schema -- loaded neatschema from another file -- 
-		//this is just the standard neat schema type -- others can make neatjs changes that require a different schema
-        emitter.emit("schema:addSchema", self.encodingName, picbreederSchema, function(err)
-        {
-        	if(err){
-        		done(new Error(err));
-        		return;
-        	}
-        	done();
-        });
-    }
-
-
-	return self;
-}
-});
-require.register("pbencoding/picbreederSchema.js", function(exports, require, module){
-//contains the neat schema setup -- default for neatjs stuff.
-
-//Need a way to override schema inside WIN -- for now, neat comes with its own schema. Will be able to add variations later
-//(for things looking to add extra neat features while still having all the custom code). 
-
-//Alternatively, they could just copy this module, and add their own stuff. Module is small. 
- 
-module.exports = {
-    "genome": { 
-        "$ref" : "NEATGenotype"
-    }
-    //some meta info about this object being stored
-    ,"meta": {
-        "imageTitle": "string",
-        "imageTags": {type: "array", items: {type: "string"}}
-    }
-};
-
-
-
-});
-require.register("win-flexiec/win-flexIEC.js", function(exports, require, module){
-var flexIEC = require('flexIEC');
-var winIEC = require('win-iec');
-
-var emitter = require('emitter');
-
-//we need to combine the two! Also, we're a win module -- so shape up!
-module.exports = winflex;
-
-function winflex(backbone, globalConfig, localConfig)
-{
-	//pull in backbone info, we gotta set our logger/emitter up
-	var self = this;
-
-	self.winFunction = "ui";
-
-	//this is how we talk to win-backbone
-	self.backEmit = backbone.getEmitter(self);
-
-	//grab our logger
-	self.log = backbone.getLogger(self);
-
-	//only vital stuff goes out for normal logs
-	self.log.logLevel = localConfig.logLevel || self.log.normal;
-
-	self.moreThanOneDisplay = localConfig.moreThanOneDisplay || false;
-
-	//we have logger and emitter, set up some of our functions
-
-	self.htmlEvoObjects = {};
-
-	//what events do we need?
-	self.requiredEvents = function()
-	{
-		return [
-			"evolution:loadSeeds",
-			"evolution:getOrCreateOffspring",
-			"evolution:selectParents",
-			"evolution:publishArtifact",
-			"evolution:unselectParents"
-			//in the future we will also need to save objects according to our save tendencies
-		];
-	}
-
-	//what events do we respond to?
-	self.eventCallbacks = function()
-	{ 
-		return {
-			"ui:initializeDisplay" : self.initializeDiv,
-			"ui:ready" : self.ready
-		};
-	}
-
-	var uiCount = 0;
-	var single = false;
-
-	var uiObjects = {};
-
-	self.chooseRandomSeed = function(seedMap)
-	{
-		var seedKeys = Object.keys(seedMap);
-		var rIx = Math.floor(Math.random()*seedKeys.length);
-		return seedKeys[rIx];
-	}
-
-	//initialize 
-	self.initializeDiv = function(seeds, div, flexOptions, done)
-	{
-		if(single && self.moreThanOneDisplay)
-			return;
-
-		if(!seeds.length)
-		{
-			done("Must send at least 1 seed to initialization -- for now");
-			return;
-		}
-
-		if(seeds.length > 1)
-			self.log("Undefined behavior with more than one seed in this UI object. You were warned, sorry :/")
-		//not getting stuck with an undefined issue
-		flexOptions = flexOptions || {};
-
-		//if you only ever allow one div to take over 
-		single = true;
-
-		//seed related -- start generating ids AFTER the seed count -- this is important
-		//why? Because effectively there is a mapping between ids created in the ui and ids of objects created in evoltuion
-		//they stay in sync all the time, except for seeds, where more ids exist than there are visuals. 
-		//for that purpose, seeds occupy [0, startIx), 
-		var startIx = seeds.length;
-		flexOptions.startIx = Math.max(startIx, flexOptions.startIx || 0);
-
-		//part of the issue here is that flexIEC uses the ids as an indicator of order because they are assumed to be numbers
-		//therefor remove oldest uses that info -- but in reality, it just needs to time stamp the creation of evo objects, and this can all be avoided in the future
-		var seedMap = {};
-		for(var i=0; i < seeds.length; i++)
-			seedMap["" + i] = seeds[i];
-
-		//untested if you switch that!
-		var nf = new flexIEC(div, flexOptions);
-
-		//add some stuff to our thing for emitting
-		var uiEmitter = {};
-		emitter(uiEmitter);
-
-		//a parent was selected by flex
-		nf.on('parentSelected', function(eID, eDiv, finished)
-		{
-			//now a parent has been selected -- let's get that parent selection to evolution!
-			 self.backEmit("evolution:selectParents", [eID], function(err, parents)
-			 {
-			 	//index into parent object, grab our single object
-			 	var parent = parents[eID];
-
-			 	//now we use this info and pass it along for other ui business we don't care about
-			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
-			 	uiEmitter.emit('parentSelected', eID, eDiv, parent, finished);
-			 });
-		});
-
-		//parent is no longer rocking it. Sorry to say. 
-		nf.on('parentUnselected', function(eID)
-		{
-			//now a parent has been selected -- let's get that parent selection to evolution!
-			 self.backEmit("evolution:unselectParents", [eID], function(err)
-			 {
-			 	//now we use this info and pass it along for other ui business we don't care about
-			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
-			 	uiEmitter.emit('parentUnselected', eID);
-
-		 		self.log("act pars: ",nf.activeParents());
-			 	//are we empty? fall back to the chosen seed please!
-			 	if(nf.activeParents() == 0)
-			 	 	nf.createParent(self.chooseRandomSeed(seedMap));
-
-			 });
-		});
-
-		//individual created inside the UI system -- let's make a corresponding object in evolution
-		nf.on('createIndividual', function(eID, eDiv, finished)
-		{
-			//let it be known that we are looking for a sweet payday -- them kids derr
-			 self.backEmit("evolution:getOrCreateOffspring", [eID], function(err, allIndividuals)
-			 {
-			 	// console.error("shitidjfdijfdf");
-			 	//we got the juice!
-			 	var individual = allIndividuals[eID];
-
-			 	self.log("Create ind. create returned: ", allIndividuals);
-
-			 	//now we use this info and pass it along for other ui business we don't care about
-			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
-			 	uiEmitter.emit('individualCreated', eID, eDiv, individual, finished);
-			 });
-		});
-
-		nf.on('publishArtifact', function(eID, meta, finished)
-		{
-			//let it be known that we are looking for a sweet payday -- them kids derr
-			 self.backEmit("evolution:publishArtifact", eID, meta, function(err)
-			 {
-			 	if(err)
-			 	{
-			 		uiEmitter.emit('publishError', eID, err);
-			 	}
-			 	else
-			 	{
-			 		uiEmitter.emit('publishSuccess', eID);
-			 	}
-
-			 	//now we are done publishing
-			 	finished();
-
-			 });
-		});
-
-		//might be published-- we are looking at the modal window
-		nf.on('publishShown', function(eID, eDiv, finished)
-		{
-			//we simply send back the indentifier, and where to put your display in the html object
-		 	uiEmitter.emit('publishShown', eID, eDiv, finished);
-		});
-
-		//we hid the object -- maybe animation needs to stop or something, let it be known
-		nf.on('publishHidden', function(eID)
-		{
-			uiEmitter.emit('publishHidden', eID);
-		});
-
-		//this is a temporary measure for now
-		//send the seeds for loading into iec -- there will be a better way to do this in the future
-		self.backEmit("evolution:loadSeeds", seedMap, function(err)
-		{
-			if(err)
-			{
-				done(err);
-			}
-			else
-			{
-				var uID = uiCount++;
-				var uiObj = {uID: uID, ui: nf, emitter: uiEmitter, seeds: seedMap};
-				uiObjects[uID] = uiObj;
-				//send back the ui object
-				done(undefined, uiObj);
-			}
-		});
-	}
-
-	self.ready = function(uID, done)
-	{
-		var uio = uiObjects[uID];
-
-		var nf = uio.ui;
-
-		//pull a random seed to set as the single parent (that's just our choice)
-		//we could pull 2 if they existed, but we don't
-		
-		var parentSeedID = self.chooseRandomSeed(uio.seeds);
-
-		//auto select parent -- this will cause changes to evolution
-		nf.createParent(parentSeedID);
-
-		//start up the display inside of the div passed in
-		nf.ready();
-
-	}
-
-
-	return self;
-}
-});
-require.register("flexstatic/main.js", function(exports, require, module){
-
-var Emitter = require('emitter');
-// var dimensions = require('dimensions');
-
-module.exports = flexstatic; 
-
-var uFlexID = 0;
-
-
-function flexstatic(divValue, reqOptions)
-{
-	// console.log(divValue);
- 
-	var self = this;
-
-	console.log("POP POP!!d!");
-
-	if(!reqOptions || !reqOptions.objectSize || !reqOptions.objectSize.width || !reqOptions.objectSize.height)
-		throw new Error("Can't use flexforever without options or objectSize");
-
-	//deep clone the required options object
-	reqOptions = JSON.parse(JSON.stringify(reqOptions));
-
-	//add emitter properties to this object
-	Emitter(self);
-
-	//add appropriate classes to our given div
-	self.uid = "iec" + uFlexID++;
-
-	self.objectSize = reqOptions.objectSize;
-
-	reqOptions.extraHeightPerObject = reqOptions.extraHeightPerObject || 0;
-
-	//for external ids, where should we start -- not necessarily 0!
-	self.startIx = reqOptions.startIx || 0;
-
-	//add a certain amount to our height object to compensate for any additional padding
-	self.objectSize.height = self.objectSize.height + reqOptions.extraHeightPerObject;
-
-	var fstatBase = self.uid + "-fstatic-#@#";
-	var outerFlexID = fstatBase.replace(/#@#/g, "container");
-	var wrapFlexID = fstatBase.replace(/#@#/g, "wrapper");
-	
-	//console check!
-	// console.log('Base: ', fstatBase, " contain: ", outerFlexID, " wrap: ", wrapFlexID);
-
-	//set the innerHTML of the supplied div to now be setup for swiper integration
-	divValue.innerHTML = "<div id=\"" + outerFlexID + "\" class=\"fstat-container\">" + 
-	// "<div id=" + wrapFlexID + " class=\"fstat-wrapper\">" + 
-	// "</div>" +
-	"</div>";
-
-	self.borderSize = 1;
-
-	// console.log(divValue.innerHTML);
-
-	// var innerWrapper = document.querySelector("#" + wrapFlexID);
-	var outerContainer = document.querySelector("#" + outerFlexID);
-	// var dimWrapper = dimensions(innerWrapper);
-
-	var itemsPerRow = function()
-	{
-		// console.log("Outer: ", outerContainer.offsetWidth, " objects: " , (self.objectSize.width + 2*(self.objectSize.rowMargin || 0 )));
-		return Math.floor(outerContainer.offsetWidth/(self.objectSize.width + 2*(self.objectSize.rowMargin || 0)));
-	}
-
-	var itemsPerColumn = function()
-	{
-		return Math.floor(outerContainer.offsetHeight/(self.objectSize.height + 2*(self.objectSize.columnMargin || 0)));
-	}
-
-	var maxItemsPerPage = function()
-	{
-		//the number = number holdable in a row * number of columns
-		//at least 1 will be created -- old code -- maybe later
-		return Math.max(itemsPerRow()*itemsPerColumn(), 0);// 1);
-	}
-
-	var itemsOnPage, itemStart, flexInner;
-
-	var htmlObjects = {};
-	var itemCount = 0;
-	var itemsOnScreen = 0;
-
-	var init = false;
-	self.initialize = function()
-	{
-		// console.log("Begin init!");
-		if(init)
-			return;
-
-		//don't do this multiple times
-		init = true;
-
-		var flexID = self.uid + "-flex-inner";
-		outerContainer.innerHTML = "<div id=\"" + flexID + "\" class=\"flexvcenter\" style=\"border: 1px solid black; height:100%;\"></div>";
-
-		flexInner = document.querySelector("#"+flexID);
-
-		//need to fill our current box with everything we can fit
-		var maxIPP = maxItemsPerPage();
-
-		itemStart = 0;
-
-
-		for(var i=0; i < maxIPP; i++)
-		{
-			var el = internalCreate(i);
-			itemsOnScreen++;
-			flexInner.appendChild(el);
-		}
-	}
-
-	function externalID(i)
-	{
-		return i + self.startIx;
-	}
-
-	function internalCreate(i)
-	{
-		var el = createElement(i);
-		htmlObjects[i] = el;
-		itemCount++;
-		self.emit('elementCreated', externalID(i), el);
-		return el;
-	}
-
-
-	self.removeExcessChildren = function()
-	{
-		var aRemove = [];
-		//if you have too many chilrdren, the extras have to go!
-		for(var i = itemsOnScreen; i < flexInner.children.length; i++)
-		{
-			aRemove.push(flexInner.children[i]);
-		}
-		aRemove.forEach(function(rm)
-		{
-			flexInner.removeChild(rm);
-		});
-	}
-	self.previousPage = function()
-	{
-		//no going left when no more room
-		if(itemStart == 0)
-			return;
-		//we're going to the previous page -- this won't require creating a bunch of elements
-		var maxIPP = maxItemsPerPage();
-
-		//hide the current elements
-		for(var i= itemStart; i < itemStart + itemsOnScreen; i++)
-		{
-			self.emit('elementHidden', externalID(i), htmlObjects[i]);
-		}
-
-		//we can't go below 0!
-		var movement = Math.min(itemStart, maxIPP);
-
-		//going backwards a mighty step!
-		itemStart -= movement;
-
-		//items on csreen changes
-		itemsOnScreen = movement;
-
-		//Loop through and pull the relevant children
-		for(var i=itemStart; i < itemStart + movement; i++)
-		{
-			var el = htmlObjects[i];
-			self.emit('elementVisible', externalID(i));
-
-			if(flexInner.children.length > i - itemStart)
-				//replace the children of our container
-				flexInner.replaceChild(el, flexInner.children[i-itemStart]);
-			else
-				flexInner.appendChild(el);	
-		}
-
-		self.removeExcessChildren();
-	}
-
-	self.nextPage = function()
-	{
-		//we're going to the next page -- this might require creating a new bunch of elements
-		var maxIPP = maxItemsPerPage();
-
-		console.log("Maxpp: ", maxIPP);
-
-		//hide the current elements
-		for(var i= itemStart; i < itemStart + itemsOnScreen; i++)
-		{
-			self.emit('elementHidden', externalID(i), htmlObjects[i]);
-		}
-
-		//now let's move to the next page
-		itemStart += itemsOnScreen;
-
-		//reset items on screen 
-		itemsOnScreen = maxIPP;
-
-		//and create if necessary
-		for(var i=itemStart; i < itemStart + maxIPP; i++)
-		{
-			var el = htmlObjects[i];
-			
-			//we already made this object
-			if(el)
-			{
-				self.emit('elementVisible', externalID(i), el);
-			}
-			else
-			{
-				el = internalCreate(i);
-			}
-
-			//replace the child -- or append it depending on circumstances
-			if(flexInner.children.length > i - itemStart)
-				flexInner.replaceChild(el, flexInner.children[i-itemStart]);
-			else
-				flexInner.appendChild(el);	
-		}
-
-		self.removeExcessChildren();
-	}
-
-	var objectIDToUID = function(idCount)
-	{
-		return self.uid + "-object-" + externalID(idCount);
-	}
-
-	//create an element from scratch (using the given identifier)
-	var createElement = function(ix)
-	{
-		var element = document.createElement('div');
-		var objectUID = objectIDToUID(ix);
-
-		element.id = objectUID;
-		element.style.width = self.objectSize.width + "px";
-		element.style.height = self.objectSize.height + "px";
-
-		element.style.marginLeft = self.objectSize.rowMargin + "px" || 0;
-		element.style.marginRight = self.objectSize.rowMargin + "px" || 0;
-
-		element.style.marginTop = self.objectSize.columnMargin + "px" || 0;
-		element.style.marginBottom = self.objectSize.columnMargin + "px" || 0;
-
-		// element.style.border = (self.borderSize ? (self.borderSize + "px solid black") : 0);
-
-		//make it a border class element
-		element.className += "border";
-
-		element.style.overflow = "hidden";
-
-		return element;
-	}
-
-	return self;
-}
-
-
-
-
-});
-require.register("ramitos-resize/src/resize.js", function(exports, require, module){
-var binds = {};
-
-module.exports.bind = function (element, cb, ms) {
-  if(!binds[element]) binds[element] = {};
-  var height = element.offsetHeight;
-  var width = element.offsetWidth;
-  if(!ms) ms = 250;
-  
-  binds[element][cb] = setInterval(function () {
-    if((width === element.offsetWidth) && (height === element.offsetHeight)) return;
-    height = element.offsetHeight;
-    width = element.offsetWidth;
-    cb(element);
-  }, ms);
-};
-
-module.exports.unbind = function (element, cb) {
-  if(!binds[element][cb]) return;
-  clearInterval(binds[element][cb]);
-};
-});
-require.register("flexparents/main.js", function(exports, require, module){
-
-var Emitter = require('emitter');
-var resize = require('resize');
-// var dimensions = require('dimensions');
-
-module.exports = parentList; 
-
-var uFlexID = 0;
-
-function parentList(divValue, reqOptions)
-{
-	// console.log(divValue);
- 
-	var self = this;
-
-	if(!reqOptions || !reqOptions.objectSize || !reqOptions.objectSize.width || !reqOptions.objectSize.height)
-		throw new Error("Can't use flexforever without options or objectSize");
-
-	//deep clone the required options object
-	reqOptions = JSON.parse(JSON.stringify(reqOptions));
-
-	//prepend the new objects
-	self.append = reqOptions.append || false;
-
-	//add emitter properties to this object
-	Emitter(self);
-
-	//add appropriate classes to our given div
-	self.uid = "plist" + uFlexID++;
-
-	self.objectSize = reqOptions.objectSize;
-	// console.log(reqOptions.maxItemCount);
-	//we auto determin
-	self.autoDetermineMax = reqOptions.autoDetermineMax == undefined ? true : reqOptions.autoDetermineMax;
-
-	self.maxItemCount = reqOptions.maxItemCount || Number.MAX_VALUE;
-
-	reqOptions.extraHeightPerObject = reqOptions.extraHeightPerObject || 0;
-
-	//add a certain amount to our height object to compensate for any additional padding
-	self.objectSize.height = self.objectSize.height + reqOptions.extraHeightPerObject;
-
-	var plistBase = self.uid + "-#@#";
-	var outerFlexID = plistBase.replace(/#@#/g, "container");
-	
-	//set the innerHTML of the supplied div to now be setup for swiper integration
-	divValue.innerHTML = "<div id=" + outerFlexID + " class=\"plist-container parentflex\" style=\"border: 1px solid black; height:100%;\">" 
-	+ "</div>";
-
-
-	var outerContainer = document.querySelector("#" + outerFlexID);
-
-	var itemsPerColumn = function()
-	{
-		return Math.floor(outerContainer.offsetHeight/(self.objectSize.height + 2*(self.objectSize.columnMargin || 0 + self.borderSize)));
-	}
-
-	if(self.autoDetermineMax)
-	{
-		self.maxItemCount = itemsPerColumn();
-		// console.log("Max items: ", self.maxItemCount);
-	}
-
-	resize.bind(outerContainer, function()
-	{
-		//we've received a resize event 
-		//adjust element counts and the like
-		if(self.autoDetermineMax)
-			self.maxItemCount = itemsPerColumn();
-
-		// console.log("Size change deteced, max items: ", self.maxItemCount);
-
-
-		if(activeElements > self.maxItemCount)
-		{
-			//don't remove EVERYTHING -- need to leave 1 element no matter what size
-			var max = Math.max(1, self.maxItemCount);
-
-			for(var i = max; i < activeElements; i++)
-			{
-				//remove oldest first always -- however many times we need to do this
-				self.removeOldest();
-			}
-		}
-	})
-
-
-	self.borderSize = 1;
-
-	var nextItem = 0;
-	var activeElements = 0;
-	
-	var htmlObjects = {};
-	var dataObjects = {};
-
-	//internal create the parent
-	function internalCreate(i, data)
-	{
-		// console.log("\t\thapkjsdflkjsdflkjsdlfkj: calling create: ", i, " d: ", data)
-		var el = createElement(i);
-		htmlObjects[i] = el;
-		dataObjects[i] = data;
-		activeElements++;
-		self.emit('elementCreated', data, i, el);
-		return el;
-	}
-
-	self.activeParents = function(){return activeElements;};
-
-	//really simple, just append to our container a new element
-	self.addElement = function(data)
-	{
-		var newID = nextItem++;
-
-		var el = internalCreate(newID, data);
-
-		// console.log("activeElements: ", activeElements, " count: ", self.maxItemCount)
-			//need to remove the lowest element
-		if(activeElements > self.maxItemCount)
-			self.removeOldest();
-
-		//prepend
-		if(!self.append)
-			outerContainer.insertBefore(el, outerContainer.firstChild);
-		else //otherwise we're appending the object
-			outerContainer.append(el);
-	}
-	self.removeOldest = function()
-	{
-		var keys = Object.keys(htmlObjects);
-		keys.sort(function(a,b){return parseInt(a) - parseInt(b);});
-
-		//grab the lowest key we have
-		var rmKey = keys[0];
-
-		//now we remove that object at the bottom of the list
-		self.removeElement(rmKey);		
-	}
-
-	self.removeElement = function(id)
-	{
-		// console.log("Removing: ", id);
-		//get the object from our list of objects
-		var el = htmlObjects[id];
-		var data = dataObjects[id];
-
-		//minus an element
-		activeElements--;
-
-		//let it be known, it's over! We're about to remove the parent
-		self.emit('elementRemoved', data, id);
-
-		//remove the object!
-		outerContainer.removeChild(el);
-
-		delete htmlObjects[id];
-		delete dataObjects[id];
-
-	}
-
-	self.removeRandom = function()
-	{
-		var keys = Object.keys(htmlObjects);
-		var rmIx = Math.floor(Math.random()*keys.length);
-
-		//jusst remove something random -- for testing purposes
-		self.removeElement(keys[rmIx]);
-	}
-
-	var objectIDToUID = function(idCount)
-	{
-		return self.uid + "-object-" + idCount;
-	}
-
-	var getElement = function(ix)
-	{
-		var objectUID = objectIDToUID(ix);
-		return htmlObjects[objectUID];
-	}
-
-	//create an element from scratch (using the given identifier)
-	var createElement = function(ix)
-	{
-		var element = document.createElement('div');
-		var objectUID = objectIDToUID(ix);
-
-		element.id = objectUID;
-		element.style.width = self.objectSize.width + "px";
-		element.style.height = self.objectSize.height + "px";
-
-		element.style.marginLeft = self.objectSize.rowMargin + "px" || 0;
-		element.style.marginRight = self.objectSize.rowMargin + "px" || 0;
-
-		element.style.marginTop = self.objectSize.columnMargin + "px" || 0;
-		element.style.marginBottom = self.objectSize.columnMargin + "px" || 0;
-
-		// element.style.border = (self.borderSize ? (self.borderSize + "px solid black") : 0);
-
-		//make it a border class element
-		element.className += "border pobject";
-
-		element.style.overflow = "hidden";
-
-		return element;
-	}
-
-	return self;
-}
-
-
-
-
-});
-require.register("component-event/index.js", function(exports, require, module){
-var bind = window.addEventListener ? 'addEventListener' : 'attachEvent',
-    unbind = window.removeEventListener ? 'removeEventListener' : 'detachEvent',
-    prefix = bind !== 'addEventListener' ? 'on' : '';
-
-/**
- * Bind `el` event `type` to `fn`.
- *
- * @param {Element} el
- * @param {String} type
- * @param {Function} fn
- * @param {Boolean} capture
- * @return {Function}
- * @api public
- */
-
-exports.bind = function(el, type, fn, capture){
-  el[bind](prefix + type, fn, capture || false);
-  return fn;
-};
-
-/**
- * Unbind `el` event `type`'s callback `fn`.
- *
- * @param {Element} el
- * @param {String} type
- * @param {Function} fn
- * @param {Boolean} capture
- * @return {Function}
- * @api public
- */
-
-exports.unbind = function(el, type, fn, capture){
-  el[unbind](prefix + type, fn, capture || false);
-  return fn;
-};
-});
-require.register("discore-closest/index.js", function(exports, require, module){
-var matches = require('matches-selector')
-
-module.exports = function (element, selector, checkYoSelf, root) {
-  element = checkYoSelf ? {parentNode: element} : element
-
-  root = root || document
-
-  // Make sure `element !== document` and `element != null`
-  // otherwise we get an illegal invocation
-  while ((element = element.parentNode) && element !== document) {
-    if (matches(element, selector))
-      return element
-    // After `matches` on the edge case that
-    // the selector matches the root
-    // (when the root is not the document)
-    if (element === root)
-      return  
-  }
-}
-});
-require.register("component-delegate/index.js", function(exports, require, module){
-/**
- * Module dependencies.
- */
-
-var closest = require('closest')
-  , event = require('event');
-
-/**
- * Delegate event `type` to `selector`
- * and invoke `fn(e)`. A callback function
- * is returned which may be passed to `.unbind()`.
- *
- * @param {Element} el
- * @param {String} selector
- * @param {String} type
- * @param {Function} fn
- * @param {Boolean} capture
- * @return {Function}
- * @api public
- */
-
-exports.bind = function(el, selector, type, fn, capture){
-  return event.bind(el, type, function(e){
-    var target = e.target || e.srcElement;
-    e.delegateTarget = closest(target, selector, true, el);
-    if (e.delegateTarget) fn.call(el, e);
-  }, capture);
-};
-
-/**
- * Unbind event `type`'s callback `fn`.
- *
- * @param {Element} el
- * @param {String} type
- * @param {Function} fn
- * @param {Boolean} capture
- * @api public
- */
-
-exports.unbind = function(el, type, fn, capture){
-  event.unbind(el, type, fn, capture);
-};
-
-});
-require.register("component-events/index.js", function(exports, require, module){
-
-/**
- * Module dependencies.
- */
-
-var events = require('event');
-var delegate = require('delegate');
-
-/**
- * Expose `Events`.
- */
-
-module.exports = Events;
-
-/**
- * Initialize an `Events` with the given
- * `el` object which events will be bound to,
- * and the `obj` which will receive method calls.
- *
- * @param {Object} el
- * @param {Object} obj
- * @api public
- */
-
-function Events(el, obj) {
-  if (!(this instanceof Events)) return new Events(el, obj);
-  if (!el) throw new Error('element required');
-  if (!obj) throw new Error('object required');
-  this.el = el;
-  this.obj = obj;
-  this._events = {};
-}
-
-/**
- * Subscription helper.
- */
-
-Events.prototype.sub = function(event, method, cb){
-  this._events[event] = this._events[event] || {};
-  this._events[event][method] = cb;
-};
-
-/**
- * Bind to `event` with optional `method` name.
- * When `method` is undefined it becomes `event`
- * with the "on" prefix.
- *
- * Examples:
- *
- *  Direct event handling:
- *
- *    events.bind('click') // implies "onclick"
- *    events.bind('click', 'remove')
- *    events.bind('click', 'sort', 'asc')
- *
- *  Delegated event handling:
- *
- *    events.bind('click li > a')
- *    events.bind('click li > a', 'remove')
- *    events.bind('click a.sort-ascending', 'sort', 'asc')
- *    events.bind('click a.sort-descending', 'sort', 'desc')
- *
- * @param {String} event
- * @param {String|function} [method]
- * @return {Function} callback
- * @api public
- */
-
-Events.prototype.bind = function(event, method){
-  var e = parse(event);
-  var el = this.el;
-  var obj = this.obj;
-  var name = e.name;
-  var method = method || 'on' + name;
-  var args = [].slice.call(arguments, 2);
-
-  // callback
-  function cb(){
-    var a = [].slice.call(arguments).concat(args);
-    obj[method].apply(obj, a);
-  }
-
-  // bind
-  if (e.selector) {
-    cb = delegate.bind(el, e.selector, name, cb);
-  } else {
-    events.bind(el, name, cb);
-  }
-
-  // subscription for unbinding
-  this.sub(name, method, cb);
-
-  return cb;
-};
-
-/**
- * Unbind a single binding, all bindings for `event`,
- * or all bindings within the manager.
- *
- * Examples:
- *
- *  Unbind direct handlers:
- *
- *     events.unbind('click', 'remove')
- *     events.unbind('click')
- *     events.unbind()
- *
- * Unbind delegate handlers:
- *
- *     events.unbind('click', 'remove')
- *     events.unbind('click')
- *     events.unbind()
- *
- * @param {String|Function} [event]
- * @param {String|Function} [method]
- * @api public
- */
-
-Events.prototype.unbind = function(event, method){
-  if (0 == arguments.length) return this.unbindAll();
-  if (1 == arguments.length) return this.unbindAllOf(event);
-
-  // no bindings for this event
-  var bindings = this._events[event];
-  if (!bindings) return;
-
-  // no bindings for this method
-  var cb = bindings[method];
-  if (!cb) return;
-
-  events.unbind(this.el, event, cb);
-};
-
-/**
- * Unbind all events.
- *
- * @api private
- */
-
-Events.prototype.unbindAll = function(){
-  for (var event in this._events) {
-    this.unbindAllOf(event);
-  }
-};
-
-/**
- * Unbind all events for `event`.
- *
- * @param {String} event
- * @api private
- */
-
-Events.prototype.unbindAllOf = function(event){
-  var bindings = this._events[event];
-  if (!bindings) return;
-
-  for (var method in bindings) {
-    this.unbind(event, method);
-  }
-};
-
-/**
- * Parse `event`.
- *
- * @param {String} event
- * @return {Object}
- * @api private
- */
-
-function parse(event) {
-  var parts = event.split(/ +/);
-  return {
-    name: parts.shift(),
-    selector: parts.join(' ')
-  }
-}
-
-});
-require.register("component-bind/index.js", function(exports, require, module){
-/**
- * Slice reference.
- */
-
-var slice = [].slice;
-
-/**
- * Bind `obj` to `fn`.
- *
- * @param {Object} obj
- * @param {Function|String} fn or string
- * @return {Function}
- * @api public
- */
-
-module.exports = function(obj, fn){
-  if ('string' == typeof fn) fn = obj[fn];
-  if ('function' != typeof fn) throw new Error('bind() requires a function');
-  var args = slice.call(arguments, 2);
-  return function(){
-    return fn.apply(obj, args.concat(slice.call(arguments)));
-  }
-};
-
-});
-require.register("component-trim/index.js", function(exports, require, module){
-
-exports = module.exports = trim;
-
-function trim(str){
-  if (str.trim) return str.trim();
-  return str.replace(/^\s*|\s*$/g, '');
-}
-
-exports.left = function(str){
-  if (str.trimLeft) return str.trimLeft();
-  return str.replace(/^\s*/, '');
-};
-
-exports.right = function(str){
-  if (str.trimRight) return str.trimRight();
-  return str.replace(/\s*$/, '');
-};
-
-});
-require.register("component-keyname/index.js", function(exports, require, module){
-
-/**
- * Key name map.
- */
-
-var map = {
-  8: 'backspace',
-  9: 'tab',
-  13: 'enter',
-  16: 'shift',
-  17: 'ctrl',
-  18: 'alt',
-  20: 'capslock',
-  27: 'esc',
-  32: 'space',
-  33: 'pageup',
-  34: 'pagedown',
-  35: 'end',
-  36: 'home',
-  37: 'left',
-  38: 'up',
-  39: 'right',
-  40: 'down',
-  45: 'ins',
-  46: 'del',
-  91: 'meta',
-  93: 'meta',
-  224: 'meta'
-};
-
-/**
- * Return key name for `n`.
- *
- * @param {Number} n
- * @return {String}
- * @api public
- */
-
-module.exports = function(n){
-  return map[n];
-};
-});
-require.register("component-set/index.js", function(exports, require, module){
-
-/**
- * Expose `Set`.
- */
-
-module.exports = Set;
-
-/**
- * Initialize a new `Set` with optional `vals`
- *
- * @param {Array} vals
- * @api public
- */
-
-function Set(vals) {
-  if (!(this instanceof Set)) return new Set(vals);
-  this.vals = [];
-  if (vals) {
-    for (var i = 0; i < vals.length; ++i) {
-      this.add(vals[i]);
-    }
-  }
-}
-
-/**
- * Add `val`.
- *
- * @param {Mixed} val
- * @api public
- */
-
-Set.prototype.add = function(val){
-  if (this.has(val)) return;
-  this.vals.push(val);
-};
-
-/**
- * Check if this set has `val`.
- *
- * @param {Mixed} val
- * @return {Boolean}
- * @api public
- */
-
-Set.prototype.has = function(val){
-  return !! ~this.indexOf(val);
-};
-
-/**
- * Return the indexof `val`.
- *
- * @param {Mixed} val
- * @return {Number}
- * @api private
- */
-
-Set.prototype.indexOf = function(val){
-  for (var i = 0, len = this.vals.length; i < len; ++i) {
-    var obj = this.vals[i];
-    if (obj.equals && obj.equals(val)) return i;
-    if (obj == val) return i;
-  }
-  return -1;
-};
-
-/**
- * Iterate each member and invoke `fn(val)`.
- *
- * @param {Function} fn
- * @return {Set}
- * @api public
- */
-
-Set.prototype.each = function(fn){
-  for (var i = 0; i < this.vals.length; ++i) {
-    fn(this.vals[i]);
-  }
-  return this;
-};
-
-/**
- * Return the values as an array.
- *
- * @return {Array}
- * @api public
- */
-
-Set.prototype.values =
-Set.prototype.array =
-Set.prototype.members =
-Set.prototype.toJSON = function(){
-  return this.vals;
-};
-
-/**
- * Return the set size.
- *
- * @return {Number}
- * @api public
- */
-
-Set.prototype.size = function(){
-  return this.vals.length;
-};
-
-/**
- * Empty the set and return old values.
- *
- * @return {Array}
- * @api public
- */
-
-Set.prototype.clear = function(){
-  var old = this.vals;
-  this.vals = [];
-  return old;
-};
-
-/**
- * Remove `val`, returning __true__ when present, otherwise __false__.
- *
- * @param {Mixed} val
- * @return {Mixed}
- * @api public
- */
-
-Set.prototype.remove = function(val){
-  var i = this.indexOf(val);
-  if (~i) this.vals.splice(i, 1);
-  return !! ~i;
-};
-
-/**
- * Perform a union on `set`.
- *
- * @param {Set} set
- * @return {Set} new set
- * @api public
- */
-
-Set.prototype.union = function(set){
-  var ret = new Set;
-  var a = this.vals;
-  var b = set.vals;
-  for (var i = 0; i < a.length; ++i) ret.add(a[i]);
-  for (var i = 0; i < b.length; ++i) ret.add(b[i]);
-  return ret;
-};
-
-/**
- * Perform an intersection on `set`.
- *
- * @param {Set} set
- * @return {Set} new set
- * @api public
- */
-
-Set.prototype.intersect = function(set){
-  var ret = new Set;
-  var a = this.vals;
-  var b = set.vals;
-
-  for (var i = 0; i < a.length; ++i) {
-    if (set.has(a[i])) {
-      ret.add(a[i]);
-    }
-  }
-
-  for (var i = 0; i < b.length; ++i) {
-    if (this.has(b[i])) {
-      ret.add(b[i]);
-    }
-  }
-
-  return ret;
-};
-
-/**
- * Check if the set is empty.
- *
- * @return {Boolean}
- * @api public
- */
-
-Set.prototype.isEmpty = function(){
-  return 0 == this.vals.length;
-};
-
-
-});
-require.register("stephenmathieson-normalize/index.js", function(exports, require, module){
-
-/**
- * Normalize the events provided to `fn`
- *
- * @api public
- * @param {Function|Event} fn
- * @return {Function|Event}
- */
-
-exports = module.exports = function (fn) {
-  // handle functions which are passed an event
-  if (typeof fn === 'function') {
-    return function (event) {
-      event = exports.normalize(event);
-      fn.call(this, event);
-    };
-  }
-
-  // just normalize the event
-  return exports.normalize(fn);
-};
-
-/**
- * Normalize the given `event`
- *
- * @api private
- * @param {Event} event
- * @return {Event}
- */
-
-exports.normalize = function (event) {
-  event = event || window.event;
-
-  event.target = event.target || event.srcElement;
-
-  event.which = event.which ||  event.keyCode || event.charCode;
-
-  event.preventDefault = event.preventDefault || function () {
-    this.returnValue = false;
-  };
-
-  event.stopPropagation = event.stopPropagation || function () {
-    this.cancelBubble = true;
-  };
-
-  return event;
-};
-
-});
-require.register("component-pillbox/index.js", function(exports, require, module){
-/**
- * Module dependencies.
- */
-
-var Emitter = require('emitter')
-  , keyname = require('keyname')
-  , events = require('events')
-  , each = require('each')
-  , Set = require('set')
-  , bind = require('bind')
-  , trim = require('trim')
-  , normalize = require('normalize');
-
-/**
- * Expose `Pillbox`.
- */
-
-module.exports = Pillbox
-
-/**
- * Initialize a `Pillbox` with the given
- * `input` element and `options`.
- *
- * @param {Element} input
- * @param {Object} options
- * @api public
- */
-
-function Pillbox(input, options) {
-  if (!(this instanceof Pillbox)) return new Pillbox(input, options);
-  this.options = options || {}
-  this.input = input;
-  this.tags = new Set;
-  this.el = document.createElement('div');
-  this.el.className = 'pillbox';
-  try {
-    this.el.style = input.style;
-  } catch (e) {
-    // IE8 just can't handle this
-  }
-  input.parentNode.insertBefore(this.el, input);
-  input.parentNode.removeChild(input);
-  this.el.appendChild(input);
-  this.events = events(this.el, this);
-  this.bind();
-}
-
-/**
- * Mixin emitter.
- */
-
-Emitter(Pillbox.prototype);
-
-/**
- * Bind internal events.
- *
- * @return {Pillbox}
- * @api public
- */
-
-Pillbox.prototype.bind = function(){
-  this.events.bind('click');
-  this.events.bind('keydown');
-  return this;
-};
-
-/**
- * Unbind internal events.
- *
- * @return {Pillbox}
- * @api public
- */
-
-Pillbox.prototype.unbind = function(){
-  this.events.unbind();
-  return this;
-};
-
-/**
- * Handle keyup.
- *
- * @api private
- */
-
-Pillbox.prototype.onkeydown = normalize(function(e){
-  switch (keyname(e.which)) {
-    case 'enter':
-      e.preventDefault();
-      this.add(e.target.value);
-      e.target.value = '';
-      break;
-    case 'space':
-      if (this.options.space === false || this.options.allowSpace === true) 
-        return;
-      e.preventDefault();
-      this.add(e.target.value);
-      e.target.value = '';
-      break;
-    case 'backspace':
-      if ('' == e.target.value) {
-        this.remove(this.last());
-      }
-      break;
-  }
-});
-
-/**
- * Handle click.
- *
- * @api private
- */
-
-Pillbox.prototype.onclick = function(){
-  this.input.focus();
-};
-
-/**
- * Set / Get all values.
- *
- * @param {Array} vals
- * @return {Array|Pillbox}
- * @api public
- */
-
-Pillbox.prototype.values = function(vals){
-  var self = this;
-
-  if (0 == arguments.length) {
-    return this.tags.values();
-  }
-
-  each(vals, function(value){
-    self.add(value);
-  });
-
-  return this;
-};
-
-/**
- * Return the last member of the set.
- *
- * @return {String}
- * @api private
- */
-
-Pillbox.prototype.last = function(){
-  return this.tags.vals[this.tags.vals.length - 1];
-};
-
-/**
- * Add `tag`.
- *
- * @param {String} tag
- * @return {Pillbox} self
- * @api public
- */
-
-Pillbox.prototype.add = function(tag) {
-  var self = this
-  tag = trim(tag);
-
-  // blank
-  if ('' == tag) return;
-
-  // exists
-  if (this.tags.has(tag)) return;
-
-  // lowercase
-  if (this.options.lowercase) tag = tag.toLowerCase();
-
-  // add it
-  this.tags.add(tag);
-
-  // list item
-  var span = document.createElement('span');
-  span.setAttribute('data', tag);
-  span.appendChild(document.createTextNode(tag));
-  span.onclick = function(e) {
-    e.preventDefault();
-    self.input.focus();
-  };
-
-  // delete link
-  var del = document.createElement('a');
-  del.appendChild(document.createTextNode('✕'));
-  del.href = '#';
-  del.onclick = bind(this, this.remove, tag);
-  span.appendChild(del);
-
-  this.el.insertBefore(span, this.input);
-  this.emit('add', tag);
-
-  return this;
-}
-
-/**
- * Remove `tag`.
- *
- * @param {String} tag
- * @return {Pillbox} self
- * @api public
- */
-
-Pillbox.prototype.remove = function(tag) {
-  if (!this.tags.has(tag)) return this;
-  this.tags.remove(tag);
-
-  var span;
-  for (var i = 0; i < this.el.childNodes.length; ++i) {
-    span = this.el.childNodes[i];
-    if (tag == span.getAttribute('data')) break;
-  }
-
-  this.el.removeChild(span);
-  this.emit('remove', tag);
-
-  return this;
-}
-
-});
-require.register("component-domify/index.js", function(exports, require, module){
-
-/**
- * Expose `parse`.
- */
-
-module.exports = parse;
-
-/**
- * Wrap map from jquery.
- */
-
-var map = {
-  legend: [1, '<fieldset>', '</fieldset>'],
-  tr: [2, '<table><tbody>', '</tbody></table>'],
-  col: [2, '<table><tbody></tbody><colgroup>', '</colgroup></table>'],
-  _default: [0, '', '']
-};
-
-map.td =
-map.th = [3, '<table><tbody><tr>', '</tr></tbody></table>'];
-
-map.option =
-map.optgroup = [1, '<select multiple="multiple">', '</select>'];
-
-map.thead =
-map.tbody =
-map.colgroup =
-map.caption =
-map.tfoot = [1, '<table>', '</table>'];
-
-map.text =
-map.circle =
-map.ellipse =
-map.line =
-map.path =
-map.polygon =
-map.polyline =
-map.rect = [1, '<svg xmlns="http://www.w3.org/2000/svg" version="1.1">','</svg>'];
-
-/**
- * Parse `html` and return the children.
- *
- * @param {String} html
- * @return {Array}
- * @api private
- */
-
-function parse(html) {
-  if ('string' != typeof html) throw new TypeError('String expected');
-  
-  // tag name
-  var m = /<([\w:]+)/.exec(html);
-  if (!m) return document.createTextNode(html);
-
-  html = html.replace(/^\s+|\s+$/g, ''); // Remove leading/trailing whitespace
-
-  var tag = m[1];
-
-  // body support
-  if (tag == 'body') {
-    var el = document.createElement('html');
-    el.innerHTML = html;
-    return el.removeChild(el.lastChild);
-  }
-
-  // wrap map
-  var wrap = map[tag] || map._default;
-  var depth = wrap[0];
-  var prefix = wrap[1];
-  var suffix = wrap[2];
-  var el = document.createElement('div');
-  el.innerHTML = prefix + html + suffix;
-  while (depth--) el = el.lastChild;
-
-  // one element
-  if (el.firstChild == el.lastChild) {
-    return el.removeChild(el.firstChild);
-  }
-
-  // several elements
-  var fragment = document.createDocumentFragment();
-  while (el.firstChild) {
-    fragment.appendChild(el.removeChild(el.firstChild));
-  }
-
-  return fragment;
-}
-
-});
-require.register("segmentio-overlay/lib/index.js", function(exports, require, module){
-var template = require('./index.html');
-var domify = require('domify');
-var emitter = require('emitter');
-var showable = require('showable');
-var classes = require('classes');
-
-/**
- * Export `Overlay`
- */
-module.exports = Overlay;
-
-
-/**
- * Initialize a new `Overlay`.
- *
- * @param {Element} target The element to attach the overlay to
- * @api public
- */
-
-function Overlay(target) {
-  if(!(this instanceof Overlay)) return new Overlay(target);
-
-  this.target = target || document.body;
-  this.el = domify(template);
-  this.el.addEventListener('click', this.handleClick.bind(this));
-
-  var el = this.el;
-  var parent = this.target;
-
-  this.on('showing', function(){
-    parent.appendChild(el);
-  });
-
-  this.on('hide', function(){
-    parent.removeChild(el);
-  });
-}
-
-
-/**
- * When the overlay is click, emit an event so that
- * the view that is using this overlay can choose
- * to close the overlay if they want
- *
- * @param {Event} e
- */
-Overlay.prototype.handleClick = function(e){
-  this.emit('click', e);
-};
-
-
-/**
- * Mixins
- */
-emitter(Overlay.prototype);
-showable(Overlay.prototype);
-classes(Overlay.prototype);
-});
-require.register("timoxley-next-tick/index.js", function(exports, require, module){
-"use strict"
-
-if (typeof setImmediate == 'function') {
-  module.exports = function(f){ setImmediate(f) }
-}
-// legacy node.js
-else if (typeof process != 'undefined' && typeof process.nextTick == 'function') {
-  module.exports = process.nextTick
-}
-// fallback for other environments / postMessage behaves badly on IE8
-else if (typeof window == 'undefined' || window.ActiveXObject || !window.postMessage) {
-  module.exports = function(f){ setTimeout(f) };
-} else {
-  var q = [];
-
-  window.addEventListener('message', function(){
-    var i = 0;
-    while (i < q.length) {
-      try { q[i++](); }
-      catch (e) {
-        q = q.slice(i);
-        window.postMessage('tic!', '*');
-        throw e;
-      }
-    }
-    q.length = 0;
-  }, true);
-
-  module.exports = function(fn){
-    if (!q.length) window.postMessage('tic!', '*');
-    q.push(fn);
-  }
-}
-
-});
-require.register("yields-has-transitions/index.js", function(exports, require, module){
-/**
- * Check if `el` or browser supports transitions.
- *
- * @param {Element} el
- * @return {Boolean}
- * @api public
- */
-
-exports = module.exports = function(el){
-  switch (arguments.length) {
-    case 0: return bool;
-    case 1: return bool
-      ? transitions(el)
-      : bool;
-  }
-};
-
-/**
- * Check if the given `el` has transitions.
- *
- * @param {Element} el
- * @return {Boolean}
- * @api private
- */
-
-function transitions(el, styl){
-  if (el.transition) return true;
-  styl = window.getComputedStyle(el);
-  return !! parseFloat(styl.transitionDuration, 10);
-}
-
-/**
- * Style.
- */
-
-var styl = document.body.style;
-
-/**
- * Export support.
- */
-
-var bool = 'transition' in styl
-  || 'webkitTransition' in styl
-  || 'MozTransition' in styl
-  || 'msTransition' in styl;
-
-});
-require.register("ecarter-css-emitter/index.js", function(exports, require, module){
-/**
- * Module Dependencies
- */
-
-var events = require('event');
-
-// CSS events
-
-var watch = [
-  'transitionend'
-, 'webkitTransitionEnd'
-, 'oTransitionEnd'
-, 'MSTransitionEnd'
-, 'animationend'
-, 'webkitAnimationEnd'
-, 'oAnimationEnd'
-, 'MSAnimationEnd'
-];
-
-/**
- * Expose `CSSnext`
- */
-
-module.exports = CssEmitter;
-
-/**
- * Initialize a new `CssEmitter`
- *
- */
-
-function CssEmitter(element){
-  if (!(this instanceof CssEmitter)) return new CssEmitter(element);
-  this.el = element;
-}
-
-/**
- * Bind CSS events.
- *
- * @api public
- */
-
-CssEmitter.prototype.bind = function(fn){
-  for (var i=0; i < watch.length; i++) {
-    events.bind(this.el, watch[i], fn);
-  }
-  return this;
-};
-
-/**
- * Unbind CSS events
- * 
- * @api public
- */
-
-CssEmitter.prototype.unbind = function(fn){
-  for (var i=0; i < watch.length; i++) {
-    events.unbind(this.el, watch[i], fn);
-  }
-  return this;
-};
-
-/**
- * Fire callback only once
- * 
- * @api public
- */
-
-CssEmitter.prototype.once = function(fn){
-  var self = this;
-  function on(){
-    self.unbind(on);
-    fn.apply(self.el, arguments);
-  }
-  self.bind(on);
-  return this;
-};
-
-
-});
-require.register("component-once/index.js", function(exports, require, module){
-
-/**
- * Identifier.
- */
-
-var n = 0;
-
-/**
- * Global.
- */
-
-var global = (function(){ return this })();
-
-/**
- * Make `fn` callable only once.
- *
- * @param {Function} fn
- * @return {Function}
- * @api public
- */
-
-module.exports = function(fn) {
-  var id = n++;
-  var called;
-
-  function once(){
-    // no receiver
-    if (this == global) {
-      if (called) return;
-      called = true;
-      return fn.apply(this, arguments);
-    }
-
-    // receiver
-    var key = '__called_' + id + '__';
-    if (this[key]) return;
-    this[key] = true;
-    return fn.apply(this, arguments);
-  }
-
-  return once;
-};
-
-});
-require.register("yields-after-transition/index.js", function(exports, require, module){
-
-/**
- * dependencies
- */
-
-var has = require('has-transitions')
-  , emitter = require('css-emitter')
-  , once = require('once');
-
-/**
- * Transition support.
- */
-
-var supported = has();
-
-/**
- * Export `after`
- */
-
-module.exports = after;
-
-/**
- * Invoke the given `fn` after transitions
- *
- * It will be invoked only if the browser
- * supports transitions __and__
- * the element has transitions
- * set in `.style` or css.
- *
- * @param {Element} el
- * @param {Function} fn
- * @return {Function} fn
- * @api public
- */
-
-function after(el, fn){
-  if (!supported || !has(el)) return fn();
-  emitter(el).bind(fn);
-  return fn;
-};
-
-/**
- * Same as `after()` only the function is invoked once.
- *
- * @param {Element} el
- * @param {Function} fn
- * @return {Function}
- * @api public
- */
-
-after.once = function(el, fn){
-  var callback = once(fn);
-  after(el, fn = function(){
-    emitter(el).unbind(fn);
-    callback();
-  });
-};
-
-});
-require.register("segmentio-showable/index.js", function(exports, require, module){
-var after = require('after-transition').once;
-var nextTick = require('next-tick');
-
-/**
- * Hide the view
- */
-function hide(fn){
-  var self = this;
-
-  if(this.hidden == null) {
-    this.hidden = this.el.classList.contains('hidden');
-  }
-
-  if(this.hidden || this.animating) return;
-
-  this.hidden = true;
-  this.animating = true;
-
-  after(self.el, function(){
-    self.animating = false;
-    self.emit('hide');
-    if(fn) fn();
-  });
-
-  self.el.classList.add('hidden');
-  this.emit('hiding');
-  return this;
-}
-
-/**
- * Show the view. This waits until after any transitions
- * are finished. It also removed the hide class on the next
- * tick so that the transition actually paints.
- */
-function show(fn){
-  var self = this;
-
-  if(this.hidden == null) {
-    this.hidden = this.el.classList.contains('hidden');
-  }
-
-  if(this.hidden === false || this.animating) return;
-
-  this.hidden = false;
-  this.animating = true;
-
-  this.emit('showing');
-
-  after(self.el, function(){
-    self.animating = false;
-    self.emit('show');
-    if(fn) fn();
-  });
-
-  this.el.offsetHeight;
-
-  nextTick(function(){
-    self.el.classList.remove('hidden');
-  });
-
-  return this;
-}
-
-/**
- * Mixin methods into the view
- *
- * @param {Emitter} obj
- */
-module.exports = function(obj) {
-  obj.hide = hide;
-  obj.show = show;
-  return obj;
-};
-});
-require.register("segmentio-on-escape/index.js", function(exports, require, module){
-
-var bind = require('event').bind
-  , indexOf = require('indexof');
-
-
-/**
- * Expose `onEscape`.
- */
-
-module.exports = exports = onEscape;
-
-
-/**
- * Handlers.
- */
-
-var fns = [];
-
-
-/**
- * Escape binder.
- *
- * @param {Function} fn
- */
-
-function onEscape (fn) {
-  fns.push(fn);
-}
-
-
-/**
- * Bind a handler, for symmetry.
- */
-
-exports.bind = onEscape;
-
-
-/**
- * Unbind a handler.
- *
- * @param {Function} fn
- */
-
-exports.unbind = function (fn) {
-  var index = indexOf(fns, fn);
-  if (index !== -1) fns.splice(index, 1);
-};
-
-
-/**
- * Bind to `document` once.
- */
-
-bind(document, 'keydown', function (e) {
-  if (27 !== e.keyCode) return;
-  for (var i = 0, fn; fn = fns[i]; i++) fn(e);
-});
-});
-require.register("jkroso-classes/index.js", function(exports, require, module){
-
-module.exports = document.createElement('div').classList
-  ? require('./modern')
-  : require('./fallback')
-});
-require.register("jkroso-classes/fallback.js", function(exports, require, module){
-
-var index = require('indexof')
-
-exports.add = function(name, el){
-	var arr = exports.array(el)
-	if (index(arr, name) < 0) {
-		arr.push(name)
-		el.className = arr.join(' ')
-	}
-}
-
-exports.remove = function(name, el){
-	if (name instanceof RegExp) {
-		return exports.removeMatching(name, el)
-	}
-	var arr = exports.array(el)
-	var i = index(arr, name)
-	if (i >= 0) {
-		arr.splice(i, 1)
-		el.className = arr.join(' ')
-	}
-}
-
-exports.removeMatching = function(re, el){
-	var arr = exports.array(el)
-	for (var i = 0; i < arr.length;) {
-		if (re.test(arr[i])) arr.splice(i, 1)
-		else i++
-	}
-	el.className = arr.join(' ')
-}
-
-exports.toggle = function(name, el){
-	if (exports.has(name, el)) {
-		exports.remove(name, el)
-	} else {
-		exports.add(name, el)
-	}
-}
-
-exports.array = function(el){
-	return el.className.match(/([^\s]+)/g) || []
-}
-
-exports.has =
-exports.contains = function(name, el){
-	return index(exports.array(el), name) >= 0
-}
-});
-require.register("jkroso-classes/modern.js", function(exports, require, module){
-
-/**
- * Add class `name` if not already present.
- *
- * @param {String} name
- * @param {Element} el
- * @api public
- */
-
-exports.add = function(name, el){
-	el.classList.add(name)
-}
-
-/**
- * Remove `name` if present
- *
- * @param {String|RegExp} name
- * @param {Element} el
- * @api public
- */
-
-exports.remove = function(name, el){
-	if (name instanceof RegExp) {
-		return exports.removeMatching(name, el)
-	}
-	el.classList.remove(name)
-}
-
-/**
- * Remove all classes matching `re`.
- *
- * @param {RegExp} re
- * @param {Element} el
- * @api public
- */
-
-exports.removeMatching = function(re, el){
-	var arr = exports.array(el)
-	for (var i = 0; i < arr.length; i++) {
-		if (re.test(arr[i])) el.classList.remove(arr[i])
-	}
-}
-
-/**
- * Toggle class `name`.
- *
- * @param {String} name
- * @param {Element} el
- * @api public
- */
-
-exports.toggle = function(name, el){
-	el.classList.toggle(name)
-}
-
-/**
- * Return an array of classes.
- *
- * @param {Element} el
- * @return {Array}
- * @api public
- */
-
-exports.array = function(el){
-	return el.className.match(/([^\s]+)/g) || []
-}
-
-/**
- * Check if class `name` is present.
- *
- * @param {String} name
- * @param {Element} el
- * @api public
- */
-
-exports.has =
-exports.contains = function(name, el){
-	return el.classList.contains(name)
-}
-});
-require.register("ianstormtaylor-classes/index.js", function(exports, require, module){
-
-var classes = require('classes');
-
-
-/**
- * Expose `mixin`.
- */
-
-module.exports = exports = mixin;
-
-
-/**
- * Mixin the classes methods.
- *
- * @param {Object} object
- * @return {Object}
- */
-
-function mixin (obj) {
-  for (var method in exports) obj[method] = exports[method];
-  return obj;
-}
-
-
-/**
- * Add a class.
- *
- * @param {String} name
- * @return {Object}
- */
-
-exports.addClass = function (name) {
-  classes.add(name, this.el);
-  return this;
-};
-
-
-/**
- * Remove a class.
- *
- * @param {String} name
- * @return {Object}
- */
-
-exports.removeClass = function (name) {
-  classes.remove(name, this.el);
-  return this;
-};
-
-
-/**
- * Has a class?
- *
- * @param {String} name
- * @return {Boolean}
- */
-
-exports.hasClass = function (name) {
-  return classes.has(name, this.el);
-};
-
-
-/**
- * Toggle a class.
- *
- * @param {String} name
- * @return {Object}
- */
-
-exports.toggleClass = function (name) {
-  classes.toggle(name, this.el);
-  return this;
-};
-
-});
-require.register("segmentio-modal/lib/index.js", function(exports, require, module){
-var domify = require('domify');
-var Emitter = require('emitter');
-var overlay = require('overlay');
-var onEscape = require('on-escape');
-var template = require('./index.html');
-var Showable = require('showable');
-var Classes = require('classes');
-
-/**
- * Expose `Modal`.
- */
-
-module.exports = Modal;
-
-
-/**
- * Initialize a new `Modal`.
- *
- * @param {Element} el The element to put into a modal
- */
-
-function Modal (el) {
-  if (!(this instanceof Modal)) return new Modal(el);
-  this.el = domify(template);
-  this.el.appendChild(el);
-  this._overlay = overlay();
-
-  var el = this.el;
-
-  this.on('showing', function(){
-    document.body.appendChild(el);
-  });
-
-  this.on('hide', function(){
-    document.body.removeChild(el);
-  });
-}
-
-
-/**
- * Mixin emitter.
- */
-
-Emitter(Modal.prototype);
-Showable(Modal.prototype);
-Classes(Modal.prototype);
-
-
-/**
- * Set the transition in/out effect
- *
- * @param {String} type
- *
- * @return {Modal}
- */
-
-Modal.prototype.effect = function(type) {
-  this.el.setAttribute('effect', type);
-  return this;
-};
-
-
-/**
- * Add an overlay
- *
- * @param {Object} opts
- *
- * @return {Modal}
- */
-
-Modal.prototype.overlay = function(){
-  var self = this;
-  this.on('showing', function(){
-    self._overlay.show();
-  });
-  this.on('hiding', function(){
-    self._overlay.hide();
-  });
-  return this;
-};
-
-
-/**
- * Make the modal closeable.
- *
- * @return {Modal}
- */
-
-Modal.prototype.closeable =
-Modal.prototype.closable = function () {
-  var self = this;
-
-  function hide(){
-    self.hide();
-  }
-
-  this._overlay.on('click', hide);
-  onEscape(hide);
-  return this;
-};
-});
-require.register("publishui/modal.js", function(exports, require, module){
-
-var modal = require('modal');
-var emitter = require('emitter');
-var element = require('el.js');
-var pillbox = require('pillbox');
-var classes = require('classes');
-
-      
-module.exports = function(options)
-{	
-	var self = this;
-
-	//have emit capabilities -- let other know when certain events are triggered
-	emitter(self);
-
-	//given a div, we need to make our publishing adjustments
-	if(!options.objectSize)
-		throw new Error("Need object size for publish view!");
-
-	var modalNames = {
-		bPublish: "modal-publish",
-		bCancel: "modal-cancel",
-		iTitle: "modal-title",
-		iTags : "modal-tags",
-		dArtifact : "modal-artifact-object",
-		dTop : "modal-top",
-		dBottom: "modal-bottom",
-		dParent : "modal-parent"
-	}
-
-
-	//now, we setup our div objects
-	self.createModalWindow = function()
-	{
-		//we need to make a full blown UI and hook it up to events that will be emitted
-
-		var div = element('div', {id: modalNames.dParent, class: "container fullSize flexContainerColumn"});
-
-		var row = element('div', {id: modalNames.dTop, class: "noPadding flexRow flexSeparate"});
-
-		var titleObject = element('div', {class: "title fullWidth flexContainerRow noPadding"}, 
-			[ 
-				element('div', {class: "col-xs-3 noPadding"}, 'Title: '),
-				element('input', {id: modalNames.iTitle, type : "text", class: "col-auto noPadding titleText"})
-			]);
-
-		var tagObject = element('div', {id: "tag-holder", class: "fullSize flexContainerRow noPadding"}, 
-			[
-				element('div', {class: "col-xs-3 noPadding"}, 'Tags: '),
-				element('input', {id: modalNames.iTags, type: "text", class: "col-auto noPadding"})
-			]);
-
-		var rightColumn = element('div', {id: "text-col"}, [titleObject, tagObject]);
-
-
-		var widthAndHeight = "width: " + options.objectSize.width + "px; height: " + options.objectSize.height + "px;"; 
-		var leftColumn = element('div', {id: "art-col", class: "col-xs-5"}, element('div', {id: modalNames.dArtifact, style: widthAndHeight, class: "border"}, "artifact here"));
-
-		row.appendChild(leftColumn);
-		row.appendChild(rightColumn);
-
-
-		var pubButton = element('div', {id: modalNames.bPublish, class: "col-auto modalButton publish centerRow"}, "Publish");
-		var cancelButton = element('div', {id: modalNames.bCancel, class: "col-auto modalButton cancel centerRow"}, "Cancel");
-
-		var bottom = element('div', {id: modalNames.dBottom, class: "noPadding fullWidth flexContainerRow flexSeparate"}, [pubButton, cancelButton]);
-
-		//now add the top row
-		div.appendChild(row);
-		div.appendChild(bottom);
-
-		return div;
-	}
-
-	var div = self.createModalWindow();
-
-	//do we need this piece?
-	document.body.appendChild(div);
-
-	var artifactDiv = document.getElementById(modalNames.dArtifact);
-
-	var title = document.getElementById(modalNames.iTitle);
-	//add tags to artifact-tag object
-	var tags = document.getElementById(modalNames.iTags);
-
-	var input = pillbox(tags, { lowercase : true, space: true });
-	classes(tags.parentNode)
-		.add("col-auto")
-		.add("noPadding");
-
-	//now we add listeners for publish/cancel
-	var pub = document.getElementById(modalNames.bPublish);
-
-	pub.addEventListener('click', function()
-	{
-		//for right now, we just close the modal
-		self.publishArtifact();
-	})
-
-	var cancel = document.getElementById(modalNames.bCancel);
-	cancel.addEventListener('click', function()
-	{
-		//for right now, we just close the modal
-		self.cancelArtifact();
-	})
-
-	var view = modal(div)
-		.overlay()
-	    .effect('fade-and-scale');
-
-
-    var currentID;
-
-    self.launchPublishModal = function(eID)
-    {
-    	if(currentID != eID)
-    	{
-    		//clear tag and titles
-    		tags.value = "";
-    		title.value = "";
-    	}
-    	currentID = eID;
-    	view.show();
-
-    	var fc;
-    	while((fc = artifactDiv.firstChild) != undefined)
-    	{
-    		artifactDiv.removeChild(fc);
-    	}
-
-    	//showing an object with a given id -- removed the innards for replacement
-    	self.emit("publishShown", eID, artifactDiv, function()
-		{
-			//this doesn't have to be called, but it's good to be in the habbit -- since we may also want to display a loading gif
-		});
-    }
-
-    self.cancelArtifact = function()
-    {
-    	view.hide();
-    	self.emit("publishHidden", currentID);
-    }
-
-    self.publishArtifact = function()
-    {
-    	if(!self.hasListeners("publishArtifact"))
-    	{
-    		console.log("Warning: No listeners for publishing");
-    		view.hide();
-    	}
-    	else{
-    		var meta = {title: title.value, tags: input.values()};
-	    	self.emit("publishArtifact", currentID, meta, function()
-	    	{
-	    		//when finished -- hide the mofo!p
-	    		view.hide();
-	    	});
-	    }
-    }
-
-
-     return self;
-}
-
-});
-require.register("flexiec/main.js", function(exports, require, module){
-
-var Emitter = require('emitter');
-var resize = require('resize');
-var classes = require('classes');
-var events = require('events');
-
-var publish = require('publishUI');
-
-//
-var element = require('el.js');
-
-var flexstatic = require('flexstatic');
-var flexparents = require('flexparents');
-// var dimensions = require('dimensions');
-
-module.exports = flexIEC; 
-
-var uFlexID = 0;
-
-function flexIEC(divValue, reqOptions)
-{
-	// console.log(divValue);
-	var self = this;
-
-	if(!reqOptions || !reqOptions.evoOptions  || !reqOptions.parentOptions)
-		throw new Error("Can't use flexforever without options or objectSize");
-
-	//deep clone the required options object
-	reqOptions = JSON.parse(JSON.stringify(reqOptions));
-
-	//someobody needs to tell us where to start the count 
-	reqOptions.evoOptions.startIx = reqOptions.startIx || reqOptions.evoOptions.startIx || 0;
-
-	self.bottomElementSize = reqOptions.bottomElementSize || 47;
-
-	//need to add some space to our objects
-	reqOptions.evoOptions.extraHeightPerObject = self.bottomElementSize;
-
-	reqOptions.publishOptions = reqOptions.publishOptions || {objectSize: reqOptions.evoOptions.objectSize};
-
-	//add emitter properties to this object
-	Emitter(self);
-
-	//add appropriate classes to our given div
-	self.uid = "flexIEC" + uFlexID++;
-
-	self.objectSize = reqOptions.objectSize;
-
-	var iecBase = self.uid + "-#@#";
-	var outerFlexID = iecBase.replace(/#@#/g, "container");
-	
-	//set the innerHTML of the supplied div to now be setup for swiper integration
-	divValue.innerHTML = "<div id=" + outerFlexID + " class=\"iec-container flexIEC border\" style=\"height:100%;\">" 
-	+ "</div>";
-
-	var outerContainer = document.querySelector("#" + outerFlexID);
-
-
-	//Out yo face, tell us when your changing sizes
-	resize.bind(outerContainer, function()
-	{
-		// console.log('IEC Resize: ', outerContainer.offsetWidth, " height: ",)
-	});
-
-	//now we need to setup the parent section and the iec children section
-	var container = element('div', {id: "test",  class: "container fullWH pOR"});	
-
-	//simple test at first
-	var row = element('div', {id: "test", class : "row mOR fullWH"});
-
-
-	var parentFlexDiv, evoFlexDiv;
-
-	var loadingIndividuals = {};
-	var finishedLoading = {};
-	var fullObjects = {};
-
-	var parentObjects = {};
-
-
-
-	self.createEvolutionGrid = function()
-	{
-		//build piece by piece the evo grid
-		var rightColumn = element('div', {id: "evo-col", class: "col-auto fullWH colObject border mOR pOR"});
-		var tabs = element('div', {id: "evoTabs", class : "tabs row mOR"});
-
-		var evoBottom = element('div', {id: "evo-bot", class : "innerObject colObject"});
-		evoFlexDiv = evoBottom;
-
-		rightColumn.appendChild(tabs);
-		rightColumn.appendChild(evoBottom);
-
-		return rightColumn;
-	}
-
-	self.createParentList = function()
-	{
-		//creat the top level container
-		var parentColumn = element('div', 
-			{id: "parent-col", style: "width: " + (reqOptions.parentOptions.objectSize.width  + 25) + "px", 
-			class: "col-xs-3 fullWH colObject border mOR pOR"});
-		
-		//then we break it into the title row, and the actual parent list object 
-		var parentTopRow = element('div', {id: "p-top", class : ""});
-		var parentBottomRow = element('div', {id: "p-bot", class : "innerObject colObject border"});
-
-		var choice = element('div', {id: "p-top-choice", class : "border"});
-		choice.innerHTML = "Parent Artifacts";
-
-		//add the choice object to our top row (to have something to display)
-		parentTopRow.appendChild(choice);
-		parentColumn.appendChild(parentTopRow);
-		parentColumn.appendChild(parentBottomRow);
-
-		parentFlexDiv = parentBottomRow;
-
-		return parentColumn;
-	}
-
-	//set it to like, then start parent creation process
-	self.createParent = function(eID)
-	{
-		//create parent using element info
-		self.parentFlex.addElement(eID);
-	}
-	self.deleteParent = function(eID)
-	{
-		var pObject = parentObjects[eID];
-
-		//remove this object from our parent
-		self.parentFlex.removeElement(pObject.pID);
-	}
-
-	//a parent has been removed!
-	self.parentDeleted = function(evoID, pID)
-	{
-		var el = fullObjects[evoID];
-
-		// console.log("Deleted parent: ", evoID, el);
-
-		if(el)
-		{
-			var cl = classes(el);
-
-			if(cl.has('like'))
-				cl.toggle('like'); 
-		}
-
-		//delete parent using element info
-		delete parentObjects[evoID];
-
-		//let it be known wassup
-		self.emit("parentUnselected", evoID);
-	}
-
-	var pSelected = function(evoID)
-	{
-		return function()
-		{
-			//don't really do anything after selecting parents
-		};
-	}
-
-	self.parentCreated = function(evoID, parID, eDiv)
-	{
-		var el = fullObjects[evoID];
-		if(el)
-		{
-			var cl = classes(el);
-
-			if(!cl.has('like'))
-				cl.toggle('like'); 
-		}
-
-		//when a parent is created, we make note
-		parentObjects[evoID] = {pID: parID, el: eDiv};
-
-		//make it known that this parent was selected for real -- we'll handle the UI
-		self.emit("parentSelected", evoID, eDiv, pSelected(evoID));
-	}
-
-	self.likeElement = function(e)
-	{
-		//either you  or your parent have an ID -- pull that id info
-		var tID = e.target.id || e.target.parentElement.id;
-
-		//replace element name to get teh original eID
-		var elementID = tID.replace(/-like/g, "");
-
-		//already a parent, toggle -- remove parent
-		if(parentObjects[elementID])
-		{
-			// console.log("Start delete parent: ", elementID)
-			self.deleteParent(elementID);
-		}
-		else{
-			// console.log("Start make parent: ", elementID)
-			self.createParent(elementID);
-		}
-
-
-		//we toggle adding this to our parent objects
-	}
-
-	self.publishElement = function(e)
-	{
-		//either you  or your parent have an ID -- pull that id info
-		var tID = e.target.id || e.target.parentElement.id;
-
-		var elementID = tID.replace(/-publish/g, "");
-
-		//launch a publish attempt using this ID
-		self.publish.launchPublishModal(elementID);
-	}
-
-	self.createLoadingWrapper = function(eID)
-	{
-		var wrapDiv = element('div', {id: eID + "-wrap", class: "colObject"});
-		var loadingDiv = element('div', {id: eID + "-object", class: "loading innerObject"});
-
-		var bottomRow = element('div', {id: eID + "-bot", style : "height: " + self.bottomElementSize + "px;", class: "row mOR border"});
-
-		//create a like button with an inner like div -- content == like graphic
-		var likeButton = element('div', {id: eID + "-like", class: "col-auto pOR border"}, element('div', 'like'));
-		var publishButton = element('div', {id: eID + "-publish", class: "col-auto pOR border"}, element('div', 'pub'));
-	
-		//create some managers...
-		var likeManager = events(likeButton, self);
-		var pubManager = events(publishButton, self);
-
-		//bind click events to self.like and self.publish callbacks
-		likeManager.bind('click', 'likeElement');
-		pubManager.bind('click', 'publishElement');	
-
-
-		bottomRow.appendChild(likeButton);
-		bottomRow.appendChild(publishButton);
-
-		wrapDiv.appendChild(loadingDiv);
-		wrapDiv.appendChild(bottomRow);
-
-		//send it back all done up
-		return {full: wrapDiv, object: loadingDiv};
-	}
-
-	//create the left parent side
-
-	// var parentColumn = element('div', {id: "parent-col", class: "col-xs-3 fullWH colObject border mOR pOR"});
-	var pColumn = self.createParentList();
-	var evoColumn = self.createEvolutionGrid();
-
-	//append both columns to the iec object
-	row.appendChild(pColumn);
-	row.appendChild(evoColumn);
-
-	container.appendChild(row);
-
-	outerContainer.appendChild(container);
-
-
-
-	//create our flex parent
-	self.parentFlex = new flexparents(parentFlexDiv, reqOptions.parentOptions || {});
-
-	self.parentFlex.on('elementCreated', self.parentCreated);
-	self.parentFlex.on('elementRemoved', self.parentDeleted);
-
-
-	//create the evolution grid -- self initializes
-	self.evoFlex = new flexstatic(evoFlexDiv, reqOptions.evoOptions || {});
-
-	self.activeParents = function(){return self.parentFlex.activeParents();};
-
-	self.individualLoaded = function(eID)
-	{
-		return function()
-		{
-			//grab our loading individual using the ID
-			var eDiv = loadingIndividuals[eID];
-
-			//grab class information,
-			var c = classes(eDiv);
-			//use class info to toggle loading backgroung (if it still exists)
-			if(c.has('loading'))
-				c.toggle('loading');
-
-			for(var i=0; i < eDiv.children.length; i++)
-			{	
-				var c = classes(eDiv.children[i]);
-				if(c.has('loading'))
-					c.toggle('loading');
-			}
-
-			finishedLoading[eID] = eDiv;
-			//get rid of the other stuff
-			delete loadingIndividuals[eID];
-		}
-	}
-
-	self.evoFlex.on('elementCreated', function(eID, eDiv)
-	{
-		var wrapDiv = self.createLoadingWrapper(eID);
-		
-		eDiv.appendChild(wrapDiv.full);
-
-		//save full object
-		fullObjects[eID] = eDiv;
-
-		//now officially loading this object
-		loadingIndividuals[eID] = wrapDiv.object;
-
-		self.emit('createIndividual', eID, wrapDiv.object, self.individualLoaded(eID));
-	});
-
-	self.evoFlex.on('elementVisible', function(eID)
-	{
-		console.log("Visible: ", eID);
-		// element.className += "grid-cell";
-		// eDiv.innerHTML = "<div>Vis: "+eID+"</div>";
-	});
-
-	self.evoFlex.on('elementHidden', function(eID)
-	{
-		console.log("Hidden: ", eID);
-		// element.className += "grid-cell";
-		// eDiv.innerHTML = "<div>Invis: "+eID+"</div>";
-	});
-
-
-	//signify that it's time to init everything
-	self.ready = function()
-	{
-		self.evoFlex.initialize();
-	}
-
-	//deal with publishing	-- add in our publishing object according to publishUI setup
-	self.publish = publish(reqOptions.publishOptions);
-
-	//this is the real deal! We have what we need to publish
-	self.publish.on('publishArtifact', function(eID, meta, finished)
-	{
-		//we now pass this on to those above us for proper publishing behavior
-		self.emit('publishArtifact', eID, meta, finished);
-	});
-
-	self.publish.on('publishShown', function(eID, eDiv, finished){
-
-		//we have space in eDiv for our objects (according to size already determined)
-		//we have nothing to add to this info
-		self.emit('publishShown', eID, eDiv, finished);
-	});
-
-	self.publish.on('publishHidden', function(eID, eDiv, finished){
-
-		//we have space in eDiv for our objects (according to size already determined)
-		//we have nothing to add to this info
-		self.emit('publishHidden', eID);
-	});
-
-
-
-	return self;
-}
-
-
-
-
-});
-require.register("win-Picbreeder/win-Picbreeder.js", function(exports, require, module){
-var flexStatic = require('flexStatic');
+require.register("win-picbreeder", function (exports, module) {
+var flexStatic = require("flexstatic");
 
 
 
 console.log("Static a go!");
 });
-require.register("win-Picbreeder/seeds/seed1.js", function(exports, require, module){
-module.exports = {
-    "wid" : "0",
-    "dbType" : "picArtifact",
-    "parents" : [],
-    "genome": {
-        "wid" : "1",
-        "dbType": "NEATGenotype",
-        "parents" : [],
-        "nodes" : [{
-            "gid" : "0",
-            "activationFunction" : "pbLinear",
-            "nodeType" : "Bias",
-            "layer" : 0,
-            "step" : 0,
-            "bias" : 0
-        }, {
-            "gid" : "1",
-            "activationFunction" : "pbLinear",
-            "nodeType" : "Input",
-            "layer" : 0,
-            "step" : 0,
-            "bias" : 0
-        }, {
-            "gid" : "2",
-            "activationFunction" : "pbLinear",
-            "nodeType" : "Input",
-            "layer" : 0,
-            "step" : 0,
-            "bias" : 0
-        }, {
-            "gid" : "3",
-            "activationFunction" : "pbLinear",
-            "nodeType" : "Input",
-            "layer" : 0,
-            "step" : 0,
-            "bias" : 0
-        }, {
-            "gid" : "4",
-            "activationFunction" : "Sine",
-            "nodeType" : "Output",
-            "layer" : 10,
-            "step" : 0,
-            "bias" : 0
-        }, {
-            "gid" : "5",
-            "activationFunction" : "PBBipolarSigmoid",
-            "nodeType" : "Output",
-            "layer" : 10,
-            "step" : 0,
-            "bias" : 0
-        }, {
-            "gid" : "6",
-            "activationFunction" : "Sine",
-            "nodeType" : "Output",
-            "layer" : 5,
-            "step" : 0,
-            "bias" : 0
-        }
-        ],
-        "connections" : [{
-            "gid" : "0",
-            "weight" : -2.2932328903588797,
-            "sourceID" : "2",
-            "targetID" : "6"
-        },   {
-            "gid" : "6",
-            "weight" : 1.7608415005951437,
-            "sourceID" : "6",
-            "targetID" : "4"
-        }, {
-            "gid" : "7",
-            "weight" : -1.314796165604506,
-            "sourceID" : "6",
-            "targetID" : "5"
-        },   {
-            "gid" : "22",
-            "weight" : -0.6256643214242532,
-            "sourceID" : "3",
-            "targetID" : "6"
-        }
-        ]
-    },
-    "meta": {"imageTitle": "seed1", "imageTags": ["simple", "scratch"]}
-}
-});
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-require.register("segmentio-overlay/lib/index.html", function(exports, require, module){
-module.exports = '<div class="Overlay hidden"></div>';
-});
-
-
-
-
-
-
-require.register("segmentio-modal/lib/index.html", function(exports, require, module){
-module.exports = '<div class="Modal hidden" effect="toggle"></div>';
-});
-require.alias("component-worker/index.js", "win-Picbreeder/deps/worker/index.js");
-require.alias("component-worker/index.js", "win-Picbreeder/deps/worker/index.js");
-require.alias("component-worker/index.js", "worker/index.js");
-require.alias("component-emitter/index.js", "component-worker/deps/emitter/index.js");
-
-require.alias("component-worker/index.js", "component-worker/index.js");
-require.alias("optimuslime-thumbnail-grid/lib/xThumb.js", "win-Picbreeder/deps/thumbnail-grid/lib/xThumb.js");
-require.alias("optimuslime-thumbnail-grid/lib/xThumb.js", "win-Picbreeder/deps/thumbnail-grid/index.js");
-require.alias("optimuslime-thumbnail-grid/lib/xThumb.js", "thumbnail-grid/index.js");
-require.alias("desandro-imagesloaded/imagesloaded.js", "optimuslime-thumbnail-grid/deps/imagesloaded/imagesloaded.js");
-require.alias("desandro-imagesloaded/imagesloaded.js", "optimuslime-thumbnail-grid/deps/imagesloaded/index.js");
-require.alias("desandro-eventie/eventie.js", "desandro-imagesloaded/deps/eventie/eventie.js");
-require.alias("desandro-eventie/eventie.js", "desandro-imagesloaded/deps/eventie/index.js");
-require.alias("desandro-eventie/eventie.js", "desandro-eventie/index.js");
-require.alias("wolfy87-eventemitter/EventEmitter.js", "desandro-imagesloaded/deps/eventEmitter/EventEmitter.js");
-require.alias("wolfy87-eventemitter/EventEmitter.js", "desandro-imagesloaded/deps/eventEmitter/index.js");
-require.alias("wolfy87-eventemitter/EventEmitter.js", "wolfy87-eventemitter/index.js");
-require.alias("desandro-imagesloaded/imagesloaded.js", "desandro-imagesloaded/index.js");
-require.alias("ramitos-dimensions/src/dimensions.js", "optimuslime-thumbnail-grid/deps/dimensions/src/dimensions.js");
-require.alias("ramitos-dimensions/src/dimensions.js", "optimuslime-thumbnail-grid/deps/dimensions/index.js");
-require.alias("twolfson-computedstyle/dist/computedStyle.commonjs.js", "ramitos-dimensions/deps/computedStyle/dist/computedStyle.commonjs.js");
-require.alias("twolfson-computedstyle/dist/computedStyle.commonjs.js", "ramitos-dimensions/deps/computedStyle/index.js");
-require.alias("twolfson-computedstyle/dist/computedStyle.commonjs.js", "twolfson-computedstyle/index.js");
-require.alias("component-css/index.js", "ramitos-dimensions/deps/css/index.js");
-require.alias("component-css/lib/css.js", "ramitos-dimensions/deps/css/lib/css.js");
-require.alias("component-css/lib/prop.js", "ramitos-dimensions/deps/css/lib/prop.js");
-require.alias("component-css/lib/swap.js", "ramitos-dimensions/deps/css/lib/swap.js");
-require.alias("component-css/lib/style.js", "ramitos-dimensions/deps/css/lib/style.js");
-require.alias("component-css/lib/hooks.js", "ramitos-dimensions/deps/css/lib/hooks.js");
-require.alias("component-css/lib/styles.js", "ramitos-dimensions/deps/css/lib/styles.js");
-require.alias("component-css/lib/vendor.js", "ramitos-dimensions/deps/css/lib/vendor.js");
-require.alias("component-css/lib/support.js", "ramitos-dimensions/deps/css/lib/support.js");
-require.alias("component-css/lib/computed.js", "ramitos-dimensions/deps/css/lib/computed.js");
-require.alias("component-css/index.js", "ramitos-dimensions/deps/css/index.js");
-require.alias("component-each/index.js", "component-css/deps/each/index.js");
-require.alias("component-to-function/index.js", "component-each/deps/to-function/index.js");
-require.alias("component-props/index.js", "component-to-function/deps/props/index.js");
-
-require.alias("component-type/index.js", "component-each/deps/type/index.js");
-
-require.alias("visionmedia-debug/debug.js", "component-css/deps/debug/debug.js");
-require.alias("visionmedia-debug/debug.js", "component-css/deps/debug/index.js");
-require.alias("visionmedia-debug/debug.js", "visionmedia-debug/index.js");
-require.alias("ianstormtaylor-to-camel-case/index.js", "component-css/deps/to-camel-case/index.js");
-require.alias("ianstormtaylor-to-space-case/index.js", "ianstormtaylor-to-camel-case/deps/to-space-case/index.js");
-require.alias("ianstormtaylor-to-no-case/index.js", "ianstormtaylor-to-space-case/deps/to-no-case/index.js");
-
-require.alias("component-within-document/index.js", "component-css/deps/within-document/index.js");
-
-require.alias("component-css/index.js", "component-css/index.js");
-require.alias("ramitos-iswindow/src/isWindow.js", "ramitos-dimensions/deps/isWindow/src/isWindow.js");
-require.alias("ramitos-iswindow/src/isWindow.js", "ramitos-dimensions/deps/isWindow/index.js");
-require.alias("ramitos-iswindow/src/isWindow.js", "ramitos-iswindow/index.js");
-require.alias("ramitos-isdocument/src/isDocument.js", "ramitos-dimensions/deps/isDocument/src/isDocument.js");
-require.alias("ramitos-isdocument/src/isDocument.js", "ramitos-dimensions/deps/isDocument/index.js");
-require.alias("ramitos-isdocument/src/isDocument.js", "ramitos-isdocument/index.js");
-require.alias("ramitos-iselement/src/isElement.js", "ramitos-dimensions/deps/isElement/src/isElement.js");
-require.alias("ramitos-iselement/src/isElement.js", "ramitos-dimensions/deps/isElement/index.js");
-require.alias("component-type/index.js", "ramitos-iselement/deps/type/index.js");
-
-require.alias("ramitos-iselement/src/isElement.js", "ramitos-iselement/index.js");
-require.alias("component-type/index.js", "ramitos-dimensions/deps/type/index.js");
-
-require.alias("ramitos-interpolate/interpolate.js", "ramitos-dimensions/deps/interpolate/interpolate.js");
-require.alias("ramitos-interpolate/interpolate.js", "ramitos-dimensions/deps/interpolate/index.js");
-require.alias("ramitos-interpolate/interpolate.js", "ramitos-interpolate/index.js");
-require.alias("yields-capitalize/index.js", "ramitos-dimensions/deps/capitalize/index.js");
-
-require.alias("ramitos-from_px/src/from_px.js", "ramitos-dimensions/deps/from_px/src/from_px.js");
-require.alias("ramitos-from_px/src/from_px.js", "ramitos-dimensions/deps/from_px/index.js");
-require.alias("component-type/index.js", "ramitos-from_px/deps/type/index.js");
-
-require.alias("kenany-is-nan/index.js", "ramitos-from_px/deps/is-nan/index.js");
-require.alias("kenany-is-number/index.js", "kenany-is-nan/deps/is-number/index.js");
-
-require.alias("ramitos-from_px/src/from_px.js", "ramitos-from_px/index.js");
-require.alias("ramitos-to_px/src/to_px.js", "ramitos-dimensions/deps/to_px/src/to_px.js");
-require.alias("ramitos-to_px/src/to_px.js", "ramitos-dimensions/deps/to_px/index.js");
-require.alias("component-type/index.js", "ramitos-to_px/deps/type/index.js");
-
-require.alias("ramitos-interpolate/interpolate.js", "ramitos-to_px/deps/interpolate/interpolate.js");
-require.alias("ramitos-interpolate/interpolate.js", "ramitos-to_px/deps/interpolate/index.js");
-require.alias("ramitos-interpolate/interpolate.js", "ramitos-interpolate/index.js");
-require.alias("ramitos-to_px/src/to_px.js", "ramitos-to_px/index.js");
-require.alias("ramitos-dimensions/src/dimensions.js", "ramitos-dimensions/index.js");
-require.alias("timoxley-offset/index.js", "optimuslime-thumbnail-grid/deps/offset/index.js");
-require.alias("timoxley-dom-support/index.js", "timoxley-offset/deps/dom-support/index.js");
-require.alias("enyo-domready/index.js", "timoxley-dom-support/deps/domready/index.js");
-
-require.alias("component-within-document/index.js", "timoxley-offset/deps/within-document/index.js");
-
-require.alias("juliangruber-fade/index.js", "optimuslime-thumbnail-grid/deps/fade/index.js");
-require.alias("juliangruber-fade/index.js", "optimuslime-thumbnail-grid/deps/fade/index.js");
-require.alias("juliangruber-prefixed/index.js", "juliangruber-fade/deps/prefixed/index.js");
-require.alias("juliangruber-prefixed/index.js", "juliangruber-fade/deps/prefixed/index.js");
-require.alias("juliangruber-prefixed/index.js", "juliangruber-prefixed/index.js");
-require.alias("juliangruber-fade/index.js", "juliangruber-fade/index.js");
-require.alias("optimuslime-animate-property/index.js", "optimuslime-thumbnail-grid/deps/animate-property/index.js");
-require.alias("optimuslime-animate-property/index.js", "optimuslime-thumbnail-grid/deps/animate-property/index.js");
-require.alias("component-raf/index.js", "optimuslime-animate-property/deps/raf/index.js");
-
-require.alias("component-tween/index.js", "optimuslime-animate-property/deps/tween/index.js");
-require.alias("component-emitter/index.js", "component-tween/deps/emitter/index.js");
-
-require.alias("component-ease/index.js", "component-tween/deps/ease/index.js");
-
-require.alias("optimuslime-animate-property/index.js", "optimuslime-animate-property/index.js");
-require.alias("optimuslime-el.js/el.js", "optimuslime-thumbnail-grid/deps/el.js/el.js");
-require.alias("optimuslime-el.js/el.js", "optimuslime-thumbnail-grid/deps/el.js/index.js");
-require.alias("optimuslime-el.js/el.js", "optimuslime-el.js/index.js");
-require.alias("optimuslime-data/index.js", "optimuslime-thumbnail-grid/deps/data/index.js");
-
-require.alias("component-classes/index.js", "optimuslime-thumbnail-grid/deps/classes/index.js");
-require.alias("component-indexof/index.js", "component-classes/deps/indexof/index.js");
-
-require.alias("component-css/index.js", "optimuslime-thumbnail-grid/deps/css/index.js");
-require.alias("component-css/lib/css.js", "optimuslime-thumbnail-grid/deps/css/lib/css.js");
-require.alias("component-css/lib/prop.js", "optimuslime-thumbnail-grid/deps/css/lib/prop.js");
-require.alias("component-css/lib/swap.js", "optimuslime-thumbnail-grid/deps/css/lib/swap.js");
-require.alias("component-css/lib/style.js", "optimuslime-thumbnail-grid/deps/css/lib/style.js");
-require.alias("component-css/lib/hooks.js", "optimuslime-thumbnail-grid/deps/css/lib/hooks.js");
-require.alias("component-css/lib/styles.js", "optimuslime-thumbnail-grid/deps/css/lib/styles.js");
-require.alias("component-css/lib/vendor.js", "optimuslime-thumbnail-grid/deps/css/lib/vendor.js");
-require.alias("component-css/lib/support.js", "optimuslime-thumbnail-grid/deps/css/lib/support.js");
-require.alias("component-css/lib/computed.js", "optimuslime-thumbnail-grid/deps/css/lib/computed.js");
-require.alias("component-css/index.js", "optimuslime-thumbnail-grid/deps/css/index.js");
-require.alias("component-each/index.js", "component-css/deps/each/index.js");
-require.alias("component-to-function/index.js", "component-each/deps/to-function/index.js");
-require.alias("component-props/index.js", "component-to-function/deps/props/index.js");
-
-require.alias("component-type/index.js", "component-each/deps/type/index.js");
-
-require.alias("visionmedia-debug/debug.js", "component-css/deps/debug/debug.js");
-require.alias("visionmedia-debug/debug.js", "component-css/deps/debug/index.js");
-require.alias("visionmedia-debug/debug.js", "visionmedia-debug/index.js");
-require.alias("ianstormtaylor-to-camel-case/index.js", "component-css/deps/to-camel-case/index.js");
-require.alias("ianstormtaylor-to-space-case/index.js", "ianstormtaylor-to-camel-case/deps/to-space-case/index.js");
-require.alias("ianstormtaylor-to-no-case/index.js", "ianstormtaylor-to-space-case/deps/to-no-case/index.js");
-
-require.alias("component-within-document/index.js", "component-css/deps/within-document/index.js");
-
-require.alias("component-css/index.js", "component-css/index.js");
-require.alias("component-emitter/index.js", "optimuslime-thumbnail-grid/deps/emitter/index.js");
-
-require.alias("component-indexof/index.js", "optimuslime-thumbnail-grid/deps/indexof/index.js");
-
-require.alias("component-matches-selector/index.js", "optimuslime-thumbnail-grid/deps/matches-selector/index.js");
-require.alias("component-query/index.js", "component-matches-selector/deps/query/index.js");
-
-require.alias("optimuslime-thumbnail-grid/lib/xThumb.js", "optimuslime-thumbnail-grid/index.js");
-require.alias("optimuslime-traverse/index.js", "win-Picbreeder/deps/optimuslime-traverse/index.js");
-require.alias("optimuslime-traverse/index.js", "win-Picbreeder/deps/optimuslime-traverse/index.js");
-require.alias("optimuslime-traverse/index.js", "optimuslime-traverse/index.js");
-require.alias("optimuslime-traverse/index.js", "optimuslime-traverse/index.js");
-require.alias("optimuslime-el.js/el.js", "win-Picbreeder/deps/el.js/el.js");
-require.alias("optimuslime-el.js/el.js", "win-Picbreeder/deps/el.js/index.js");
-require.alias("optimuslime-el.js/el.js", "el.js/index.js");
-require.alias("optimuslime-el.js/el.js", "optimuslime-el.js/index.js");
-require.alias("optimuslime-win-iec/lib/win-iec.js", "win-Picbreeder/deps/win-iec/lib/win-iec.js");
-require.alias("optimuslime-win-iec/lib/win-iec.js", "win-Picbreeder/deps/win-iec/index.js");
-require.alias("optimuslime-win-iec/lib/win-iec.js", "win-iec/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-iec/deps/win-utils/winutils.js");
-require.alias("optimuslime-win-utils/uuid/cuid.js", "optimuslime-win-iec/deps/win-utils/uuid/cuid.js");
-require.alias("optimuslime-win-utils/math/winmath.js", "optimuslime-win-iec/deps/win-utils/math/winmath.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-iec/deps/win-utils/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-utils/index.js");
-require.alias("optimuslime-win-iec/lib/win-iec.js", "optimuslime-win-iec/index.js");
-require.alias("optimuslime-win-query/lib/win-query.js", "win-Picbreeder/deps/win-query/lib/win-query.js");
-require.alias("optimuslime-win-query/lib/win-query.js", "win-Picbreeder/deps/win-query/index.js");
-require.alias("optimuslime-win-query/lib/win-query.js", "win-query/index.js");
-require.alias("visionmedia-superagent/lib/client.js", "optimuslime-win-query/deps/superagent/lib/client.js");
-require.alias("visionmedia-superagent/lib/client.js", "optimuslime-win-query/deps/superagent/index.js");
-require.alias("component-emitter/index.js", "visionmedia-superagent/deps/emitter/index.js");
-
-require.alias("component-reduce/index.js", "visionmedia-superagent/deps/reduce/index.js");
-
-require.alias("visionmedia-superagent/lib/client.js", "visionmedia-superagent/index.js");
-require.alias("optimuslime-win-query/lib/win-query.js", "optimuslime-win-query/index.js");
-require.alias("optimuslime-win-publish/lib/win-publish.js", "win-Picbreeder/deps/win-publish/lib/win-publish.js");
-require.alias("optimuslime-win-publish/lib/win-publish.js", "win-Picbreeder/deps/win-publish/index.js");
-require.alias("optimuslime-win-publish/lib/win-publish.js", "win-publish/index.js");
-require.alias("visionmedia-superagent/lib/client.js", "optimuslime-win-publish/deps/superagent/lib/client.js");
-require.alias("visionmedia-superagent/lib/client.js", "optimuslime-win-publish/deps/superagent/index.js");
-require.alias("component-emitter/index.js", "visionmedia-superagent/deps/emitter/index.js");
-
-require.alias("component-reduce/index.js", "visionmedia-superagent/deps/reduce/index.js");
-
-require.alias("visionmedia-superagent/lib/client.js", "visionmedia-superagent/index.js");
-require.alias("optimuslime-win-publish/lib/win-publish.js", "optimuslime-win-publish/index.js");
-require.alias("optimuslime-win-neat/lib/neatSchema.js", "win-Picbreeder/deps/win-neat/lib/neatSchema.js");
-require.alias("optimuslime-win-neat/lib/win-neat.js", "win-Picbreeder/deps/win-neat/lib/win-neat.js");
-require.alias("optimuslime-win-neat/lib/win-neat.js", "win-Picbreeder/deps/win-neat/index.js");
-require.alias("optimuslime-win-neat/lib/win-neat.js", "win-neat/index.js");
-require.alias("optimuslime-neatjs/neat.js", "optimuslime-win-neat/deps/neatjs/neat.js");
-require.alias("optimuslime-neatjs/evolution/iec.js", "optimuslime-win-neat/deps/neatjs/evolution/iec.js");
-require.alias("optimuslime-neatjs/evolution/multiobjective.js", "optimuslime-win-neat/deps/neatjs/evolution/multiobjective.js");
-require.alias("optimuslime-neatjs/evolution/novelty.js", "optimuslime-win-neat/deps/neatjs/evolution/novelty.js");
-require.alias("optimuslime-neatjs/genome/neatConnection.js", "optimuslime-win-neat/deps/neatjs/genome/neatConnection.js");
-require.alias("optimuslime-neatjs/genome/neatNode.js", "optimuslime-win-neat/deps/neatjs/genome/neatNode.js");
-require.alias("optimuslime-neatjs/genome/neatGenome.js", "optimuslime-win-neat/deps/neatjs/genome/neatGenome.js");
-require.alias("optimuslime-neatjs/neatHelp/neatDecoder.js", "optimuslime-win-neat/deps/neatjs/neatHelp/neatDecoder.js");
-require.alias("optimuslime-neatjs/neatHelp/neatHelp.js", "optimuslime-win-neat/deps/neatjs/neatHelp/neatHelp.js");
-require.alias("optimuslime-neatjs/neatHelp/neatParameters.js", "optimuslime-win-neat/deps/neatjs/neatHelp/neatParameters.js");
-require.alias("optimuslime-neatjs/types/nodeType.js", "optimuslime-win-neat/deps/neatjs/types/nodeType.js");
-require.alias("optimuslime-neatjs/utility/genomeSharpToJS.js", "optimuslime-win-neat/deps/neatjs/utility/genomeSharpToJS.js");
-require.alias("optimuslime-neatjs/neat.js", "optimuslime-win-neat/deps/neatjs/index.js");
-require.alias("optimuslime-cppnjs/cppn.js", "optimuslime-neatjs/deps/cppnjs/cppn.js");
-require.alias("optimuslime-cppnjs/activationFunctions/cppnActivationFactory.js", "optimuslime-neatjs/deps/cppnjs/activationFunctions/cppnActivationFactory.js");
-require.alias("optimuslime-cppnjs/activationFunctions/cppnActivationFunctions.js", "optimuslime-neatjs/deps/cppnjs/activationFunctions/cppnActivationFunctions.js");
-require.alias("optimuslime-cppnjs/networks/cppnConnection.js", "optimuslime-neatjs/deps/cppnjs/networks/cppnConnection.js");
-require.alias("optimuslime-cppnjs/networks/cppnNode.js", "optimuslime-neatjs/deps/cppnjs/networks/cppnNode.js");
-require.alias("optimuslime-cppnjs/networks/cppn.js", "optimuslime-neatjs/deps/cppnjs/networks/cppn.js");
-require.alias("optimuslime-cppnjs/types/nodeType.js", "optimuslime-neatjs/deps/cppnjs/types/nodeType.js");
-require.alias("optimuslime-cppnjs/utility/utilities.js", "optimuslime-neatjs/deps/cppnjs/utility/utilities.js");
-require.alias("optimuslime-cppnjs/extras/adaptableAdditions.js", "optimuslime-neatjs/deps/cppnjs/extras/adaptableAdditions.js");
-require.alias("optimuslime-cppnjs/extras/pureCPPNAdditions.js", "optimuslime-neatjs/deps/cppnjs/extras/pureCPPNAdditions.js");
-require.alias("optimuslime-cppnjs/extras/gpuAdditions.js", "optimuslime-neatjs/deps/cppnjs/extras/gpuAdditions.js");
-require.alias("optimuslime-cppnjs/cppn.js", "optimuslime-neatjs/deps/cppnjs/index.js");
-require.alias("optimuslime-cppnjs/cppn.js", "optimuslime-cppnjs/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-neatjs/deps/win-utils/winutils.js");
-require.alias("optimuslime-win-utils/uuid/cuid.js", "optimuslime-neatjs/deps/win-utils/uuid/cuid.js");
-require.alias("optimuslime-win-utils/math/winmath.js", "optimuslime-neatjs/deps/win-utils/math/winmath.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-neatjs/deps/win-utils/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-utils/index.js");
-require.alias("optimuslime-neatjs/neat.js", "optimuslime-neatjs/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-neat/deps/win-utils/winutils.js");
-require.alias("optimuslime-win-utils/uuid/cuid.js", "optimuslime-win-neat/deps/win-utils/uuid/cuid.js");
-require.alias("optimuslime-win-utils/math/winmath.js", "optimuslime-win-neat/deps/win-utils/math/winmath.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-neat/deps/win-utils/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-utils/index.js");
-require.alias("optimuslime-win-neat/lib/win-neat.js", "optimuslime-win-neat/index.js");
-require.alias("optimuslime-win-backbone/lib/win-backbone.js", "win-Picbreeder/deps/win-backbone/lib/win-backbone.js");
-require.alias("optimuslime-win-backbone/lib/win-backbone.js", "win-Picbreeder/deps/win-backbone/index.js");
-require.alias("optimuslime-win-backbone/lib/win-backbone.js", "win-backbone/index.js");
-require.alias("techjacker-q/q.js", "optimuslime-win-backbone/deps/q/q.js");
-require.alias("techjacker-q/q.js", "optimuslime-win-backbone/deps/q/index.js");
-require.alias("techjacker-q/q.js", "techjacker-q/index.js");
-require.alias("component-emitter/index.js", "optimuslime-win-backbone/deps/emitter/index.js");
-
-require.alias("optimuslime-win-backbone/lib/win-backbone.js", "optimuslime-win-backbone/index.js");
-require.alias("optimuslime-win-schema/lib/addSchema.js", "win-Picbreeder/deps/win-schema/lib/addSchema.js");
-require.alias("optimuslime-win-schema/lib/schemaSpec.js", "win-Picbreeder/deps/win-schema/lib/schemaSpec.js");
-require.alias("optimuslime-win-schema/lib/win-schema.js", "win-Picbreeder/deps/win-schema/lib/win-schema.js");
-require.alias("optimuslime-win-schema/lib/win-schema.js", "win-Picbreeder/deps/win-schema/index.js");
-require.alias("optimuslime-win-schema/lib/win-schema.js", "win-schema/index.js");
-require.alias("optimuslime-traverse/index.js", "optimuslime-win-schema/deps/optimuslime-traverse/index.js");
-require.alias("optimuslime-traverse/index.js", "optimuslime-win-schema/deps/optimuslime-traverse/index.js");
-require.alias("optimuslime-traverse/index.js", "optimuslime-traverse/index.js");
-require.alias("geraintluff-tv4/lang/de.js", "optimuslime-win-schema/deps/tv4/lang/de.js");
-require.alias("geraintluff-tv4/tv4.js", "optimuslime-win-schema/deps/tv4/tv4.js");
-require.alias("geraintluff-tv4/tv4.js", "optimuslime-win-schema/deps/tv4/index.js");
-require.alias("geraintluff-tv4/tv4.js", "geraintluff-tv4/index.js");
-require.alias("optimuslime-win-schema/lib/win-schema.js", "optimuslime-win-schema/index.js");
-require.alias("optimuslime-win-gen/lib/wingen.js", "win-Picbreeder/deps/win-gen/lib/wingen.js");
-require.alias("optimuslime-win-gen/lib/module/backbone.js", "win-Picbreeder/deps/win-gen/lib/module/backbone.js");
-require.alias("optimuslime-win-gen/lib/wingen.js", "win-Picbreeder/deps/win-gen/index.js");
-require.alias("optimuslime-win-gen/lib/wingen.js", "win-gen/index.js");
-require.alias("techjacker-q/q.js", "optimuslime-win-gen/deps/q/q.js");
-require.alias("techjacker-q/q.js", "optimuslime-win-gen/deps/q/index.js");
-require.alias("techjacker-q/q.js", "techjacker-q/index.js");
-require.alias("optimuslime-win-schema/lib/addSchema.js", "optimuslime-win-gen/deps/win-schema/lib/addSchema.js");
-require.alias("optimuslime-win-schema/lib/schemaSpec.js", "optimuslime-win-gen/deps/win-schema/lib/schemaSpec.js");
-require.alias("optimuslime-win-schema/lib/win-schema.js", "optimuslime-win-gen/deps/win-schema/lib/win-schema.js");
-require.alias("optimuslime-win-schema/lib/win-schema.js", "optimuslime-win-gen/deps/win-schema/index.js");
-require.alias("optimuslime-traverse/index.js", "optimuslime-win-schema/deps/optimuslime-traverse/index.js");
-require.alias("optimuslime-traverse/index.js", "optimuslime-win-schema/deps/optimuslime-traverse/index.js");
-require.alias("optimuslime-traverse/index.js", "optimuslime-traverse/index.js");
-require.alias("geraintluff-tv4/lang/de.js", "optimuslime-win-schema/deps/tv4/lang/de.js");
-require.alias("geraintluff-tv4/tv4.js", "optimuslime-win-schema/deps/tv4/tv4.js");
-require.alias("geraintluff-tv4/tv4.js", "optimuslime-win-schema/deps/tv4/index.js");
-require.alias("geraintluff-tv4/tv4.js", "geraintluff-tv4/index.js");
-require.alias("optimuslime-win-schema/lib/win-schema.js", "optimuslime-win-schema/index.js");
-require.alias("optimuslime-traverse/index.js", "optimuslime-win-gen/deps/optimuslime-traverse/index.js");
-require.alias("optimuslime-traverse/index.js", "optimuslime-win-gen/deps/optimuslime-traverse/index.js");
-require.alias("optimuslime-traverse/index.js", "optimuslime-traverse/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-gen/deps/win-utils/winutils.js");
-require.alias("optimuslime-win-utils/uuid/cuid.js", "optimuslime-win-gen/deps/win-utils/uuid/cuid.js");
-require.alias("optimuslime-win-utils/math/winmath.js", "optimuslime-win-gen/deps/win-utils/math/winmath.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-gen/deps/win-utils/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-utils/index.js");
-require.alias("optimuslime-win-gen/lib/wingen.js", "optimuslime-win-gen/index.js");
-require.alias("optimuslime-win-data/lib/win-data.js", "win-Picbreeder/deps/win-data/lib/win-data.js");
-require.alias("optimuslime-win-data/lib/win-data.js", "win-Picbreeder/deps/win-data/index.js");
-require.alias("optimuslime-win-data/lib/win-data.js", "win-data/index.js");
-require.alias("visionmedia-superagent/lib/client.js", "optimuslime-win-data/deps/superagent/lib/client.js");
-require.alias("visionmedia-superagent/lib/client.js", "optimuslime-win-data/deps/superagent/index.js");
-require.alias("component-emitter/index.js", "visionmedia-superagent/deps/emitter/index.js");
-
-require.alias("component-reduce/index.js", "visionmedia-superagent/deps/reduce/index.js");
-
-require.alias("visionmedia-superagent/lib/client.js", "visionmedia-superagent/index.js");
-require.alias("optimuslime-win-data/lib/win-data.js", "optimuslime-win-data/index.js");
-require.alias("optimuslime-win-phylogeny/lib/win-phylogeny.js", "win-Picbreeder/deps/win-phylogeny/lib/win-phylogeny.js");
-require.alias("optimuslime-win-phylogeny/lib/win-phylogeny.js", "win-Picbreeder/deps/win-phylogeny/index.js");
-require.alias("optimuslime-win-phylogeny/lib/win-phylogeny.js", "win-phylogeny/index.js");
-require.alias("optimuslime-traverse/index.js", "optimuslime-win-phylogeny/deps/optimuslime-traverse/index.js");
-require.alias("optimuslime-traverse/index.js", "optimuslime-win-phylogeny/deps/optimuslime-traverse/index.js");
-require.alias("optimuslime-traverse/index.js", "optimuslime-traverse/index.js");
-require.alias("optimuslime-win-phylogeny/lib/win-phylogeny.js", "optimuslime-win-phylogeny/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "win-Picbreeder/deps/win-utils/winutils.js");
-require.alias("optimuslime-win-utils/uuid/cuid.js", "win-Picbreeder/deps/win-utils/uuid/cuid.js");
-require.alias("optimuslime-win-utils/math/winmath.js", "win-Picbreeder/deps/win-utils/math/winmath.js");
-require.alias("optimuslime-win-utils/winutils.js", "win-Picbreeder/deps/win-utils/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "win-utils/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-utils/index.js");
-require.alias("win-home-ui/main.js", "win-Picbreeder/deps/win-home-ui/main.js");
-require.alias("win-home-ui/main.js", "win-Picbreeder/deps/win-home-ui/index.js");
-require.alias("win-home-ui/main.js", "win-home-ui/index.js");
-require.alias("optimuslime-thumbnail-grid/lib/xThumb.js", "win-home-ui/deps/thumbnail-grid/lib/xThumb.js");
-require.alias("optimuslime-thumbnail-grid/lib/xThumb.js", "win-home-ui/deps/thumbnail-grid/index.js");
-require.alias("desandro-imagesloaded/imagesloaded.js", "optimuslime-thumbnail-grid/deps/imagesloaded/imagesloaded.js");
-require.alias("desandro-imagesloaded/imagesloaded.js", "optimuslime-thumbnail-grid/deps/imagesloaded/index.js");
-require.alias("desandro-eventie/eventie.js", "desandro-imagesloaded/deps/eventie/eventie.js");
-require.alias("desandro-eventie/eventie.js", "desandro-imagesloaded/deps/eventie/index.js");
-require.alias("desandro-eventie/eventie.js", "desandro-eventie/index.js");
-require.alias("wolfy87-eventemitter/EventEmitter.js", "desandro-imagesloaded/deps/eventEmitter/EventEmitter.js");
-require.alias("wolfy87-eventemitter/EventEmitter.js", "desandro-imagesloaded/deps/eventEmitter/index.js");
-require.alias("wolfy87-eventemitter/EventEmitter.js", "wolfy87-eventemitter/index.js");
-require.alias("desandro-imagesloaded/imagesloaded.js", "desandro-imagesloaded/index.js");
-require.alias("ramitos-dimensions/src/dimensions.js", "optimuslime-thumbnail-grid/deps/dimensions/src/dimensions.js");
-require.alias("ramitos-dimensions/src/dimensions.js", "optimuslime-thumbnail-grid/deps/dimensions/index.js");
-require.alias("twolfson-computedstyle/dist/computedStyle.commonjs.js", "ramitos-dimensions/deps/computedStyle/dist/computedStyle.commonjs.js");
-require.alias("twolfson-computedstyle/dist/computedStyle.commonjs.js", "ramitos-dimensions/deps/computedStyle/index.js");
-require.alias("twolfson-computedstyle/dist/computedStyle.commonjs.js", "twolfson-computedstyle/index.js");
-require.alias("component-css/index.js", "ramitos-dimensions/deps/css/index.js");
-require.alias("component-css/lib/css.js", "ramitos-dimensions/deps/css/lib/css.js");
-require.alias("component-css/lib/prop.js", "ramitos-dimensions/deps/css/lib/prop.js");
-require.alias("component-css/lib/swap.js", "ramitos-dimensions/deps/css/lib/swap.js");
-require.alias("component-css/lib/style.js", "ramitos-dimensions/deps/css/lib/style.js");
-require.alias("component-css/lib/hooks.js", "ramitos-dimensions/deps/css/lib/hooks.js");
-require.alias("component-css/lib/styles.js", "ramitos-dimensions/deps/css/lib/styles.js");
-require.alias("component-css/lib/vendor.js", "ramitos-dimensions/deps/css/lib/vendor.js");
-require.alias("component-css/lib/support.js", "ramitos-dimensions/deps/css/lib/support.js");
-require.alias("component-css/lib/computed.js", "ramitos-dimensions/deps/css/lib/computed.js");
-require.alias("component-css/index.js", "ramitos-dimensions/deps/css/index.js");
-require.alias("component-each/index.js", "component-css/deps/each/index.js");
-require.alias("component-to-function/index.js", "component-each/deps/to-function/index.js");
-require.alias("component-props/index.js", "component-to-function/deps/props/index.js");
-
-require.alias("component-type/index.js", "component-each/deps/type/index.js");
-
-require.alias("visionmedia-debug/debug.js", "component-css/deps/debug/debug.js");
-require.alias("visionmedia-debug/debug.js", "component-css/deps/debug/index.js");
-require.alias("visionmedia-debug/debug.js", "visionmedia-debug/index.js");
-require.alias("ianstormtaylor-to-camel-case/index.js", "component-css/deps/to-camel-case/index.js");
-require.alias("ianstormtaylor-to-space-case/index.js", "ianstormtaylor-to-camel-case/deps/to-space-case/index.js");
-require.alias("ianstormtaylor-to-no-case/index.js", "ianstormtaylor-to-space-case/deps/to-no-case/index.js");
-
-require.alias("component-within-document/index.js", "component-css/deps/within-document/index.js");
-
-require.alias("component-css/index.js", "component-css/index.js");
-require.alias("ramitos-iswindow/src/isWindow.js", "ramitos-dimensions/deps/isWindow/src/isWindow.js");
-require.alias("ramitos-iswindow/src/isWindow.js", "ramitos-dimensions/deps/isWindow/index.js");
-require.alias("ramitos-iswindow/src/isWindow.js", "ramitos-iswindow/index.js");
-require.alias("ramitos-isdocument/src/isDocument.js", "ramitos-dimensions/deps/isDocument/src/isDocument.js");
-require.alias("ramitos-isdocument/src/isDocument.js", "ramitos-dimensions/deps/isDocument/index.js");
-require.alias("ramitos-isdocument/src/isDocument.js", "ramitos-isdocument/index.js");
-require.alias("ramitos-iselement/src/isElement.js", "ramitos-dimensions/deps/isElement/src/isElement.js");
-require.alias("ramitos-iselement/src/isElement.js", "ramitos-dimensions/deps/isElement/index.js");
-require.alias("component-type/index.js", "ramitos-iselement/deps/type/index.js");
-
-require.alias("ramitos-iselement/src/isElement.js", "ramitos-iselement/index.js");
-require.alias("component-type/index.js", "ramitos-dimensions/deps/type/index.js");
-
-require.alias("ramitos-interpolate/interpolate.js", "ramitos-dimensions/deps/interpolate/interpolate.js");
-require.alias("ramitos-interpolate/interpolate.js", "ramitos-dimensions/deps/interpolate/index.js");
-require.alias("ramitos-interpolate/interpolate.js", "ramitos-interpolate/index.js");
-require.alias("yields-capitalize/index.js", "ramitos-dimensions/deps/capitalize/index.js");
-
-require.alias("ramitos-from_px/src/from_px.js", "ramitos-dimensions/deps/from_px/src/from_px.js");
-require.alias("ramitos-from_px/src/from_px.js", "ramitos-dimensions/deps/from_px/index.js");
-require.alias("component-type/index.js", "ramitos-from_px/deps/type/index.js");
-
-require.alias("kenany-is-nan/index.js", "ramitos-from_px/deps/is-nan/index.js");
-require.alias("kenany-is-number/index.js", "kenany-is-nan/deps/is-number/index.js");
-
-require.alias("ramitos-from_px/src/from_px.js", "ramitos-from_px/index.js");
-require.alias("ramitos-to_px/src/to_px.js", "ramitos-dimensions/deps/to_px/src/to_px.js");
-require.alias("ramitos-to_px/src/to_px.js", "ramitos-dimensions/deps/to_px/index.js");
-require.alias("component-type/index.js", "ramitos-to_px/deps/type/index.js");
-
-require.alias("ramitos-interpolate/interpolate.js", "ramitos-to_px/deps/interpolate/interpolate.js");
-require.alias("ramitos-interpolate/interpolate.js", "ramitos-to_px/deps/interpolate/index.js");
-require.alias("ramitos-interpolate/interpolate.js", "ramitos-interpolate/index.js");
-require.alias("ramitos-to_px/src/to_px.js", "ramitos-to_px/index.js");
-require.alias("ramitos-dimensions/src/dimensions.js", "ramitos-dimensions/index.js");
-require.alias("timoxley-offset/index.js", "optimuslime-thumbnail-grid/deps/offset/index.js");
-require.alias("timoxley-dom-support/index.js", "timoxley-offset/deps/dom-support/index.js");
-require.alias("enyo-domready/index.js", "timoxley-dom-support/deps/domready/index.js");
-
-require.alias("component-within-document/index.js", "timoxley-offset/deps/within-document/index.js");
-
-require.alias("juliangruber-fade/index.js", "optimuslime-thumbnail-grid/deps/fade/index.js");
-require.alias("juliangruber-fade/index.js", "optimuslime-thumbnail-grid/deps/fade/index.js");
-require.alias("juliangruber-prefixed/index.js", "juliangruber-fade/deps/prefixed/index.js");
-require.alias("juliangruber-prefixed/index.js", "juliangruber-fade/deps/prefixed/index.js");
-require.alias("juliangruber-prefixed/index.js", "juliangruber-prefixed/index.js");
-require.alias("juliangruber-fade/index.js", "juliangruber-fade/index.js");
-require.alias("optimuslime-animate-property/index.js", "optimuslime-thumbnail-grid/deps/animate-property/index.js");
-require.alias("optimuslime-animate-property/index.js", "optimuslime-thumbnail-grid/deps/animate-property/index.js");
-require.alias("component-raf/index.js", "optimuslime-animate-property/deps/raf/index.js");
-
-require.alias("component-tween/index.js", "optimuslime-animate-property/deps/tween/index.js");
-require.alias("component-emitter/index.js", "component-tween/deps/emitter/index.js");
-
-require.alias("component-ease/index.js", "component-tween/deps/ease/index.js");
-
-require.alias("optimuslime-animate-property/index.js", "optimuslime-animate-property/index.js");
-require.alias("optimuslime-el.js/el.js", "optimuslime-thumbnail-grid/deps/el.js/el.js");
-require.alias("optimuslime-el.js/el.js", "optimuslime-thumbnail-grid/deps/el.js/index.js");
-require.alias("optimuslime-el.js/el.js", "optimuslime-el.js/index.js");
-require.alias("optimuslime-data/index.js", "optimuslime-thumbnail-grid/deps/data/index.js");
-
-require.alias("component-classes/index.js", "optimuslime-thumbnail-grid/deps/classes/index.js");
-require.alias("component-indexof/index.js", "component-classes/deps/indexof/index.js");
-
-require.alias("component-css/index.js", "optimuslime-thumbnail-grid/deps/css/index.js");
-require.alias("component-css/lib/css.js", "optimuslime-thumbnail-grid/deps/css/lib/css.js");
-require.alias("component-css/lib/prop.js", "optimuslime-thumbnail-grid/deps/css/lib/prop.js");
-require.alias("component-css/lib/swap.js", "optimuslime-thumbnail-grid/deps/css/lib/swap.js");
-require.alias("component-css/lib/style.js", "optimuslime-thumbnail-grid/deps/css/lib/style.js");
-require.alias("component-css/lib/hooks.js", "optimuslime-thumbnail-grid/deps/css/lib/hooks.js");
-require.alias("component-css/lib/styles.js", "optimuslime-thumbnail-grid/deps/css/lib/styles.js");
-require.alias("component-css/lib/vendor.js", "optimuslime-thumbnail-grid/deps/css/lib/vendor.js");
-require.alias("component-css/lib/support.js", "optimuslime-thumbnail-grid/deps/css/lib/support.js");
-require.alias("component-css/lib/computed.js", "optimuslime-thumbnail-grid/deps/css/lib/computed.js");
-require.alias("component-css/index.js", "optimuslime-thumbnail-grid/deps/css/index.js");
-require.alias("component-each/index.js", "component-css/deps/each/index.js");
-require.alias("component-to-function/index.js", "component-each/deps/to-function/index.js");
-require.alias("component-props/index.js", "component-to-function/deps/props/index.js");
-
-require.alias("component-type/index.js", "component-each/deps/type/index.js");
-
-require.alias("visionmedia-debug/debug.js", "component-css/deps/debug/debug.js");
-require.alias("visionmedia-debug/debug.js", "component-css/deps/debug/index.js");
-require.alias("visionmedia-debug/debug.js", "visionmedia-debug/index.js");
-require.alias("ianstormtaylor-to-camel-case/index.js", "component-css/deps/to-camel-case/index.js");
-require.alias("ianstormtaylor-to-space-case/index.js", "ianstormtaylor-to-camel-case/deps/to-space-case/index.js");
-require.alias("ianstormtaylor-to-no-case/index.js", "ianstormtaylor-to-space-case/deps/to-no-case/index.js");
-
-require.alias("component-within-document/index.js", "component-css/deps/within-document/index.js");
-
-require.alias("component-css/index.js", "component-css/index.js");
-require.alias("component-emitter/index.js", "optimuslime-thumbnail-grid/deps/emitter/index.js");
-
-require.alias("component-indexof/index.js", "optimuslime-thumbnail-grid/deps/indexof/index.js");
-
-require.alias("component-matches-selector/index.js", "optimuslime-thumbnail-grid/deps/matches-selector/index.js");
-require.alias("component-query/index.js", "component-matches-selector/deps/query/index.js");
-
-require.alias("optimuslime-thumbnail-grid/lib/xThumb.js", "optimuslime-thumbnail-grid/index.js");
-require.alias("optimuslime-el.js/el.js", "win-home-ui/deps/el.js/el.js");
-require.alias("optimuslime-el.js/el.js", "win-home-ui/deps/el.js/index.js");
-require.alias("optimuslime-el.js/el.js", "optimuslime-el.js/index.js");
-require.alias("optimuslime-win-query/lib/win-query.js", "win-home-ui/deps/win-query/lib/win-query.js");
-require.alias("optimuslime-win-query/lib/win-query.js", "win-home-ui/deps/win-query/index.js");
-require.alias("visionmedia-superagent/lib/client.js", "optimuslime-win-query/deps/superagent/lib/client.js");
-require.alias("visionmedia-superagent/lib/client.js", "optimuslime-win-query/deps/superagent/index.js");
-require.alias("component-emitter/index.js", "visionmedia-superagent/deps/emitter/index.js");
-
-require.alias("component-reduce/index.js", "visionmedia-superagent/deps/reduce/index.js");
-
-require.alias("visionmedia-superagent/lib/client.js", "visionmedia-superagent/index.js");
-require.alias("optimuslime-win-query/lib/win-query.js", "optimuslime-win-query/index.js");
-require.alias("component-emitter/index.js", "win-home-ui/deps/emitter/index.js");
-
-require.alias("win-home-ui/main.js", "win-home-ui/index.js");
-require.alias("webworker-queue/webworker-queue.js", "win-Picbreeder/deps/webworker-queue/webworker-queue.js");
-require.alias("webworker-queue/webworker-queue.js", "win-Picbreeder/deps/webworker-queue/index.js");
-require.alias("webworker-queue/webworker-queue.js", "webworker-queue/index.js");
-require.alias("component-worker/index.js", "webworker-queue/deps/worker/index.js");
-require.alias("component-worker/index.js", "webworker-queue/deps/worker/index.js");
-require.alias("component-emitter/index.js", "component-worker/deps/emitter/index.js");
-
-require.alias("component-worker/index.js", "component-worker/index.js");
-require.alias("webworker-queue/webworker-queue.js", "webworker-queue/index.js");
-require.alias("geno-to-picture/geno-to-picture.js", "win-Picbreeder/deps/geno-to-picture/geno-to-picture.js");
-require.alias("geno-to-picture/generateBitmap.js", "win-Picbreeder/deps/geno-to-picture/generateBitmap.js");
-require.alias("geno-to-picture/base64.js", "win-Picbreeder/deps/geno-to-picture/base64.js");
-require.alias("geno-to-picture/geno-to-picture.js", "win-Picbreeder/deps/geno-to-picture/index.js");
-require.alias("geno-to-picture/geno-to-picture.js", "geno-to-picture/index.js");
-require.alias("optimuslime-win-neat/lib/neatSchema.js", "geno-to-picture/deps/win-neat/lib/neatSchema.js");
-require.alias("optimuslime-win-neat/lib/win-neat.js", "geno-to-picture/deps/win-neat/lib/win-neat.js");
-require.alias("optimuslime-win-neat/lib/win-neat.js", "geno-to-picture/deps/win-neat/index.js");
-require.alias("optimuslime-neatjs/neat.js", "optimuslime-win-neat/deps/neatjs/neat.js");
-require.alias("optimuslime-neatjs/evolution/iec.js", "optimuslime-win-neat/deps/neatjs/evolution/iec.js");
-require.alias("optimuslime-neatjs/evolution/multiobjective.js", "optimuslime-win-neat/deps/neatjs/evolution/multiobjective.js");
-require.alias("optimuslime-neatjs/evolution/novelty.js", "optimuslime-win-neat/deps/neatjs/evolution/novelty.js");
-require.alias("optimuslime-neatjs/genome/neatConnection.js", "optimuslime-win-neat/deps/neatjs/genome/neatConnection.js");
-require.alias("optimuslime-neatjs/genome/neatNode.js", "optimuslime-win-neat/deps/neatjs/genome/neatNode.js");
-require.alias("optimuslime-neatjs/genome/neatGenome.js", "optimuslime-win-neat/deps/neatjs/genome/neatGenome.js");
-require.alias("optimuslime-neatjs/neatHelp/neatDecoder.js", "optimuslime-win-neat/deps/neatjs/neatHelp/neatDecoder.js");
-require.alias("optimuslime-neatjs/neatHelp/neatHelp.js", "optimuslime-win-neat/deps/neatjs/neatHelp/neatHelp.js");
-require.alias("optimuslime-neatjs/neatHelp/neatParameters.js", "optimuslime-win-neat/deps/neatjs/neatHelp/neatParameters.js");
-require.alias("optimuslime-neatjs/types/nodeType.js", "optimuslime-win-neat/deps/neatjs/types/nodeType.js");
-require.alias("optimuslime-neatjs/utility/genomeSharpToJS.js", "optimuslime-win-neat/deps/neatjs/utility/genomeSharpToJS.js");
-require.alias("optimuslime-neatjs/neat.js", "optimuslime-win-neat/deps/neatjs/index.js");
-require.alias("optimuslime-cppnjs/cppn.js", "optimuslime-neatjs/deps/cppnjs/cppn.js");
-require.alias("optimuslime-cppnjs/activationFunctions/cppnActivationFactory.js", "optimuslime-neatjs/deps/cppnjs/activationFunctions/cppnActivationFactory.js");
-require.alias("optimuslime-cppnjs/activationFunctions/cppnActivationFunctions.js", "optimuslime-neatjs/deps/cppnjs/activationFunctions/cppnActivationFunctions.js");
-require.alias("optimuslime-cppnjs/networks/cppnConnection.js", "optimuslime-neatjs/deps/cppnjs/networks/cppnConnection.js");
-require.alias("optimuslime-cppnjs/networks/cppnNode.js", "optimuslime-neatjs/deps/cppnjs/networks/cppnNode.js");
-require.alias("optimuslime-cppnjs/networks/cppn.js", "optimuslime-neatjs/deps/cppnjs/networks/cppn.js");
-require.alias("optimuslime-cppnjs/types/nodeType.js", "optimuslime-neatjs/deps/cppnjs/types/nodeType.js");
-require.alias("optimuslime-cppnjs/utility/utilities.js", "optimuslime-neatjs/deps/cppnjs/utility/utilities.js");
-require.alias("optimuslime-cppnjs/extras/adaptableAdditions.js", "optimuslime-neatjs/deps/cppnjs/extras/adaptableAdditions.js");
-require.alias("optimuslime-cppnjs/extras/pureCPPNAdditions.js", "optimuslime-neatjs/deps/cppnjs/extras/pureCPPNAdditions.js");
-require.alias("optimuslime-cppnjs/extras/gpuAdditions.js", "optimuslime-neatjs/deps/cppnjs/extras/gpuAdditions.js");
-require.alias("optimuslime-cppnjs/cppn.js", "optimuslime-neatjs/deps/cppnjs/index.js");
-require.alias("optimuslime-cppnjs/cppn.js", "optimuslime-cppnjs/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-neatjs/deps/win-utils/winutils.js");
-require.alias("optimuslime-win-utils/uuid/cuid.js", "optimuslime-neatjs/deps/win-utils/uuid/cuid.js");
-require.alias("optimuslime-win-utils/math/winmath.js", "optimuslime-neatjs/deps/win-utils/math/winmath.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-neatjs/deps/win-utils/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-utils/index.js");
-require.alias("optimuslime-neatjs/neat.js", "optimuslime-neatjs/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-neat/deps/win-utils/winutils.js");
-require.alias("optimuslime-win-utils/uuid/cuid.js", "optimuslime-win-neat/deps/win-utils/uuid/cuid.js");
-require.alias("optimuslime-win-utils/math/winmath.js", "optimuslime-win-neat/deps/win-utils/math/winmath.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-neat/deps/win-utils/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-utils/index.js");
-require.alias("optimuslime-win-neat/lib/win-neat.js", "optimuslime-win-neat/index.js");
-require.alias("optimuslime-neatjs/neat.js", "geno-to-picture/deps/neatjs/neat.js");
-require.alias("optimuslime-neatjs/evolution/iec.js", "geno-to-picture/deps/neatjs/evolution/iec.js");
-require.alias("optimuslime-neatjs/evolution/multiobjective.js", "geno-to-picture/deps/neatjs/evolution/multiobjective.js");
-require.alias("optimuslime-neatjs/evolution/novelty.js", "geno-to-picture/deps/neatjs/evolution/novelty.js");
-require.alias("optimuslime-neatjs/genome/neatConnection.js", "geno-to-picture/deps/neatjs/genome/neatConnection.js");
-require.alias("optimuslime-neatjs/genome/neatNode.js", "geno-to-picture/deps/neatjs/genome/neatNode.js");
-require.alias("optimuslime-neatjs/genome/neatGenome.js", "geno-to-picture/deps/neatjs/genome/neatGenome.js");
-require.alias("optimuslime-neatjs/neatHelp/neatDecoder.js", "geno-to-picture/deps/neatjs/neatHelp/neatDecoder.js");
-require.alias("optimuslime-neatjs/neatHelp/neatHelp.js", "geno-to-picture/deps/neatjs/neatHelp/neatHelp.js");
-require.alias("optimuslime-neatjs/neatHelp/neatParameters.js", "geno-to-picture/deps/neatjs/neatHelp/neatParameters.js");
-require.alias("optimuslime-neatjs/types/nodeType.js", "geno-to-picture/deps/neatjs/types/nodeType.js");
-require.alias("optimuslime-neatjs/utility/genomeSharpToJS.js", "geno-to-picture/deps/neatjs/utility/genomeSharpToJS.js");
-require.alias("optimuslime-neatjs/neat.js", "geno-to-picture/deps/neatjs/index.js");
-require.alias("optimuslime-cppnjs/cppn.js", "optimuslime-neatjs/deps/cppnjs/cppn.js");
-require.alias("optimuslime-cppnjs/activationFunctions/cppnActivationFactory.js", "optimuslime-neatjs/deps/cppnjs/activationFunctions/cppnActivationFactory.js");
-require.alias("optimuslime-cppnjs/activationFunctions/cppnActivationFunctions.js", "optimuslime-neatjs/deps/cppnjs/activationFunctions/cppnActivationFunctions.js");
-require.alias("optimuslime-cppnjs/networks/cppnConnection.js", "optimuslime-neatjs/deps/cppnjs/networks/cppnConnection.js");
-require.alias("optimuslime-cppnjs/networks/cppnNode.js", "optimuslime-neatjs/deps/cppnjs/networks/cppnNode.js");
-require.alias("optimuslime-cppnjs/networks/cppn.js", "optimuslime-neatjs/deps/cppnjs/networks/cppn.js");
-require.alias("optimuslime-cppnjs/types/nodeType.js", "optimuslime-neatjs/deps/cppnjs/types/nodeType.js");
-require.alias("optimuslime-cppnjs/utility/utilities.js", "optimuslime-neatjs/deps/cppnjs/utility/utilities.js");
-require.alias("optimuslime-cppnjs/extras/adaptableAdditions.js", "optimuslime-neatjs/deps/cppnjs/extras/adaptableAdditions.js");
-require.alias("optimuslime-cppnjs/extras/pureCPPNAdditions.js", "optimuslime-neatjs/deps/cppnjs/extras/pureCPPNAdditions.js");
-require.alias("optimuslime-cppnjs/extras/gpuAdditions.js", "optimuslime-neatjs/deps/cppnjs/extras/gpuAdditions.js");
-require.alias("optimuslime-cppnjs/cppn.js", "optimuslime-neatjs/deps/cppnjs/index.js");
-require.alias("optimuslime-cppnjs/cppn.js", "optimuslime-cppnjs/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-neatjs/deps/win-utils/winutils.js");
-require.alias("optimuslime-win-utils/uuid/cuid.js", "optimuslime-neatjs/deps/win-utils/uuid/cuid.js");
-require.alias("optimuslime-win-utils/math/winmath.js", "optimuslime-neatjs/deps/win-utils/math/winmath.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-neatjs/deps/win-utils/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-utils/index.js");
-require.alias("optimuslime-neatjs/neat.js", "optimuslime-neatjs/index.js");
-require.alias("optimuslime-cppnjs/cppn.js", "geno-to-picture/deps/cppnjs/cppn.js");
-require.alias("optimuslime-cppnjs/activationFunctions/cppnActivationFactory.js", "geno-to-picture/deps/cppnjs/activationFunctions/cppnActivationFactory.js");
-require.alias("optimuslime-cppnjs/activationFunctions/cppnActivationFunctions.js", "geno-to-picture/deps/cppnjs/activationFunctions/cppnActivationFunctions.js");
-require.alias("optimuslime-cppnjs/networks/cppnConnection.js", "geno-to-picture/deps/cppnjs/networks/cppnConnection.js");
-require.alias("optimuslime-cppnjs/networks/cppnNode.js", "geno-to-picture/deps/cppnjs/networks/cppnNode.js");
-require.alias("optimuslime-cppnjs/networks/cppn.js", "geno-to-picture/deps/cppnjs/networks/cppn.js");
-require.alias("optimuslime-cppnjs/types/nodeType.js", "geno-to-picture/deps/cppnjs/types/nodeType.js");
-require.alias("optimuslime-cppnjs/utility/utilities.js", "geno-to-picture/deps/cppnjs/utility/utilities.js");
-require.alias("optimuslime-cppnjs/extras/adaptableAdditions.js", "geno-to-picture/deps/cppnjs/extras/adaptableAdditions.js");
-require.alias("optimuslime-cppnjs/extras/pureCPPNAdditions.js", "geno-to-picture/deps/cppnjs/extras/pureCPPNAdditions.js");
-require.alias("optimuslime-cppnjs/extras/gpuAdditions.js", "geno-to-picture/deps/cppnjs/extras/gpuAdditions.js");
-require.alias("optimuslime-cppnjs/cppn.js", "geno-to-picture/deps/cppnjs/index.js");
-require.alias("optimuslime-cppnjs/cppn.js", "optimuslime-cppnjs/index.js");
-require.alias("geno-to-picture/geno-to-picture.js", "geno-to-picture/index.js");
-require.alias("cppn-additions/cppn-additions.js", "win-Picbreeder/deps/cppn-additions/cppn-additions.js");
-require.alias("cppn-additions/cppn-additions.js", "win-Picbreeder/deps/cppn-additions/index.js");
-require.alias("cppn-additions/cppn-additions.js", "cppn-additions/index.js");
-require.alias("optimuslime-cppnjs/cppn.js", "cppn-additions/deps/cppnjs/cppn.js");
-require.alias("optimuslime-cppnjs/activationFunctions/cppnActivationFactory.js", "cppn-additions/deps/cppnjs/activationFunctions/cppnActivationFactory.js");
-require.alias("optimuslime-cppnjs/activationFunctions/cppnActivationFunctions.js", "cppn-additions/deps/cppnjs/activationFunctions/cppnActivationFunctions.js");
-require.alias("optimuslime-cppnjs/networks/cppnConnection.js", "cppn-additions/deps/cppnjs/networks/cppnConnection.js");
-require.alias("optimuslime-cppnjs/networks/cppnNode.js", "cppn-additions/deps/cppnjs/networks/cppnNode.js");
-require.alias("optimuslime-cppnjs/networks/cppn.js", "cppn-additions/deps/cppnjs/networks/cppn.js");
-require.alias("optimuslime-cppnjs/types/nodeType.js", "cppn-additions/deps/cppnjs/types/nodeType.js");
-require.alias("optimuslime-cppnjs/utility/utilities.js", "cppn-additions/deps/cppnjs/utility/utilities.js");
-require.alias("optimuslime-cppnjs/extras/adaptableAdditions.js", "cppn-additions/deps/cppnjs/extras/adaptableAdditions.js");
-require.alias("optimuslime-cppnjs/extras/pureCPPNAdditions.js", "cppn-additions/deps/cppnjs/extras/pureCPPNAdditions.js");
-require.alias("optimuslime-cppnjs/extras/gpuAdditions.js", "cppn-additions/deps/cppnjs/extras/gpuAdditions.js");
-require.alias("optimuslime-cppnjs/cppn.js", "cppn-additions/deps/cppnjs/index.js");
-require.alias("optimuslime-cppnjs/cppn.js", "optimuslime-cppnjs/index.js");
-require.alias("cppn-additions/cppn-additions.js", "cppn-additions/index.js");
-require.alias("win-setup/win-setup.js", "win-Picbreeder/deps/win-setup/win-setup.js");
-require.alias("win-setup/win-setup.js", "win-Picbreeder/deps/win-setup/index.js");
-require.alias("win-setup/win-setup.js", "win-setup/index.js");
-require.alias("optimuslime-win-backbone/lib/win-backbone.js", "win-setup/deps/win-backbone/lib/win-backbone.js");
-require.alias("optimuslime-win-backbone/lib/win-backbone.js", "win-setup/deps/win-backbone/index.js");
-require.alias("techjacker-q/q.js", "optimuslime-win-backbone/deps/q/q.js");
-require.alias("techjacker-q/q.js", "optimuslime-win-backbone/deps/q/index.js");
-require.alias("techjacker-q/q.js", "techjacker-q/index.js");
-require.alias("component-emitter/index.js", "optimuslime-win-backbone/deps/emitter/index.js");
-
-require.alias("optimuslime-win-backbone/lib/win-backbone.js", "optimuslime-win-backbone/index.js");
-require.alias("techjacker-q/q.js", "win-setup/deps/q/q.js");
-require.alias("techjacker-q/q.js", "win-setup/deps/q/index.js");
-require.alias("techjacker-q/q.js", "techjacker-q/index.js");
-require.alias("win-setup/win-setup.js", "win-setup/index.js");
-require.alias("pbencoding/picbreeder-encoding.js", "win-Picbreeder/deps/pbEncoding/picbreeder-encoding.js");
-require.alias("pbencoding/picbreederSchema.js", "win-Picbreeder/deps/pbEncoding/picbreederSchema.js");
-require.alias("pbencoding/picbreeder-encoding.js", "win-Picbreeder/deps/pbEncoding/index.js");
-require.alias("pbencoding/picbreeder-encoding.js", "pbEncoding/index.js");
-require.alias("pbencoding/picbreeder-encoding.js", "pbencoding/index.js");
-require.alias("win-flexiec/win-flexIEC.js", "win-Picbreeder/deps/win-flexIEC/win-flexIEC.js");
-require.alias("win-flexiec/win-flexIEC.js", "win-Picbreeder/deps/win-flexIEC/index.js");
-require.alias("win-flexiec/win-flexIEC.js", "win-flexIEC/index.js");
-require.alias("optimuslime-win-iec/lib/win-iec.js", "win-flexiec/deps/win-iec/lib/win-iec.js");
-require.alias("optimuslime-win-iec/lib/win-iec.js", "win-flexiec/deps/win-iec/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-iec/deps/win-utils/winutils.js");
-require.alias("optimuslime-win-utils/uuid/cuid.js", "optimuslime-win-iec/deps/win-utils/uuid/cuid.js");
-require.alias("optimuslime-win-utils/math/winmath.js", "optimuslime-win-iec/deps/win-utils/math/winmath.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-iec/deps/win-utils/index.js");
-require.alias("optimuslime-win-utils/winutils.js", "optimuslime-win-utils/index.js");
-require.alias("optimuslime-win-iec/lib/win-iec.js", "optimuslime-win-iec/index.js");
-require.alias("component-emitter/index.js", "win-flexiec/deps/emitter/index.js");
-
-require.alias("flexiec/main.js", "win-flexiec/deps/flexIEC/main.js");
-require.alias("flexiec/main.js", "win-flexiec/deps/flexIEC/index.js");
-require.alias("component-events/index.js", "flexiec/deps/events/index.js");
-require.alias("component-event/index.js", "component-events/deps/event/index.js");
-
-require.alias("component-delegate/index.js", "component-events/deps/delegate/index.js");
-require.alias("discore-closest/index.js", "component-delegate/deps/closest/index.js");
-require.alias("discore-closest/index.js", "component-delegate/deps/closest/index.js");
-require.alias("component-matches-selector/index.js", "discore-closest/deps/matches-selector/index.js");
-require.alias("component-query/index.js", "component-matches-selector/deps/query/index.js");
-
-require.alias("discore-closest/index.js", "discore-closest/index.js");
-require.alias("component-event/index.js", "component-delegate/deps/event/index.js");
-
-require.alias("component-classes/index.js", "flexiec/deps/classes/index.js");
-require.alias("component-indexof/index.js", "component-classes/deps/indexof/index.js");
-
-require.alias("ramitos-resize/src/resize.js", "flexiec/deps/resize/src/resize.js");
-require.alias("ramitos-resize/src/resize.js", "flexiec/deps/resize/index.js");
-require.alias("ramitos-resize/src/resize.js", "ramitos-resize/index.js");
-require.alias("optimuslime-el.js/el.js", "flexiec/deps/el.js/el.js");
-require.alias("optimuslime-el.js/el.js", "flexiec/deps/el.js/index.js");
-require.alias("optimuslime-el.js/el.js", "optimuslime-el.js/index.js");
-require.alias("component-emitter/index.js", "flexiec/deps/emitter/index.js");
-
-require.alias("flexstatic/main.js", "flexiec/deps/flexstatic/main.js");
-require.alias("flexstatic/main.js", "flexiec/deps/flexstatic/index.js");
-require.alias("optimuslime-el.js/el.js", "flexstatic/deps/el.js/el.js");
-require.alias("optimuslime-el.js/el.js", "flexstatic/deps/el.js/index.js");
-require.alias("optimuslime-el.js/el.js", "optimuslime-el.js/index.js");
-require.alias("component-emitter/index.js", "flexstatic/deps/emitter/index.js");
-
-require.alias("flexstatic/main.js", "flexstatic/index.js");
-require.alias("flexparents/main.js", "flexiec/deps/flexparents/main.js");
-require.alias("flexparents/main.js", "flexiec/deps/flexparents/index.js");
-require.alias("ramitos-resize/src/resize.js", "flexparents/deps/resize/src/resize.js");
-require.alias("ramitos-resize/src/resize.js", "flexparents/deps/resize/index.js");
-require.alias("ramitos-resize/src/resize.js", "ramitos-resize/index.js");
-require.alias("component-emitter/index.js", "flexparents/deps/emitter/index.js");
-
-require.alias("flexparents/main.js", "flexparents/index.js");
-require.alias("publishui/modal.js", "flexiec/deps/publishUI/modal.js");
-require.alias("publishui/modal.js", "flexiec/deps/publishUI/index.js");
-require.alias("component-pillbox/index.js", "publishui/deps/pillbox/index.js");
-require.alias("component-bind/index.js", "component-pillbox/deps/bind/index.js");
-
-require.alias("component-trim/index.js", "component-pillbox/deps/trim/index.js");
-
-require.alias("component-events/index.js", "component-pillbox/deps/events/index.js");
-require.alias("component-event/index.js", "component-events/deps/event/index.js");
-
-require.alias("component-delegate/index.js", "component-events/deps/delegate/index.js");
-require.alias("discore-closest/index.js", "component-delegate/deps/closest/index.js");
-require.alias("discore-closest/index.js", "component-delegate/deps/closest/index.js");
-require.alias("component-matches-selector/index.js", "discore-closest/deps/matches-selector/index.js");
-require.alias("component-query/index.js", "component-matches-selector/deps/query/index.js");
-
-require.alias("discore-closest/index.js", "discore-closest/index.js");
-require.alias("component-event/index.js", "component-delegate/deps/event/index.js");
-
-require.alias("component-keyname/index.js", "component-pillbox/deps/keyname/index.js");
-
-require.alias("component-emitter/index.js", "component-pillbox/deps/emitter/index.js");
-
-require.alias("component-each/index.js", "component-pillbox/deps/each/index.js");
-require.alias("component-to-function/index.js", "component-each/deps/to-function/index.js");
-require.alias("component-props/index.js", "component-to-function/deps/props/index.js");
-
-require.alias("component-type/index.js", "component-each/deps/type/index.js");
-
-require.alias("component-set/index.js", "component-pillbox/deps/set/index.js");
-
-require.alias("stephenmathieson-normalize/index.js", "component-pillbox/deps/normalize/index.js");
-require.alias("stephenmathieson-normalize/index.js", "component-pillbox/deps/normalize/index.js");
-require.alias("stephenmathieson-normalize/index.js", "stephenmathieson-normalize/index.js");
-require.alias("optimuslime-el.js/el.js", "publishui/deps/el.js/el.js");
-require.alias("optimuslime-el.js/el.js", "publishui/deps/el.js/index.js");
-require.alias("optimuslime-el.js/el.js", "optimuslime-el.js/index.js");
-require.alias("component-classes/index.js", "publishui/deps/classes/index.js");
-require.alias("component-indexof/index.js", "component-classes/deps/indexof/index.js");
-
-require.alias("component-emitter/index.js", "publishui/deps/emitter/index.js");
-
-require.alias("segmentio-modal/lib/index.js", "publishui/deps/modal/lib/index.js");
-require.alias("segmentio-modal/lib/index.js", "publishui/deps/modal/index.js");
-require.alias("component-domify/index.js", "segmentio-modal/deps/domify/index.js");
-
-require.alias("component-emitter/index.js", "segmentio-modal/deps/emitter/index.js");
-
-require.alias("segmentio-overlay/lib/index.js", "segmentio-modal/deps/overlay/lib/index.js");
-require.alias("segmentio-overlay/lib/index.js", "segmentio-modal/deps/overlay/index.js");
-require.alias("component-emitter/index.js", "segmentio-overlay/deps/emitter/index.js");
-
-require.alias("component-domify/index.js", "segmentio-overlay/deps/domify/index.js");
-
-require.alias("segmentio-showable/index.js", "segmentio-overlay/deps/showable/index.js");
-require.alias("timoxley-next-tick/index.js", "segmentio-showable/deps/next-tick/index.js");
-
-require.alias("yields-after-transition/index.js", "segmentio-showable/deps/after-transition/index.js");
-require.alias("yields-after-transition/index.js", "segmentio-showable/deps/after-transition/index.js");
-require.alias("yields-has-transitions/index.js", "yields-after-transition/deps/has-transitions/index.js");
-require.alias("yields-has-transitions/index.js", "yields-after-transition/deps/has-transitions/index.js");
-require.alias("yields-has-transitions/index.js", "yields-has-transitions/index.js");
-require.alias("ecarter-css-emitter/index.js", "yields-after-transition/deps/css-emitter/index.js");
-require.alias("component-event/index.js", "ecarter-css-emitter/deps/event/index.js");
-
-require.alias("component-once/index.js", "yields-after-transition/deps/once/index.js");
-
-require.alias("yields-after-transition/index.js", "yields-after-transition/index.js");
-require.alias("segmentio-on-escape/index.js", "segmentio-showable/deps/on-escape/index.js");
-require.alias("component-event/index.js", "segmentio-on-escape/deps/event/index.js");
-
-require.alias("component-indexof/index.js", "segmentio-on-escape/deps/indexof/index.js");
-
-require.alias("ianstormtaylor-classes/index.js", "segmentio-overlay/deps/classes/index.js");
-require.alias("jkroso-classes/index.js", "ianstormtaylor-classes/deps/classes/index.js");
-require.alias("jkroso-classes/fallback.js", "ianstormtaylor-classes/deps/classes/fallback.js");
-require.alias("jkroso-classes/modern.js", "ianstormtaylor-classes/deps/classes/modern.js");
-require.alias("component-indexof/index.js", "jkroso-classes/deps/indexof/index.js");
-
-require.alias("segmentio-overlay/lib/index.js", "segmentio-overlay/index.js");
-require.alias("segmentio-showable/index.js", "segmentio-modal/deps/showable/index.js");
-require.alias("timoxley-next-tick/index.js", "segmentio-showable/deps/next-tick/index.js");
-
-require.alias("yields-after-transition/index.js", "segmentio-showable/deps/after-transition/index.js");
-require.alias("yields-after-transition/index.js", "segmentio-showable/deps/after-transition/index.js");
-require.alias("yields-has-transitions/index.js", "yields-after-transition/deps/has-transitions/index.js");
-require.alias("yields-has-transitions/index.js", "yields-after-transition/deps/has-transitions/index.js");
-require.alias("yields-has-transitions/index.js", "yields-has-transitions/index.js");
-require.alias("ecarter-css-emitter/index.js", "yields-after-transition/deps/css-emitter/index.js");
-require.alias("component-event/index.js", "ecarter-css-emitter/deps/event/index.js");
-
-require.alias("component-once/index.js", "yields-after-transition/deps/once/index.js");
-
-require.alias("yields-after-transition/index.js", "yields-after-transition/index.js");
-require.alias("segmentio-on-escape/index.js", "segmentio-showable/deps/on-escape/index.js");
-require.alias("component-event/index.js", "segmentio-on-escape/deps/event/index.js");
-
-require.alias("component-indexof/index.js", "segmentio-on-escape/deps/indexof/index.js");
-
-require.alias("segmentio-on-escape/index.js", "segmentio-modal/deps/on-escape/index.js");
-require.alias("component-event/index.js", "segmentio-on-escape/deps/event/index.js");
-
-require.alias("component-indexof/index.js", "segmentio-on-escape/deps/indexof/index.js");
-
-require.alias("ianstormtaylor-classes/index.js", "segmentio-modal/deps/classes/index.js");
-require.alias("jkroso-classes/index.js", "ianstormtaylor-classes/deps/classes/index.js");
-require.alias("jkroso-classes/fallback.js", "ianstormtaylor-classes/deps/classes/fallback.js");
-require.alias("jkroso-classes/modern.js", "ianstormtaylor-classes/deps/classes/modern.js");
-require.alias("component-indexof/index.js", "jkroso-classes/deps/indexof/index.js");
-
-require.alias("segmentio-modal/lib/index.js", "segmentio-modal/index.js");
-require.alias("publishui/modal.js", "publishui/index.js");
-require.alias("flexiec/main.js", "flexiec/index.js");
-require.alias("win-flexiec/win-flexIEC.js", "win-flexiec/index.js");
-require.alias("flexstatic/main.js", "win-Picbreeder/deps/flexstatic/main.js");
-require.alias("flexstatic/main.js", "win-Picbreeder/deps/flexstatic/index.js");
-require.alias("flexstatic/main.js", "flexstatic/index.js");
-require.alias("optimuslime-el.js/el.js", "flexstatic/deps/el.js/el.js");
-require.alias("optimuslime-el.js/el.js", "flexstatic/deps/el.js/index.js");
-require.alias("optimuslime-el.js/el.js", "optimuslime-el.js/index.js");
-require.alias("component-emitter/index.js", "flexstatic/deps/emitter/index.js");
-
-require.alias("flexstatic/main.js", "flexstatic/index.js");
-require.alias("flexparents/main.js", "win-Picbreeder/deps/flexparents/main.js");
-require.alias("flexparents/main.js", "win-Picbreeder/deps/flexparents/index.js");
-require.alias("flexparents/main.js", "flexparents/index.js");
-require.alias("ramitos-resize/src/resize.js", "flexparents/deps/resize/src/resize.js");
-require.alias("ramitos-resize/src/resize.js", "flexparents/deps/resize/index.js");
-require.alias("ramitos-resize/src/resize.js", "ramitos-resize/index.js");
-require.alias("component-emitter/index.js", "flexparents/deps/emitter/index.js");
-
-require.alias("flexparents/main.js", "flexparents/index.js");
-require.alias("flexiec/main.js", "win-Picbreeder/deps/flexIEC/main.js");
-require.alias("flexiec/main.js", "win-Picbreeder/deps/flexIEC/index.js");
-require.alias("flexiec/main.js", "flexIEC/index.js");
-require.alias("component-events/index.js", "flexiec/deps/events/index.js");
-require.alias("component-event/index.js", "component-events/deps/event/index.js");
-
-require.alias("component-delegate/index.js", "component-events/deps/delegate/index.js");
-require.alias("discore-closest/index.js", "component-delegate/deps/closest/index.js");
-require.alias("discore-closest/index.js", "component-delegate/deps/closest/index.js");
-require.alias("component-matches-selector/index.js", "discore-closest/deps/matches-selector/index.js");
-require.alias("component-query/index.js", "component-matches-selector/deps/query/index.js");
-
-require.alias("discore-closest/index.js", "discore-closest/index.js");
-require.alias("component-event/index.js", "component-delegate/deps/event/index.js");
-
-require.alias("component-classes/index.js", "flexiec/deps/classes/index.js");
-require.alias("component-indexof/index.js", "component-classes/deps/indexof/index.js");
-
-require.alias("ramitos-resize/src/resize.js", "flexiec/deps/resize/src/resize.js");
-require.alias("ramitos-resize/src/resize.js", "flexiec/deps/resize/index.js");
-require.alias("ramitos-resize/src/resize.js", "ramitos-resize/index.js");
-require.alias("optimuslime-el.js/el.js", "flexiec/deps/el.js/el.js");
-require.alias("optimuslime-el.js/el.js", "flexiec/deps/el.js/index.js");
-require.alias("optimuslime-el.js/el.js", "optimuslime-el.js/index.js");
-require.alias("component-emitter/index.js", "flexiec/deps/emitter/index.js");
-
-require.alias("flexstatic/main.js", "flexiec/deps/flexstatic/main.js");
-require.alias("flexstatic/main.js", "flexiec/deps/flexstatic/index.js");
-require.alias("optimuslime-el.js/el.js", "flexstatic/deps/el.js/el.js");
-require.alias("optimuslime-el.js/el.js", "flexstatic/deps/el.js/index.js");
-require.alias("optimuslime-el.js/el.js", "optimuslime-el.js/index.js");
-require.alias("component-emitter/index.js", "flexstatic/deps/emitter/index.js");
-
-require.alias("flexstatic/main.js", "flexstatic/index.js");
-require.alias("flexparents/main.js", "flexiec/deps/flexparents/main.js");
-require.alias("flexparents/main.js", "flexiec/deps/flexparents/index.js");
-require.alias("ramitos-resize/src/resize.js", "flexparents/deps/resize/src/resize.js");
-require.alias("ramitos-resize/src/resize.js", "flexparents/deps/resize/index.js");
-require.alias("ramitos-resize/src/resize.js", "ramitos-resize/index.js");
-require.alias("component-emitter/index.js", "flexparents/deps/emitter/index.js");
-
-require.alias("flexparents/main.js", "flexparents/index.js");
-require.alias("publishui/modal.js", "flexiec/deps/publishUI/modal.js");
-require.alias("publishui/modal.js", "flexiec/deps/publishUI/index.js");
-require.alias("component-pillbox/index.js", "publishui/deps/pillbox/index.js");
-require.alias("component-bind/index.js", "component-pillbox/deps/bind/index.js");
-
-require.alias("component-trim/index.js", "component-pillbox/deps/trim/index.js");
-
-require.alias("component-events/index.js", "component-pillbox/deps/events/index.js");
-require.alias("component-event/index.js", "component-events/deps/event/index.js");
-
-require.alias("component-delegate/index.js", "component-events/deps/delegate/index.js");
-require.alias("discore-closest/index.js", "component-delegate/deps/closest/index.js");
-require.alias("discore-closest/index.js", "component-delegate/deps/closest/index.js");
-require.alias("component-matches-selector/index.js", "discore-closest/deps/matches-selector/index.js");
-require.alias("component-query/index.js", "component-matches-selector/deps/query/index.js");
-
-require.alias("discore-closest/index.js", "discore-closest/index.js");
-require.alias("component-event/index.js", "component-delegate/deps/event/index.js");
-
-require.alias("component-keyname/index.js", "component-pillbox/deps/keyname/index.js");
-
-require.alias("component-emitter/index.js", "component-pillbox/deps/emitter/index.js");
-
-require.alias("component-each/index.js", "component-pillbox/deps/each/index.js");
-require.alias("component-to-function/index.js", "component-each/deps/to-function/index.js");
-require.alias("component-props/index.js", "component-to-function/deps/props/index.js");
-
-require.alias("component-type/index.js", "component-each/deps/type/index.js");
-
-require.alias("component-set/index.js", "component-pillbox/deps/set/index.js");
-
-require.alias("stephenmathieson-normalize/index.js", "component-pillbox/deps/normalize/index.js");
-require.alias("stephenmathieson-normalize/index.js", "component-pillbox/deps/normalize/index.js");
-require.alias("stephenmathieson-normalize/index.js", "stephenmathieson-normalize/index.js");
-require.alias("optimuslime-el.js/el.js", "publishui/deps/el.js/el.js");
-require.alias("optimuslime-el.js/el.js", "publishui/deps/el.js/index.js");
-require.alias("optimuslime-el.js/el.js", "optimuslime-el.js/index.js");
-require.alias("component-classes/index.js", "publishui/deps/classes/index.js");
-require.alias("component-indexof/index.js", "component-classes/deps/indexof/index.js");
-
-require.alias("component-emitter/index.js", "publishui/deps/emitter/index.js");
-
-require.alias("segmentio-modal/lib/index.js", "publishui/deps/modal/lib/index.js");
-require.alias("segmentio-modal/lib/index.js", "publishui/deps/modal/index.js");
-require.alias("component-domify/index.js", "segmentio-modal/deps/domify/index.js");
-
-require.alias("component-emitter/index.js", "segmentio-modal/deps/emitter/index.js");
-
-require.alias("segmentio-overlay/lib/index.js", "segmentio-modal/deps/overlay/lib/index.js");
-require.alias("segmentio-overlay/lib/index.js", "segmentio-modal/deps/overlay/index.js");
-require.alias("component-emitter/index.js", "segmentio-overlay/deps/emitter/index.js");
-
-require.alias("component-domify/index.js", "segmentio-overlay/deps/domify/index.js");
-
-require.alias("segmentio-showable/index.js", "segmentio-overlay/deps/showable/index.js");
-require.alias("timoxley-next-tick/index.js", "segmentio-showable/deps/next-tick/index.js");
-
-require.alias("yields-after-transition/index.js", "segmentio-showable/deps/after-transition/index.js");
-require.alias("yields-after-transition/index.js", "segmentio-showable/deps/after-transition/index.js");
-require.alias("yields-has-transitions/index.js", "yields-after-transition/deps/has-transitions/index.js");
-require.alias("yields-has-transitions/index.js", "yields-after-transition/deps/has-transitions/index.js");
-require.alias("yields-has-transitions/index.js", "yields-has-transitions/index.js");
-require.alias("ecarter-css-emitter/index.js", "yields-after-transition/deps/css-emitter/index.js");
-require.alias("component-event/index.js", "ecarter-css-emitter/deps/event/index.js");
-
-require.alias("component-once/index.js", "yields-after-transition/deps/once/index.js");
-
-require.alias("yields-after-transition/index.js", "yields-after-transition/index.js");
-require.alias("segmentio-on-escape/index.js", "segmentio-showable/deps/on-escape/index.js");
-require.alias("component-event/index.js", "segmentio-on-escape/deps/event/index.js");
-
-require.alias("component-indexof/index.js", "segmentio-on-escape/deps/indexof/index.js");
-
-require.alias("ianstormtaylor-classes/index.js", "segmentio-overlay/deps/classes/index.js");
-require.alias("jkroso-classes/index.js", "ianstormtaylor-classes/deps/classes/index.js");
-require.alias("jkroso-classes/fallback.js", "ianstormtaylor-classes/deps/classes/fallback.js");
-require.alias("jkroso-classes/modern.js", "ianstormtaylor-classes/deps/classes/modern.js");
-require.alias("component-indexof/index.js", "jkroso-classes/deps/indexof/index.js");
-
-require.alias("segmentio-overlay/lib/index.js", "segmentio-overlay/index.js");
-require.alias("segmentio-showable/index.js", "segmentio-modal/deps/showable/index.js");
-require.alias("timoxley-next-tick/index.js", "segmentio-showable/deps/next-tick/index.js");
-
-require.alias("yields-after-transition/index.js", "segmentio-showable/deps/after-transition/index.js");
-require.alias("yields-after-transition/index.js", "segmentio-showable/deps/after-transition/index.js");
-require.alias("yields-has-transitions/index.js", "yields-after-transition/deps/has-transitions/index.js");
-require.alias("yields-has-transitions/index.js", "yields-after-transition/deps/has-transitions/index.js");
-require.alias("yields-has-transitions/index.js", "yields-has-transitions/index.js");
-require.alias("ecarter-css-emitter/index.js", "yields-after-transition/deps/css-emitter/index.js");
-require.alias("component-event/index.js", "ecarter-css-emitter/deps/event/index.js");
-
-require.alias("component-once/index.js", "yields-after-transition/deps/once/index.js");
-
-require.alias("yields-after-transition/index.js", "yields-after-transition/index.js");
-require.alias("segmentio-on-escape/index.js", "segmentio-showable/deps/on-escape/index.js");
-require.alias("component-event/index.js", "segmentio-on-escape/deps/event/index.js");
-
-require.alias("component-indexof/index.js", "segmentio-on-escape/deps/indexof/index.js");
-
-require.alias("segmentio-on-escape/index.js", "segmentio-modal/deps/on-escape/index.js");
-require.alias("component-event/index.js", "segmentio-on-escape/deps/event/index.js");
-
-require.alias("component-indexof/index.js", "segmentio-on-escape/deps/indexof/index.js");
-
-require.alias("ianstormtaylor-classes/index.js", "segmentio-modal/deps/classes/index.js");
-require.alias("jkroso-classes/index.js", "ianstormtaylor-classes/deps/classes/index.js");
-require.alias("jkroso-classes/fallback.js", "ianstormtaylor-classes/deps/classes/fallback.js");
-require.alias("jkroso-classes/modern.js", "ianstormtaylor-classes/deps/classes/modern.js");
-require.alias("component-indexof/index.js", "jkroso-classes/deps/indexof/index.js");
-
-require.alias("segmentio-modal/lib/index.js", "segmentio-modal/index.js");
-require.alias("publishui/modal.js", "publishui/index.js");
-require.alias("flexiec/main.js", "flexiec/index.js");
-require.alias("win-Picbreeder/win-Picbreeder.js", "win-Picbreeder/index.js");
+require("win-picbreeder")
