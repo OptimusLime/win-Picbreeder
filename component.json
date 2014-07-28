@@ -7,10 +7,6 @@
     "win",
     "picbreeder"
   ],
-  "json" :
-    [
-    "./localConfig.json"
-    ],
   "dependencies": {
     "component/worker": "master",
     "optimuslime/traverse": "0.6.6-1",
@@ -29,6 +25,22 @@
   "main": "win-Picbreeder.js",
   "scripts": [
     "win-Picbreeder.js"
+  ],
+  "styles" : ["css/main.css"],
+  "local": [
+    "win-home-ui",
+    "webworker-queue",
+    "geno-to-picture",
+    "cppn-additions",
+    "win-setup",
+    "pbEncoding",
+    "win-flexIEC",
+    "flexstatic",
+    "flexparents",
+    "flexIEC"
+  ],
+  "paths": [
+    "libs"
   ],
   "license": "MIT"
 }

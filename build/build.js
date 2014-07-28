@@ -220,6 +220,11 @@ Emitter.prototype.hasListeners = function(event){
 
 });
 
+require.modules["component-emitter"] = require.modules["component~emitter@master"];
+require.modules["component~emitter"] = require.modules["component~emitter@master"];
+require.modules["emitter"] = require.modules["component~emitter@master"];
+
+
 require.register("component~worker@master", function (exports, module) {
 
 /**
@@ -327,6 +332,11 @@ Worker.prototype.request = function(msg, fn, transferables){
 };
 
 });
+
+require.modules["component-worker"] = require.modules["component~worker@master"];
+require.modules["component~worker"] = require.modules["component~worker@master"];
+require.modules["worker"] = require.modules["component~worker@master"];
+
 
 require.register("optimuslime~traverse@master", function (exports, module) {
 var traverse = module.exports = function (obj) {
@@ -646,6 +656,11 @@ var hasOwnProperty = Object.hasOwnProperty || function (obj, key) {
 
 });
 
+require.modules["optimuslime-traverse"] = require.modules["optimuslime~traverse@master"];
+require.modules["optimuslime~traverse"] = require.modules["optimuslime~traverse@master"];
+require.modules["traverse"] = require.modules["optimuslime~traverse@master"];
+
+
 require.register("optimuslime~traverse@0.6.6-1", function (exports, module) {
 var traverse = module.exports = function (obj) {
     return new Traverse(obj);
@@ -964,6 +979,1031 @@ var hasOwnProperty = Object.hasOwnProperty || function (obj, key) {
 
 });
 
+require.modules["optimuslime-traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
+require.modules["optimuslime~traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
+require.modules["traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
+
+
+require.register("optimuslime~el.js@master", function (exports, module) {
+/**
+* el.js v0.3 - A JavaScript Node Creation Tool
+*
+* https://github.com/markgandolfo/el.js
+*
+* Copyright 2013 Mark Gandolfo and other contributors
+* Released under the MIT license.
+* http://en.wikipedia.org/wiki/MIT_License
+*/
+
+module.exports = el;
+
+function el(tagName, attrs, child) {
+  // Pattern to match id & class names
+  var pattern = /([a-z]+|#[\w-\d]+|\.[\w\d-]+)/g
+
+  if(arguments.length === 2) {
+    if(attrs instanceof Array
+    || typeof attrs === 'function'
+    || typeof attrs === 'string'
+    || attrs.constructor !== Object
+    ) {
+      child = attrs;
+      attrs = undefined;
+    }
+
+  }
+  // does the user pass attributes in, if not set an empty object up
+  attrs = typeof attrs !== 'undefined' ? attrs : {};
+  child = typeof child !== 'undefined' ? child : [];
+  child = child instanceof Array ? child : [child];
+
+  // run the pattern over the tagname an attempt to pull out class & id attributes
+  // shift the first record out as it's the element name
+  matched = tagName.match(pattern);
+  tagName = matched[0];
+  matched.shift();
+
+  // Iterate over the matches and concat the attrs to either class or id keys in attrs json object
+  for (var m in matched) {
+    if(matched[m][0] == '.') {
+      if(attrs['class'] == undefined) {
+        attrs['class'] = matched[m].substring(1, matched[m].length);
+      } else {
+        attrs['class'] = attrs['class'] + ' ' + matched[m].substring(1, matched[m].length);
+      }
+    } else if(matched[m][0] == '#') {
+      if(attrs['id'] == undefined) {
+        attrs['id'] = matched[m].substring(1, matched[m].length)
+      } else {
+        // Feels dirty having multiple id's, but it's allowed: http://www.w3.org/TR/selectors/#id-selectors
+        attrs['id'] = attrs['id'] + ' ' + matched[m].substring(1, matched[m].length);
+      }
+    }
+  }
+
+  // create the element
+  var element = document.createElement(tagName);
+  for(var i = 0; i < child.length; i += 1) {
+    (function(child){
+      switch(typeof child) {
+        case 'object':
+          element.appendChild(child);
+          break;
+        case 'function':
+          var discardDoneCallbackResult = false;
+          var doneCallback = function doneCallback(content) {
+            if (!discardDoneCallbackResult) {
+              element.appendChild(content);
+            }
+          }
+          var result = child.apply(null, [doneCallback])
+          if(typeof result != 'undefined') {
+            discardDoneCallbackResult = true;
+            element.appendChild(result);
+          }
+          break;
+        case 'string':
+          element.appendChild(document.createTextNode(child));
+        default:
+          //???
+      }
+    }(child[i]));
+
+  }
+
+  for (var key in attrs) {
+    if (attrs.hasOwnProperty(key)) {
+      element.setAttribute(key, attrs[key]);
+    }
+  }
+
+  return element;
+};
+
+// alias
+el.create = el.c = el;
+
+// vanity methods
+el.img = function(attrs) {
+  return el.create('img', attrs);
+};
+
+el.a = function(attrs, child) {
+  return el.create('a', attrs, child);
+};
+
+el.div = function(attrs, child) {
+  return el.create('div', attrs, child);
+};
+
+el.p = function(attrs, child) {
+  return el.create('p', attrs, child);
+};
+
+el.input = function(attrs, child) {
+  return el.create('input', attrs);
+};
+
+});
+
+require.modules["optimuslime-el.js"] = require.modules["optimuslime~el.js@master"];
+require.modules["optimuslime~el.js"] = require.modules["optimuslime~el.js@master"];
+require.modules["el.js"] = require.modules["optimuslime~el.js@master"];
+
+
+require.register("optimuslime~win-utils@master", function (exports, module) {
+
+var winutils = {};
+
+module.exports = winutils;
+
+//right now, it's all we have setup -- later there will be more utilities
+winutils.cuid = require("optimuslime~win-utils@master/uuid/cuid.js");
+
+winutils.math = require("optimuslime~win-utils@master/math/winmath.js");
+
+
+});
+
+require.register("optimuslime~win-utils@master/uuid/cuid.js", function (exports, module) {
+/**
+ * cuid.js
+ * Collision-resistant UID generator for browsers and node.
+ * Sequential for fast db lookups and recency sorting.
+ * Safe for element IDs and server-side lookups.
+ *
+ * Extracted from CLCTR
+ * 
+ * Copyright (c) Eric Elliott 2012
+ * MIT License
+ */
+//From: https://github.com/dilvie/cuid
+
+//note that module.exports is at the end -- it exports the api variable
+
+/*global window, navigator, document, require, process, module */
+var c = 0,
+    blockSize = 4,
+    base = 36,
+    discreteValues = Math.pow(base, blockSize),
+
+    pad = function pad(num, size) {
+      var s = "000000000" + num;
+      return s.substr(s.length-size);
+    },
+
+    randomBlock = function randomBlock() {
+      return pad((Math.random() *
+            discreteValues << 0)
+            .toString(base), blockSize);
+    },
+
+    api = function cuid() {
+      // Starting with a lowercase letter makes
+      // it HTML element ID friendly.
+      var letter = 'c', // hard-coded allows for sequential access
+
+        // timestamp
+        // warning: this exposes the exact date and time
+        // that the uid was created.
+        timestamp = (new Date().getTime()).toString(base),
+
+        // Prevent same-machine collisions.
+        counter,
+
+        // A few chars to generate distinct ids for different
+        // clients (so different computers are far less
+        // likely to generate the same id)
+        fingerprint = api.fingerprint(),
+
+        // Grab some more chars from Math.random()
+        random = randomBlock() + randomBlock() + randomBlock() + randomBlock();
+
+        c = (c < discreteValues) ? c : 0;
+        counter = pad(c.toString(base), blockSize);
+
+      c++; // this is not subliminal
+
+      return  (letter + timestamp + counter + fingerprint + random);
+    };
+
+api.slug = function slug() {
+  var date = new Date().getTime().toString(36),
+    counter = c.toString(36).slice(-1),
+    print = api.fingerprint().slice(0,1) +
+      api.fingerprint().slice(-1),
+    random = randomBlock().slice(-1);
+
+  c++;
+
+  return date.slice(2,4) + date.slice(-2) + 
+    counter + print + random;
+};
+
+//fingerprint changes based on nodejs or component setup
+var isBrowser = (typeof process == 'undefined');
+
+api.fingerprint = isBrowser ?
+  function browserPrint() {
+      return pad((navigator.mimeTypes.length +
+          navigator.userAgent.length).toString(36) +
+          api.globalCount().toString(36), 4);
+  }
+: function nodePrint() {
+  var os = require("os"),
+
+  padding = 2,
+  pid = pad((process.pid).toString(36), padding),
+  hostname = os.hostname(),
+  length = hostname.length,
+  hostId = pad((hostname)
+    .split('')
+    .reduce(function (prev, char) {
+      return +prev + char.charCodeAt(0);
+    }, +length + 36)
+    .toString(36),
+  padding);
+return pid + hostId;
+};
+
+api.globalCount = function globalCount() {
+    // We want to cache the results of this
+    var cache = (function calc() {
+        var i,
+            count = 0;
+
+            //global count only ever called inside browser environment
+            //lets loop through and count the keys in window -- then cahce that as part of our fingerprint
+        for (i in window) {
+            count++;
+        }
+
+        return count;
+    }());
+
+    api.globalCount = function () { return cache; };
+    return cache;
+};
+
+api.isLessThan = function(first, second)
+{
+  var fParse= parseInt(first);
+  var sParse = parseInt(second);
+  if(isNaN(fParse) && isNaN(sParse))
+  {
+     //tease apart first, second to determine which ID came first
+    //counter + fingerprint + random = 6 blocks of 4 = 24
+    var dateEnd = 6*blockSize;
+    var counterEnd = 5*blockSize;
+    var charStart = 1;
+
+    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
+    var firstTime = parseInt(first.slice(charStart, first.length - dateEnd), base);
+    //ditto for counter
+    var firstCounter = parseInt(first.slice(first.length - dateEnd, first.length - counterEnd),base);
+
+    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
+    var secondTime =  parseInt(second.slice(charStart, second.length - dateEnd), base);
+    
+    //ditto for counter 
+    var secondCounter = parseInt(second.slice(second.length - dateEnd, second.length - counterEnd), base);
+
+    //either the first time is less than the second time, and we answer this question immediately
+    //or the times are equal -- then we pull the lower counter
+    //techincially counters can wrap, but this won't happen very often AND this is all for measuring disjoint/excess behavior
+    //the time should be enough of an ordering principal for this not to matter
+    return firstTime < secondTime || (firstTime == secondTime && firstCounter < secondCounter);
+
+  }
+  else if(isNaN(sParse))
+  {
+    //if sParse is a string, then the first is a number and the second is a string UUID
+    //to maintain backwards compat -- number come before strings in neatjs ordering
+    return true;
+  }//both are not NaN -- we have two numbers to compare
+  else
+  {
+    return fParse < sParse;
+  }
+}
+
+//we send out API
+module.exports = api;
+
+
+
+
+});
+
+require.register("optimuslime~win-utils@master/math/winmath.js", function (exports, module) {
+
+var mathHelper = {};
+
+module.exports = mathHelper;
+
+mathHelper.next = function(max)
+{
+    return Math.floor(Math.random()*max);
+};
+
+});
+
+require.modules["optimuslime-win-utils"] = require.modules["optimuslime~win-utils@master"];
+require.modules["optimuslime~win-utils"] = require.modules["optimuslime~win-utils@master"];
+require.modules["win-utils"] = require.modules["optimuslime~win-utils@master"];
+
+
+require.register("optimuslime~win-utils@0.1.1", function (exports, module) {
+
+var winutils = {};
+
+module.exports = winutils;
+
+//right now, it's all we have setup -- later there will be more utilities
+winutils.cuid = require("optimuslime~win-utils@0.1.1/uuid/cuid.js");
+
+winutils.math = require("optimuslime~win-utils@0.1.1/math/winmath.js");
+
+
+});
+
+require.register("optimuslime~win-utils@0.1.1/uuid/cuid.js", function (exports, module) {
+/**
+ * cuid.js
+ * Collision-resistant UID generator for browsers and node.
+ * Sequential for fast db lookups and recency sorting.
+ * Safe for element IDs and server-side lookups.
+ *
+ * Extracted from CLCTR
+ * 
+ * Copyright (c) Eric Elliott 2012
+ * MIT License
+ */
+//From: https://github.com/dilvie/cuid
+
+//note that module.exports is at the end -- it exports the api variable
+
+/*global window, navigator, document, require, process, module */
+var c = 0,
+    blockSize = 4,
+    base = 36,
+    discreteValues = Math.pow(base, blockSize),
+
+    pad = function pad(num, size) {
+      var s = "000000000" + num;
+      return s.substr(s.length-size);
+    },
+
+    randomBlock = function randomBlock() {
+      return pad((Math.random() *
+            discreteValues << 0)
+            .toString(base), blockSize);
+    },
+
+    api = function cuid() {
+      // Starting with a lowercase letter makes
+      // it HTML element ID friendly.
+      var letter = 'c', // hard-coded allows for sequential access
+
+        // timestamp
+        // warning: this exposes the exact date and time
+        // that the uid was created.
+        timestamp = (new Date().getTime()).toString(base),
+
+        // Prevent same-machine collisions.
+        counter,
+
+        // A few chars to generate distinct ids for different
+        // clients (so different computers are far less
+        // likely to generate the same id)
+        fingerprint = api.fingerprint(),
+
+        // Grab some more chars from Math.random()
+        random = randomBlock() + randomBlock() + randomBlock() + randomBlock();
+
+        c = (c < discreteValues) ? c : 0;
+        counter = pad(c.toString(base), blockSize);
+
+      c++; // this is not subliminal
+
+      return  (letter + timestamp + counter + fingerprint + random);
+    };
+
+api.slug = function slug() {
+  var date = new Date().getTime().toString(36),
+    counter = c.toString(36).slice(-1),
+    print = api.fingerprint().slice(0,1) +
+      api.fingerprint().slice(-1),
+    random = randomBlock().slice(-1);
+
+  c++;
+
+  return date.slice(2,4) + date.slice(-2) + 
+    counter + print + random;
+};
+
+//fingerprint changes based on nodejs or component setup
+var isBrowser = (typeof process == 'undefined');
+
+api.fingerprint = isBrowser ?
+  function browserPrint() {
+      return pad((navigator.mimeTypes.length +
+          navigator.userAgent.length).toString(36) +
+          api.globalCount().toString(36), 4);
+  }
+: function nodePrint() {
+  var os = require("os"),
+
+  padding = 2,
+  pid = pad((process.pid).toString(36), padding),
+  hostname = os.hostname(),
+  length = hostname.length,
+  hostId = pad((hostname)
+    .split('')
+    .reduce(function (prev, char) {
+      return +prev + char.charCodeAt(0);
+    }, +length + 36)
+    .toString(36),
+  padding);
+return pid + hostId;
+};
+
+api.globalCount = function globalCount() {
+    // We want to cache the results of this
+    var cache = (function calc() {
+        var i,
+            count = 0;
+
+            //global count only ever called inside browser environment
+            //lets loop through and count the keys in window -- then cahce that as part of our fingerprint
+        for (i in window) {
+            count++;
+        }
+
+        return count;
+    }());
+
+    api.globalCount = function () { return cache; };
+    return cache;
+};
+
+api.isLessThan = function(first, second)
+{
+  var fParse= parseInt(first);
+  var sParse = parseInt(second);
+  if(isNaN(fParse) && isNaN(sParse))
+  {
+     //tease apart first, second to determine which ID came first
+    //counter + fingerprint + random = 6 blocks of 4 = 24
+    var dateEnd = 6*blockSize;
+    var counterEnd = 5*blockSize;
+    var charStart = 1;
+
+    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
+    var firstTime = parseInt(first.slice(charStart, first.length - dateEnd), base);
+    //ditto for counter
+    var firstCounter = parseInt(first.slice(first.length - dateEnd, first.length - counterEnd),base);
+
+    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
+    var secondTime =  parseInt(second.slice(charStart, second.length - dateEnd), base);
+    
+    //ditto for counter 
+    var secondCounter = parseInt(second.slice(second.length - dateEnd, second.length - counterEnd), base);
+
+    //either the first time is less than the second time, and we answer this question immediately
+    //or the times are equal -- then we pull the lower counter
+    //techincially counters can wrap, but this won't happen very often AND this is all for measuring disjoint/excess behavior
+    //the time should be enough of an ordering principal for this not to matter
+    return firstTime < secondTime || (firstTime == secondTime && firstCounter < secondCounter);
+
+  }
+  else if(isNaN(sParse))
+  {
+    //if sParse is a string, then the first is a number and the second is a string UUID
+    //to maintain backwards compat -- number come before strings in neatjs ordering
+    return true;
+  }//both are not NaN -- we have two numbers to compare
+  else
+  {
+    return fParse < sParse;
+  }
+}
+
+//we send out API
+module.exports = api;
+
+
+
+
+});
+
+require.register("optimuslime~win-utils@0.1.1/math/winmath.js", function (exports, module) {
+
+var mathHelper = {};
+
+module.exports = mathHelper;
+
+mathHelper.next = function(max)
+{
+    return Math.floor(Math.random()*max);
+};
+
+});
+
+require.modules["optimuslime-win-utils"] = require.modules["optimuslime~win-utils@0.1.1"];
+require.modules["optimuslime~win-utils"] = require.modules["optimuslime~win-utils@0.1.1"];
+require.modules["win-utils"] = require.modules["optimuslime~win-utils@0.1.1"];
+
+
+require.register("optimuslime~win-iec@0.0.2-6", function (exports, module) {
+//generating session info
+var uuid = require("optimuslime~win-utils@master").cuid;
+
+module.exports = winiec;
+
+function winiec(backbone, globalConfig, localConfig)
+{
+	//pull in backbone info, we gotta set our logger/emitter up
+	var self = this;
+
+	self.winFunction = "evolution";
+
+	if(!localConfig.genomeType)
+		throw new Error("win-IEC needs a genome type specified."); 
+
+	//this is how we talk to win-backbone
+	self.backEmit = backbone.getEmitter(self);
+
+	//grab our logger
+	self.log = backbone.getLogger(self);
+
+	//only vital stuff goes out for normal logs
+	self.log.logLevel = localConfig.logLevel || self.log.normal;
+
+	//we have logger and emitter, set up some of our functions
+
+	function clearEvolution(genomeType)
+	{
+		//optionally, we can change types if we need to 
+		if(genomeType)
+			self.genomeType = genomeType;
+
+		self.log("clear evo to type: ", self.genomeType)
+		self.selectedParents = {};
+		//all the evo objects we ceated -- parents are a subset
+		self.evolutionObjects = {};
+
+		//count it up
+		self.parentCount = 0;
+
+		//session information -- new nodes and connections yo! that's all we care about after all-- new innovative stuff
+		//i rambled just then. For no reason. Still doing it. Sucks that you're reading this. trolololol
+		self.sessionObject = {};
+
+		//everything we publish is linked by this session information
+		self.evolutionSessionID = uuid();
+
+		//save our seeds!
+		self.seeds = {};
+
+		//map children to parents for all objects
+		self.childrenToParents = {};
+
+		self.seedParents = {};
+	}
+
+	//we setup all our basic 
+	clearEvolution(localConfig.genomeType);
+
+	//what events do we need?
+	self.requiredEvents = function()
+	{
+		return [
+		//need to be able to create artifacts
+			"generator:createArtifacts",
+			"schema:replaceParentReferences",
+			"schema:getReferencesAndParents",
+			"publish:publishArtifacts",
+			//in the future we will also need to save objects according to our save tendencies
+			//for now, we'll offload that to UI decisions
+		];
+	}
+
+	//what events do we respond to?
+	self.eventCallbacks = function()
+	{ 
+		return {
+			"evolution:selectParents" : self.selectParents,
+			"evolution:unselectParents" : self.unselectParents,
+			"evolution:publishArtifact" : self.publishArtifact,
+			//we fetch a list of objects based on IDs, if they don't exist we create them
+			"evolution:getOrCreateOffspring" : self.getOrCreateOffspring,
+			"evolution:loadSeeds" : self.loadSeeds,
+			"evolution:resetEvolution" : clearEvolution
+
+		};
+	}
+
+	
+
+	// self.findSeedOrigins = function(eID)
+	// {
+	// 	//let's look through parents until we find the seed you originated from -- then you are considered a decendant
+	// 	var alreadyChecked = {};
+
+	// 	var originObjects = {};
+	// 	var startingParents = self.childrenToParents[eID];
+
+	// 	while(startingParents.length)
+	// 	{
+	// 		var nextCheck = [];
+	// 		for(var i=0; i < startingParents.length; i++)
+	// 		{
+	// 			var parentWID = startingParents[i];
+
+	// 			if(!alreadyChecked[parentWID])
+	// 			{
+	// 				//mark it as checked
+	// 				alreadyChecked[parentWID] = true;
+
+	// 				if(self.seeds[parentWID])
+	// 				{
+	// 					//this is a seed!
+	// 					originObjects[parentWID] = self.seeds[parentWID];
+	// 				}
+
+	// 				//otherwise, it's not of interested, but perhaps it's parents are!
+
+	// 				//let's look at the parents parents
+	// 				var grandparents = self.childrenToParents[parentWID];
+
+	// 				if(grandparents)
+	// 				{
+	// 					nextCheck = nextCheck.concat(grandparents);
+	// 				}
+	// 			}
+	// 		}
+
+	// 		//continue the process - don't worry about loops, we're checking!
+	// 		startingParents = nextCheck;
+	// 	}
+
+	// 	//send back all the seed objects
+	// 	return originObjects
+	// }
+
+	self.publishArtifact = function(id, meta, finished)
+	{
+		//don't always have to send meta info -- since we don't know what to do with it anyways
+		if(typeof meta == "function")
+		{
+			finished = meta;
+			meta = {};
+		}
+		//we fetch the object from the id
+
+		var evoObject = self.evolutionObjects[id];
+
+		if(!evoObject)
+		{
+			finished("Evolutionary artifactID to publish is invalid: " + id);
+			return;
+		}
+		//we also want to store some meta info -- don't do anything about that for now 
+
+		// var seedParents = self.findSeedOrigins(id);
+
+		//
+		var seedList = [];
+
+		//here is what needs to happen, the incoming evo object has the "wrong" parents
+		//the right parents are the published parents -- the other parents 
+
+		//this will need to be fixed in the future -- we need to know private vs public parents
+		//but for now, we simply send in the public parents -- good enough for picbreeder iec applications
+		//other types of applications might need more info.
+
+		var widObject = {};
+		widObject[evoObject.wid] = evoObject;
+		self.backEmit("schema:getReferencesAndParents", self.genomeType, widObject, function(err, refsAndParents){
+
+			//now we know our references
+			var refParents = refsAndParents[evoObject.wid];
+
+			//so we simply fetch our appropraite seed parents 
+			var evoSeedParents = self.noDuplicatSeedParents(refParents);
+
+			//now we have all the info we need to replace all our parent refs
+			self.backEmit("schema:replaceParentReferences", self.genomeType, evoObject, evoSeedParents, function(err, cloned)
+			{
+				//now we have a cloned version for publishing, where it has public seeds
+
+				 //just publish everything public for now!
+		        var session = {sessionID: self.evolutionSessionID, publish: true};
+
+		        //we can also save private info
+		        //this is where we would grab all the parents of the individual
+		        var privateObjects = [];
+
+				self.backEmit("publish:publishArtifacts", self.genomeType, session, [cloned], [], function(err)
+				{
+					if(err)
+					{
+						finished(err);
+					}
+					else //no error publishing, hooray!
+						finished(undefined, cloned);
+
+				})
+
+			})
+
+		});
+       
+	}
+
+	//no need for a callback here -- nuffin to do but load
+	self.loadSeeds = function(idAndSeeds, finished)
+	{
+		//we have all the seeds and their ids, we just absorb them immediately
+		for(var eID in idAndSeeds)
+		{
+			var seed = idAndSeeds[eID];
+			//grab the objects and save them
+			self.evolutionObjects[eID] = seed;
+
+			//save our seeds
+			self.seeds[seed.wid] = seed;
+		}
+
+		self.log("seed objects: ", self.seeds);
+
+		self.backEmit("schema:getReferencesAndParents", self.genomeType, self.seeds, function(err, refsAndParents)
+		{
+			if(err)
+			{
+				//pass on the error if it happened
+				if(finished)
+					finished(err);
+				else
+					throw err;
+				return;
+			}
+			//there are no parent refs for seeds, just the refs themselves which are important
+			for(var wid in self.seeds)
+			{
+				var refs = Object.keys(refsAndParents[wid]);
+				for(var i=0; i < refs.length; i++)
+				{
+					//who is the parent seed of a particular wid? why itself duh!
+					self.seedParents[refs[i]] = [refs[i]];
+				}
+			}
+
+			// self.log("Seed parents: ", self.seedParents);
+
+			//note, there is no default behavior with seeds -- as usual, you must still tell iec to select parents
+			//there is no subsitute for parent selection
+			if(finished)
+				finished();
+
+		});
+
+
+	}
+
+	//just grab from evo objects -- throw error if issue
+	self.selectParents = function(eIDList, finished)
+	{
+		if(typeof eIDList == "string")
+			eIDList = [eIDList];
+
+		var selectedObjects = {};
+
+		for(var i=0; i < eIDList.length; i++)
+		{	
+			var eID = eIDList[i];
+
+			//grab from evo
+			var evoObject = self.evolutionObjects[eID];
+
+			if(!evoObject){
+				//wrong id 
+				finished("Invalid parent selection: " + eID);
+				return;
+			}
+
+			selectedObjects[eID] = evoObject;
+
+			//save as a selected parent
+			self.selectedParents[eID] = evoObject;
+			self.parentCount++;
+		}
+	
+		//send back the evolutionary object that is linked to this parentID
+		finished(undefined, selectedObjects);
+	}
+
+	self.unselectParents = function(eIDList, finished)
+	{
+		if(typeof eIDList == "string")
+			eIDList = [eIDList];
+
+		for(var i=0; i < eIDList.length; i++)
+		{	
+			var eID = eIDList[i];
+
+			//remove this parent from the selected parents -- doesn't delete from all the individuals
+			if(self.selectedParents[eID])
+				self.parentCount--;
+
+			delete self.selectedParents[eID];
+		}
+
+		//callback optional really, here for backwards compat 
+		if(finished)
+			finished();
+
+	}
+
+	self.noDuplicatSeedParents = function(refsAndParents)
+	{
+		var allSeedNoDup = {};
+
+		//this is a map from the wid to the associated parent wids
+		for(var refWID in refsAndParents)
+		{
+			var parents = refsAndParents[refWID];
+
+			var mergeParents = [];
+
+			for(var i=0; i < parents.length; i++)
+			{
+				var seedsForEachParent = self.seedParents[parents[i]];
+
+				//now we just merge all these together
+				mergeParents = mergeParents.concat(seedsForEachParent);
+			}
+
+			//then we get rid of any duplicates
+			var nodups = {};
+			for(var i=0; i < mergeParents.length; i++)
+				nodups[mergeParents[i]] = true;
+
+			//by induction, each wid generated knows it's seed parents (where each seed reference wid references itself in array form)
+			//therefore, you just look at your reference's parents to see who they believe is their seed 
+			//and concat those results together -- pretty simple, just remove duplicates
+			allSeedNoDup[refWID] = Object.keys(nodups);
+		}	
+
+		return allSeedNoDup;	
+	}
+
+	self.callGenerator = function(allObjects, toCreate, finished)
+	{
+		var parents = self.getOffspringParents();
+
+		//we need to go fetch some stuff
+		self.backEmit("generator:createArtifacts", self.genomeType, toCreate.length, parents, self.sessionObject, function(err, artifacts)
+		{
+			if(err)
+			{
+				//pass on the error if it happened
+				finished(err);
+				return;
+			}
+
+			// self.log("iec generated " + toCreate.length + " individuals: ", artifacts);
+
+			//otherwise, let's do this thang! match artifacts to offspring -- arbitrary don't worry
+			var off = artifacts.offspring;
+
+			var widOffspring = {};
+
+			for(var i=0; i < off.length; i++)
+			{
+				var oObject = off[i];
+				var eID = toCreate[i];
+				//save our evolution object internally -- no more fetches required
+				self.evolutionObjects[eID] = oObject;
+
+				//store objects relateive to their requested ids for return
+				allObjects[eID] = (oObject);
+
+
+				//clone the parent objects for the child!
+				widOffspring[oObject.wid] = oObject;
+
+				// var util = require('util')
+				// self.log("off returned: ".magenta, util.inspect(oObject, false, 3));
+			}
+
+			self.backEmit("schema:getReferencesAndParents", self.genomeType, widOffspring, function(err, refsAndParents)
+			{
+				if(err)
+				{
+					finished(err);
+					return;
+				}
+
+				//check the refs for each object
+				for(var wid in widOffspring)
+				{
+					//here we are with refs and parents
+					var rAndP = refsAndParents[wid];
+
+					var widSeedParents = self.noDuplicatSeedParents(rAndP);
+
+					// self.log("\n\nwid seed parents: ".magenta, rAndP);
+
+
+					//for each key, we set our seed parents appropriately	
+					for(var key in widSeedParents)
+					{
+						self.seedParents[key] = widSeedParents[key];
+					}
+				}
+
+				// self.log("\n\nSeed parents: ".magenta, self.seedParents);
+
+				//mark the offspring as the list objects
+				finished(undefined, allObjects);
+
+			});
+
+
+
+		});
+	}
+
+	//generator yo face!
+	self.getOrCreateOffspring = function(eIDList, finished)
+	{
+		//don't bother doing anything if you havne't selected parents
+		if(self.parentCount ==0){
+			finished("Cannot generate offspring without parents");
+			return;
+		}
+
+		//we need to make a bunch, as many as requested
+		var toCreate = [];
+
+		var allObjects = {};
+
+		//first we check to see which ids we already know
+		for(var i=0; i < eIDList.length; i++)
+		{
+			var eID = eIDList[i];
+			var evoObject = self.evolutionObjects[eID];
+			if(!evoObject)
+			{
+				toCreate.push(eID);
+			}
+			else
+			{
+				//otherwise add to objects that will be sent back
+				allObjects[eID] = evoObject;
+			}
+		}
+
+		//now we have a list of objects that must be created
+		if(toCreate.length)
+		{
+			//this will handle the finished call for us -- after it gets artifacts from the generator
+			self.callGenerator(allObjects, toCreate, finished);	
+		}
+		else
+		{
+			//all ready to go -- send back our objects
+			finished(undefined, allObjects)
+		}
+
+	}
+
+	self.getOffspringParents = function()
+	{
+		var parents = [];
+
+		for(var key in self.selectedParents)
+			parents.push(self.selectedParents[key]);
+
+		return parents;
+	}
+
+	return self;
+}
+
+
+
+
+
+});
+
+require.modules["optimuslime-win-iec"] = require.modules["optimuslime~win-iec@0.0.2-6"];
+require.modules["optimuslime~win-iec"] = require.modules["optimuslime~win-iec@0.0.2-6"];
+require.modules["win-iec"] = require.modules["optimuslime~win-iec@0.0.2-6"];
+
+
 require.register("component~reduce@1.0.1", function (exports, module) {
 
 /**
@@ -990,6 +2030,11 @@ module.exports = function(arr, fn, initial){
   return curr;
 };
 });
+
+require.modules["component-reduce"] = require.modules["component~reduce@1.0.1"];
+require.modules["component~reduce"] = require.modules["component~reduce@1.0.1"];
+require.modules["reduce"] = require.modules["component~reduce@1.0.1"];
+
 
 require.register("visionmedia~superagent@master", function (exports, module) {
 /**
@@ -2096,6 +3141,11 @@ module.exports = request;
 
 });
 
+require.modules["visionmedia-superagent"] = require.modules["visionmedia~superagent@master"];
+require.modules["visionmedia~superagent"] = require.modules["visionmedia~superagent@master"];
+require.modules["superagent"] = require.modules["visionmedia~superagent@master"];
+
+
 require.register("optimuslime~win-query@0.0.1-4", function (exports, module) {
 var request = require("visionmedia~superagent@master");
 
@@ -2288,1005 +3338,10 @@ function winquery(backbone, globalConfig, localConfig)
 
 });
 
-require.register("optimuslime~win-utils@master", function (exports, module) {
+require.modules["optimuslime-win-query"] = require.modules["optimuslime~win-query@0.0.1-4"];
+require.modules["optimuslime~win-query"] = require.modules["optimuslime~win-query@0.0.1-4"];
+require.modules["win-query"] = require.modules["optimuslime~win-query@0.0.1-4"];
 
-var winutils = {};
-
-module.exports = winutils;
-
-//right now, it's all we have setup -- later there will be more utilities
-winutils.cuid = require("optimuslime~win-utils@master/uuid/cuid.js");
-
-winutils.math = require("optimuslime~win-utils@master/math/winmath.js");
-
-
-});
-
-require.register("optimuslime~win-utils@master/uuid/cuid.js", function (exports, module) {
-/**
- * cuid.js
- * Collision-resistant UID generator for browsers and node.
- * Sequential for fast db lookups and recency sorting.
- * Safe for element IDs and server-side lookups.
- *
- * Extracted from CLCTR
- * 
- * Copyright (c) Eric Elliott 2012
- * MIT License
- */
-//From: https://github.com/dilvie/cuid
-
-//note that module.exports is at the end -- it exports the api variable
-
-/*global window, navigator, document, require, process, module */
-var c = 0,
-    blockSize = 4,
-    base = 36,
-    discreteValues = Math.pow(base, blockSize),
-
-    pad = function pad(num, size) {
-      var s = "000000000" + num;
-      return s.substr(s.length-size);
-    },
-
-    randomBlock = function randomBlock() {
-      return pad((Math.random() *
-            discreteValues << 0)
-            .toString(base), blockSize);
-    },
-
-    api = function cuid() {
-      // Starting with a lowercase letter makes
-      // it HTML element ID friendly.
-      var letter = 'c', // hard-coded allows for sequential access
-
-        // timestamp
-        // warning: this exposes the exact date and time
-        // that the uid was created.
-        timestamp = (new Date().getTime()).toString(base),
-
-        // Prevent same-machine collisions.
-        counter,
-
-        // A few chars to generate distinct ids for different
-        // clients (so different computers are far less
-        // likely to generate the same id)
-        fingerprint = api.fingerprint(),
-
-        // Grab some more chars from Math.random()
-        random = randomBlock() + randomBlock() + randomBlock() + randomBlock();
-
-        c = (c < discreteValues) ? c : 0;
-        counter = pad(c.toString(base), blockSize);
-
-      c++; // this is not subliminal
-
-      return  (letter + timestamp + counter + fingerprint + random);
-    };
-
-api.slug = function slug() {
-  var date = new Date().getTime().toString(36),
-    counter = c.toString(36).slice(-1),
-    print = api.fingerprint().slice(0,1) +
-      api.fingerprint().slice(-1),
-    random = randomBlock().slice(-1);
-
-  c++;
-
-  return date.slice(2,4) + date.slice(-2) + 
-    counter + print + random;
-};
-
-//fingerprint changes based on nodejs or component setup
-var isBrowser = (typeof process == 'undefined');
-
-api.fingerprint = isBrowser ?
-  function browserPrint() {
-      return pad((navigator.mimeTypes.length +
-          navigator.userAgent.length).toString(36) +
-          api.globalCount().toString(36), 4);
-  }
-: function nodePrint() {
-  var os = require("os"),
-
-  padding = 2,
-  pid = pad((process.pid).toString(36), padding),
-  hostname = os.hostname(),
-  length = hostname.length,
-  hostId = pad((hostname)
-    .split('')
-    .reduce(function (prev, char) {
-      return +prev + char.charCodeAt(0);
-    }, +length + 36)
-    .toString(36),
-  padding);
-return pid + hostId;
-};
-
-api.globalCount = function globalCount() {
-    // We want to cache the results of this
-    var cache = (function calc() {
-        var i,
-            count = 0;
-
-            //global count only ever called inside browser environment
-            //lets loop through and count the keys in window -- then cahce that as part of our fingerprint
-        for (i in window) {
-            count++;
-        }
-
-        return count;
-    }());
-
-    api.globalCount = function () { return cache; };
-    return cache;
-};
-
-api.isLessThan = function(first, second)
-{
-  var fParse= parseInt(first);
-  var sParse = parseInt(second);
-  if(isNaN(fParse) && isNaN(sParse))
-  {
-     //tease apart first, second to determine which ID came first
-    //counter + fingerprint + random = 6 blocks of 4 = 24
-    var dateEnd = 6*blockSize;
-    var counterEnd = 5*blockSize;
-    var charStart = 1;
-
-    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
-    var firstTime = parseInt(first.slice(charStart, first.length - dateEnd), base);
-    //ditto for counter
-    var firstCounter = parseInt(first.slice(first.length - dateEnd, first.length - counterEnd),base);
-
-    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
-    var secondTime =  parseInt(second.slice(charStart, second.length - dateEnd), base);
-    
-    //ditto for counter 
-    var secondCounter = parseInt(second.slice(second.length - dateEnd, second.length - counterEnd), base);
-
-    //either the first time is less than the second time, and we answer this question immediately
-    //or the times are equal -- then we pull the lower counter
-    //techincially counters can wrap, but this won't happen very often AND this is all for measuring disjoint/excess behavior
-    //the time should be enough of an ordering principal for this not to matter
-    return firstTime < secondTime || (firstTime == secondTime && firstCounter < secondCounter);
-
-  }
-  else if(isNaN(sParse))
-  {
-    //if sParse is a string, then the first is a number and the second is a string UUID
-    //to maintain backwards compat -- number come before strings in neatjs ordering
-    return true;
-  }//both are not NaN -- we have two numbers to compare
-  else
-  {
-    return fParse < sParse;
-  }
-}
-
-//we send out API
-module.exports = api;
-
-
-
-
-});
-
-require.register("optimuslime~win-utils@master/math/winmath.js", function (exports, module) {
-
-var mathHelper = {};
-
-module.exports = mathHelper;
-
-mathHelper.next = function(max)
-{
-    return Math.floor(Math.random()*max);
-};
-
-});
-
-require.register("optimuslime~win-utils@0.1.1", function (exports, module) {
-
-var winutils = {};
-
-module.exports = winutils;
-
-//right now, it's all we have setup -- later there will be more utilities
-winutils.cuid = require("optimuslime~win-utils@0.1.1/uuid/cuid.js");
-
-winutils.math = require("optimuslime~win-utils@0.1.1/math/winmath.js");
-
-
-});
-
-require.register("optimuslime~win-utils@0.1.1/uuid/cuid.js", function (exports, module) {
-/**
- * cuid.js
- * Collision-resistant UID generator for browsers and node.
- * Sequential for fast db lookups and recency sorting.
- * Safe for element IDs and server-side lookups.
- *
- * Extracted from CLCTR
- * 
- * Copyright (c) Eric Elliott 2012
- * MIT License
- */
-//From: https://github.com/dilvie/cuid
-
-//note that module.exports is at the end -- it exports the api variable
-
-/*global window, navigator, document, require, process, module */
-var c = 0,
-    blockSize = 4,
-    base = 36,
-    discreteValues = Math.pow(base, blockSize),
-
-    pad = function pad(num, size) {
-      var s = "000000000" + num;
-      return s.substr(s.length-size);
-    },
-
-    randomBlock = function randomBlock() {
-      return pad((Math.random() *
-            discreteValues << 0)
-            .toString(base), blockSize);
-    },
-
-    api = function cuid() {
-      // Starting with a lowercase letter makes
-      // it HTML element ID friendly.
-      var letter = 'c', // hard-coded allows for sequential access
-
-        // timestamp
-        // warning: this exposes the exact date and time
-        // that the uid was created.
-        timestamp = (new Date().getTime()).toString(base),
-
-        // Prevent same-machine collisions.
-        counter,
-
-        // A few chars to generate distinct ids for different
-        // clients (so different computers are far less
-        // likely to generate the same id)
-        fingerprint = api.fingerprint(),
-
-        // Grab some more chars from Math.random()
-        random = randomBlock() + randomBlock() + randomBlock() + randomBlock();
-
-        c = (c < discreteValues) ? c : 0;
-        counter = pad(c.toString(base), blockSize);
-
-      c++; // this is not subliminal
-
-      return  (letter + timestamp + counter + fingerprint + random);
-    };
-
-api.slug = function slug() {
-  var date = new Date().getTime().toString(36),
-    counter = c.toString(36).slice(-1),
-    print = api.fingerprint().slice(0,1) +
-      api.fingerprint().slice(-1),
-    random = randomBlock().slice(-1);
-
-  c++;
-
-  return date.slice(2,4) + date.slice(-2) + 
-    counter + print + random;
-};
-
-//fingerprint changes based on nodejs or component setup
-var isBrowser = (typeof process == 'undefined');
-
-api.fingerprint = isBrowser ?
-  function browserPrint() {
-      return pad((navigator.mimeTypes.length +
-          navigator.userAgent.length).toString(36) +
-          api.globalCount().toString(36), 4);
-  }
-: function nodePrint() {
-  var os = require("os"),
-
-  padding = 2,
-  pid = pad((process.pid).toString(36), padding),
-  hostname = os.hostname(),
-  length = hostname.length,
-  hostId = pad((hostname)
-    .split('')
-    .reduce(function (prev, char) {
-      return +prev + char.charCodeAt(0);
-    }, +length + 36)
-    .toString(36),
-  padding);
-return pid + hostId;
-};
-
-api.globalCount = function globalCount() {
-    // We want to cache the results of this
-    var cache = (function calc() {
-        var i,
-            count = 0;
-
-            //global count only ever called inside browser environment
-            //lets loop through and count the keys in window -- then cahce that as part of our fingerprint
-        for (i in window) {
-            count++;
-        }
-
-        return count;
-    }());
-
-    api.globalCount = function () { return cache; };
-    return cache;
-};
-
-api.isLessThan = function(first, second)
-{
-  var fParse= parseInt(first);
-  var sParse = parseInt(second);
-  if(isNaN(fParse) && isNaN(sParse))
-  {
-     //tease apart first, second to determine which ID came first
-    //counter + fingerprint + random = 6 blocks of 4 = 24
-    var dateEnd = 6*blockSize;
-    var counterEnd = 5*blockSize;
-    var charStart = 1;
-
-    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
-    var firstTime = parseInt(first.slice(charStart, first.length - dateEnd), base);
-    //ditto for counter
-    var firstCounter = parseInt(first.slice(first.length - dateEnd, first.length - counterEnd),base);
-
-    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
-    var secondTime =  parseInt(second.slice(charStart, second.length - dateEnd), base);
-    
-    //ditto for counter 
-    var secondCounter = parseInt(second.slice(second.length - dateEnd, second.length - counterEnd), base);
-
-    //either the first time is less than the second time, and we answer this question immediately
-    //or the times are equal -- then we pull the lower counter
-    //techincially counters can wrap, but this won't happen very often AND this is all for measuring disjoint/excess behavior
-    //the time should be enough of an ordering principal for this not to matter
-    return firstTime < secondTime || (firstTime == secondTime && firstCounter < secondCounter);
-
-  }
-  else if(isNaN(sParse))
-  {
-    //if sParse is a string, then the first is a number and the second is a string UUID
-    //to maintain backwards compat -- number come before strings in neatjs ordering
-    return true;
-  }//both are not NaN -- we have two numbers to compare
-  else
-  {
-    return fParse < sParse;
-  }
-}
-
-//we send out API
-module.exports = api;
-
-
-
-
-});
-
-require.register("optimuslime~win-utils@0.1.1/math/winmath.js", function (exports, module) {
-
-var mathHelper = {};
-
-module.exports = mathHelper;
-
-mathHelper.next = function(max)
-{
-    return Math.floor(Math.random()*max);
-};
-
-});
-
-require.register("optimuslime~win-iec@0.0.2-6", function (exports, module) {
-//generating session info
-var uuid = require("optimuslime~win-utils@master").cuid;
-
-module.exports = winiec;
-
-function winiec(backbone, globalConfig, localConfig)
-{
-	//pull in backbone info, we gotta set our logger/emitter up
-	var self = this;
-
-	self.winFunction = "evolution";
-
-	if(!localConfig.genomeType)
-		throw new Error("win-IEC needs a genome type specified."); 
-
-	//this is how we talk to win-backbone
-	self.backEmit = backbone.getEmitter(self);
-
-	//grab our logger
-	self.log = backbone.getLogger(self);
-
-	//only vital stuff goes out for normal logs
-	self.log.logLevel = localConfig.logLevel || self.log.normal;
-
-	//we have logger and emitter, set up some of our functions
-
-	function clearEvolution(genomeType)
-	{
-		//optionally, we can change types if we need to 
-		if(genomeType)
-			self.genomeType = genomeType;
-
-		self.log("clear evo to type: ", self.genomeType)
-		self.selectedParents = {};
-		//all the evo objects we ceated -- parents are a subset
-		self.evolutionObjects = {};
-
-		//count it up
-		self.parentCount = 0;
-
-		//session information -- new nodes and connections yo! that's all we care about after all-- new innovative stuff
-		//i rambled just then. For no reason. Still doing it. Sucks that you're reading this. trolololol
-		self.sessionObject = {};
-
-		//everything we publish is linked by this session information
-		self.evolutionSessionID = uuid();
-
-		//save our seeds!
-		self.seeds = {};
-
-		//map children to parents for all objects
-		self.childrenToParents = {};
-
-		self.seedParents = {};
-	}
-
-	//we setup all our basic 
-	clearEvolution(localConfig.genomeType);
-
-	//what events do we need?
-	self.requiredEvents = function()
-	{
-		return [
-		//need to be able to create artifacts
-			"generator:createArtifacts",
-			"schema:replaceParentReferences",
-			"schema:getReferencesAndParents",
-			"publish:publishArtifacts",
-			//in the future we will also need to save objects according to our save tendencies
-			//for now, we'll offload that to UI decisions
-		];
-	}
-
-	//what events do we respond to?
-	self.eventCallbacks = function()
-	{ 
-		return {
-			"evolution:selectParents" : self.selectParents,
-			"evolution:unselectParents" : self.unselectParents,
-			"evolution:publishArtifact" : self.publishArtifact,
-			//we fetch a list of objects based on IDs, if they don't exist we create them
-			"evolution:getOrCreateOffspring" : self.getOrCreateOffspring,
-			"evolution:loadSeeds" : self.loadSeeds,
-			"evolution:resetEvolution" : clearEvolution
-
-		};
-	}
-
-	
-
-	// self.findSeedOrigins = function(eID)
-	// {
-	// 	//let's look through parents until we find the seed you originated from -- then you are considered a decendant
-	// 	var alreadyChecked = {};
-
-	// 	var originObjects = {};
-	// 	var startingParents = self.childrenToParents[eID];
-
-	// 	while(startingParents.length)
-	// 	{
-	// 		var nextCheck = [];
-	// 		for(var i=0; i < startingParents.length; i++)
-	// 		{
-	// 			var parentWID = startingParents[i];
-
-	// 			if(!alreadyChecked[parentWID])
-	// 			{
-	// 				//mark it as checked
-	// 				alreadyChecked[parentWID] = true;
-
-	// 				if(self.seeds[parentWID])
-	// 				{
-	// 					//this is a seed!
-	// 					originObjects[parentWID] = self.seeds[parentWID];
-	// 				}
-
-	// 				//otherwise, it's not of interested, but perhaps it's parents are!
-
-	// 				//let's look at the parents parents
-	// 				var grandparents = self.childrenToParents[parentWID];
-
-	// 				if(grandparents)
-	// 				{
-	// 					nextCheck = nextCheck.concat(grandparents);
-	// 				}
-	// 			}
-	// 		}
-
-	// 		//continue the process - don't worry about loops, we're checking!
-	// 		startingParents = nextCheck;
-	// 	}
-
-	// 	//send back all the seed objects
-	// 	return originObjects
-	// }
-
-	self.publishArtifact = function(id, meta, finished)
-	{
-		//don't always have to send meta info -- since we don't know what to do with it anyways
-		if(typeof meta == "function")
-		{
-			finished = meta;
-			meta = {};
-		}
-		//we fetch the object from the id
-
-		var evoObject = self.evolutionObjects[id];
-
-		if(!evoObject)
-		{
-			finished("Evolutionary artifactID to publish is invalid: " + id);
-			return;
-		}
-		//we also want to store some meta info -- don't do anything about that for now 
-
-		// var seedParents = self.findSeedOrigins(id);
-
-		//
-		var seedList = [];
-
-		//here is what needs to happen, the incoming evo object has the "wrong" parents
-		//the right parents are the published parents -- the other parents 
-
-		//this will need to be fixed in the future -- we need to know private vs public parents
-		//but for now, we simply send in the public parents -- good enough for picbreeder iec applications
-		//other types of applications might need more info.
-
-		var widObject = {};
-		widObject[evoObject.wid] = evoObject;
-		self.backEmit("schema:getReferencesAndParents", self.genomeType, widObject, function(err, refsAndParents){
-
-			//now we know our references
-			var refParents = refsAndParents[evoObject.wid];
-
-			//so we simply fetch our appropraite seed parents 
-			var evoSeedParents = self.noDuplicatSeedParents(refParents);
-
-			//now we have all the info we need to replace all our parent refs
-			self.backEmit("schema:replaceParentReferences", self.genomeType, evoObject, evoSeedParents, function(err, cloned)
-			{
-				//now we have a cloned version for publishing, where it has public seeds
-
-				 //just publish everything public for now!
-		        var session = {sessionID: self.evolutionSessionID, publish: true};
-
-		        //we can also save private info
-		        //this is where we would grab all the parents of the individual
-		        var privateObjects = [];
-
-				self.backEmit("publish:publishArtifacts", self.genomeType, session, [cloned], [], function(err)
-				{
-					if(err)
-					{
-						finished(err);
-					}
-					else //no error publishing, hooray!
-						finished(undefined, cloned);
-
-				})
-
-			})
-
-		});
-       
-	}
-
-	//no need for a callback here -- nuffin to do but load
-	self.loadSeeds = function(idAndSeeds, finished)
-	{
-		//we have all the seeds and their ids, we just absorb them immediately
-		for(var eID in idAndSeeds)
-		{
-			var seed = idAndSeeds[eID];
-			//grab the objects and save them
-			self.evolutionObjects[eID] = seed;
-
-			//save our seeds
-			self.seeds[seed.wid] = seed;
-		}
-
-		self.log("seed objects: ", self.seeds);
-
-		self.backEmit("schema:getReferencesAndParents", self.genomeType, self.seeds, function(err, refsAndParents)
-		{
-			if(err)
-			{
-				//pass on the error if it happened
-				if(finished)
-					finished(err);
-				else
-					throw err;
-				return;
-			}
-			//there are no parent refs for seeds, just the refs themselves which are important
-			for(var wid in self.seeds)
-			{
-				var refs = Object.keys(refsAndParents[wid]);
-				for(var i=0; i < refs.length; i++)
-				{
-					//who is the parent seed of a particular wid? why itself duh!
-					self.seedParents[refs[i]] = [refs[i]];
-				}
-			}
-
-			// self.log("Seed parents: ", self.seedParents);
-
-			//note, there is no default behavior with seeds -- as usual, you must still tell iec to select parents
-			//there is no subsitute for parent selection
-			if(finished)
-				finished();
-
-		});
-
-
-	}
-
-	//just grab from evo objects -- throw error if issue
-	self.selectParents = function(eIDList, finished)
-	{
-		if(typeof eIDList == "string")
-			eIDList = [eIDList];
-
-		var selectedObjects = {};
-
-		for(var i=0; i < eIDList.length; i++)
-		{	
-			var eID = eIDList[i];
-
-			//grab from evo
-			var evoObject = self.evolutionObjects[eID];
-
-			if(!evoObject){
-				//wrong id 
-				finished("Invalid parent selection: " + eID);
-				return;
-			}
-
-			selectedObjects[eID] = evoObject;
-
-			//save as a selected parent
-			self.selectedParents[eID] = evoObject;
-			self.parentCount++;
-		}
-	
-		//send back the evolutionary object that is linked to this parentID
-		finished(undefined, selectedObjects);
-	}
-
-	self.unselectParents = function(eIDList, finished)
-	{
-		if(typeof eIDList == "string")
-			eIDList = [eIDList];
-
-		for(var i=0; i < eIDList.length; i++)
-		{	
-			var eID = eIDList[i];
-
-			//remove this parent from the selected parents -- doesn't delete from all the individuals
-			if(self.selectedParents[eID])
-				self.parentCount--;
-
-			delete self.selectedParents[eID];
-		}
-
-		//callback optional really, here for backwards compat 
-		if(finished)
-			finished();
-
-	}
-
-	self.noDuplicatSeedParents = function(refsAndParents)
-	{
-		var allSeedNoDup = {};
-
-		//this is a map from the wid to the associated parent wids
-		for(var refWID in refsAndParents)
-		{
-			var parents = refsAndParents[refWID];
-
-			var mergeParents = [];
-
-			for(var i=0; i < parents.length; i++)
-			{
-				var seedsForEachParent = self.seedParents[parents[i]];
-
-				//now we just merge all these together
-				mergeParents = mergeParents.concat(seedsForEachParent);
-			}
-
-			//then we get rid of any duplicates
-			var nodups = {};
-			for(var i=0; i < mergeParents.length; i++)
-				nodups[mergeParents[i]] = true;
-
-			//by induction, each wid generated knows it's seed parents (where each seed reference wid references itself in array form)
-			//therefore, you just look at your reference's parents to see who they believe is their seed 
-			//and concat those results together -- pretty simple, just remove duplicates
-			allSeedNoDup[refWID] = Object.keys(nodups);
-		}	
-
-		return allSeedNoDup;	
-	}
-
-	self.callGenerator = function(allObjects, toCreate, finished)
-	{
-		var parents = self.getOffspringParents();
-
-		//we need to go fetch some stuff
-		self.backEmit("generator:createArtifacts", self.genomeType, toCreate.length, parents, self.sessionObject, function(err, artifacts)
-		{
-			if(err)
-			{
-				//pass on the error if it happened
-				finished(err);
-				return;
-			}
-
-			// self.log("iec generated " + toCreate.length + " individuals: ", artifacts);
-
-			//otherwise, let's do this thang! match artifacts to offspring -- arbitrary don't worry
-			var off = artifacts.offspring;
-
-			var widOffspring = {};
-
-			for(var i=0; i < off.length; i++)
-			{
-				var oObject = off[i];
-				var eID = toCreate[i];
-				//save our evolution object internally -- no more fetches required
-				self.evolutionObjects[eID] = oObject;
-
-				//store objects relateive to their requested ids for return
-				allObjects[eID] = (oObject);
-
-
-				//clone the parent objects for the child!
-				widOffspring[oObject.wid] = oObject;
-
-				// var util = require('util')
-				// self.log("off returned: ".magenta, util.inspect(oObject, false, 3));
-			}
-
-			self.backEmit("schema:getReferencesAndParents", self.genomeType, widOffspring, function(err, refsAndParents)
-			{
-				if(err)
-				{
-					finished(err);
-					return;
-				}
-
-				//check the refs for each object
-				for(var wid in widOffspring)
-				{
-					//here we are with refs and parents
-					var rAndP = refsAndParents[wid];
-
-					var widSeedParents = self.noDuplicatSeedParents(rAndP);
-
-					// self.log("\n\nwid seed parents: ".magenta, rAndP);
-
-
-					//for each key, we set our seed parents appropriately	
-					for(var key in widSeedParents)
-					{
-						self.seedParents[key] = widSeedParents[key];
-					}
-				}
-
-				// self.log("\n\nSeed parents: ".magenta, self.seedParents);
-
-				//mark the offspring as the list objects
-				finished(undefined, allObjects);
-
-			});
-
-
-
-		});
-	}
-
-	//generator yo face!
-	self.getOrCreateOffspring = function(eIDList, finished)
-	{
-		//don't bother doing anything if you havne't selected parents
-		if(self.parentCount ==0){
-			finished("Cannot generate offspring without parents");
-			return;
-		}
-
-		//we need to make a bunch, as many as requested
-		var toCreate = [];
-
-		var allObjects = {};
-
-		//first we check to see which ids we already know
-		for(var i=0; i < eIDList.length; i++)
-		{
-			var eID = eIDList[i];
-			var evoObject = self.evolutionObjects[eID];
-			if(!evoObject)
-			{
-				toCreate.push(eID);
-			}
-			else
-			{
-				//otherwise add to objects that will be sent back
-				allObjects[eID] = evoObject;
-			}
-		}
-
-		//now we have a list of objects that must be created
-		if(toCreate.length)
-		{
-			//this will handle the finished call for us -- after it gets artifacts from the generator
-			self.callGenerator(allObjects, toCreate, finished);	
-		}
-		else
-		{
-			//all ready to go -- send back our objects
-			finished(undefined, allObjects)
-		}
-
-	}
-
-	self.getOffspringParents = function()
-	{
-		var parents = [];
-
-		for(var key in self.selectedParents)
-			parents.push(self.selectedParents[key]);
-
-		return parents;
-	}
-
-	return self;
-}
-
-
-
-
-
-});
-
-require.register("optimuslime~el.js@master", function (exports, module) {
-/**
-* el.js v0.3 - A JavaScript Node Creation Tool
-*
-* https://github.com/markgandolfo/el.js
-*
-* Copyright 2013 Mark Gandolfo and other contributors
-* Released under the MIT license.
-* http://en.wikipedia.org/wiki/MIT_License
-*/
-
-module.exports = el;
-
-function el(tagName, attrs, child) {
-  // Pattern to match id & class names
-  var pattern = /([a-z]+|#[\w-\d]+|\.[\w\d-]+)/g
-
-  if(arguments.length === 2) {
-    if(attrs instanceof Array
-    || typeof attrs === 'function'
-    || typeof attrs === 'string'
-    || attrs.constructor !== Object
-    ) {
-      child = attrs;
-      attrs = undefined;
-    }
-
-  }
-  // does the user pass attributes in, if not set an empty object up
-  attrs = typeof attrs !== 'undefined' ? attrs : {};
-  child = typeof child !== 'undefined' ? child : [];
-  child = child instanceof Array ? child : [child];
-
-  // run the pattern over the tagname an attempt to pull out class & id attributes
-  // shift the first record out as it's the element name
-  matched = tagName.match(pattern);
-  tagName = matched[0];
-  matched.shift();
-
-  // Iterate over the matches and concat the attrs to either class or id keys in attrs json object
-  for (var m in matched) {
-    if(matched[m][0] == '.') {
-      if(attrs['class'] == undefined) {
-        attrs['class'] = matched[m].substring(1, matched[m].length);
-      } else {
-        attrs['class'] = attrs['class'] + ' ' + matched[m].substring(1, matched[m].length);
-      }
-    } else if(matched[m][0] == '#') {
-      if(attrs['id'] == undefined) {
-        attrs['id'] = matched[m].substring(1, matched[m].length)
-      } else {
-        // Feels dirty having multiple id's, but it's allowed: http://www.w3.org/TR/selectors/#id-selectors
-        attrs['id'] = attrs['id'] + ' ' + matched[m].substring(1, matched[m].length);
-      }
-    }
-  }
-
-  // create the element
-  var element = document.createElement(tagName);
-  for(var i = 0; i < child.length; i += 1) {
-    (function(child){
-      switch(typeof child) {
-        case 'object':
-          element.appendChild(child);
-          break;
-        case 'function':
-          var discardDoneCallbackResult = false;
-          var doneCallback = function doneCallback(content) {
-            if (!discardDoneCallbackResult) {
-              element.appendChild(content);
-            }
-          }
-          var result = child.apply(null, [doneCallback])
-          if(typeof result != 'undefined') {
-            discardDoneCallbackResult = true;
-            element.appendChild(result);
-          }
-          break;
-        case 'string':
-          element.appendChild(document.createTextNode(child));
-        default:
-          //???
-      }
-    }(child[i]));
-
-  }
-
-  for (var key in attrs) {
-    if (attrs.hasOwnProperty(key)) {
-      element.setAttribute(key, attrs[key]);
-    }
-  }
-
-  return element;
-};
-
-// alias
-el.create = el.c = el;
-
-// vanity methods
-el.img = function(attrs) {
-  return el.create('img', attrs);
-};
-
-el.a = function(attrs, child) {
-  return el.create('a', attrs, child);
-};
-
-el.div = function(attrs, child) {
-  return el.create('div', attrs, child);
-};
-
-el.p = function(attrs, child) {
-  return el.create('p', attrs, child);
-};
-
-el.input = function(attrs, child) {
-  return el.create('input', attrs);
-};
-
-});
 
 require.register("optimuslime~win-publish@0.0.1-4", function (exports, module) {
 //superagent handles browser or node.js requests
@@ -3418,57 +3473,65 @@ function winpublish(backbone, globalConfig, localConfig)
 
 });
 
-require.register("optimuslime~cppnjs@0.2.6", function (exports, module) {
+require.modules["optimuslime-win-publish"] = require.modules["optimuslime~win-publish@0.0.1-4"];
+require.modules["optimuslime~win-publish"] = require.modules["optimuslime~win-publish@0.0.1-4"];
+require.modules["win-publish"] = require.modules["optimuslime~win-publish@0.0.1-4"];
+
+
+require.register("optimuslime~cppnjs@master", function (exports, module) {
 var cppnjs = {};
 
 //export the cppn library
 module.exports = cppnjs;
 
 //CPPNs
-cppnjs.cppn = require("optimuslime~cppnjs@0.2.6/networks/cppn.js");
+cppnjs.cppn = require("optimuslime~cppnjs@master/networks/cppn.js");
+
+cppnjs.addAdaptable = function()
+{
+    require("optimuslime~cppnjs@master/extras/adaptableAdditions.js");
+};
+
+cppnjs.addPureCPPN = function()
+{
+    require("optimuslime~cppnjs@master/extras/pureCPPNAdditions.js");
+};
 
 cppnjs.addGPUExtras = function()
 {
     //requires pureCPPN activations
     cppnjs.addPureCPPN();
-    require("optimuslime~cppnjs@0.2.6/extras/gpuAdditions.js");
+    require("optimuslime~cppnjs@master/extras/gpuAdditions.js");
 };
 
 //add GPU extras by default
 cppnjs.addGPUExtras();
 
-cppnjs.addAdaptable = function()
-{
-    require("optimuslime~cppnjs@0.2.6/extras/adaptableAdditions.js");
-};
 
-cppnjs.addPureCPPN = function()
-{
-  require("optimuslime~cppnjs@0.2.6/extras/pureCPPNAdditions.js");
-};
+
 
 
 //nodes and connections!
-cppnjs.cppnNode = require("optimuslime~cppnjs@0.2.6/networks/cppnNode.js");
-cppnjs.cppnConnection = require("optimuslime~cppnjs@0.2.6/networks/cppnConnection.js");
+cppnjs.cppnNode = require("optimuslime~cppnjs@master/networks/cppnNode.js");
+cppnjs.cppnConnection = require("optimuslime~cppnjs@master/networks/cppnConnection.js");
 
 //all the activations your heart could ever hope for
-cppnjs.cppnActivationFunctions = require("optimuslime~cppnjs@0.2.6/activationFunctions/cppnActivationFunctions.js");
-cppnjs.cppnActivationFactory = require("optimuslime~cppnjs@0.2.6/activationFunctions/cppnActivationFactory.js");
+cppnjs.cppnActivationFunctions = require("optimuslime~cppnjs@master/activationFunctions/cppnactivationfunctions.js");
+cppnjs.cppnActivationFactory = require("optimuslime~cppnjs@master/activationFunctions/cppnActivationFactory.js");
 
 //and the utilities to round it out!
-cppnjs.utilities = require("optimuslime~cppnjs@0.2.6/utility/utilities.js");
+cppnjs.utilities = require("optimuslime~cppnjs@master/utility/utilities.js");
 
 //exporting the node type
-cppnjs.NodeType = require("optimuslime~cppnjs@0.2.6/types/nodeType.js");
+cppnjs.NodeType = require("optimuslime~cppnjs@master/types/nodeType.js");
 
 
 
 });
 
-require.register("optimuslime~cppnjs@0.2.6/activationFunctions/cppnActivationFactory.js", function (exports, module) {
-var utils = require("optimuslime~cppnjs@0.2.6/utility/utilities.js");
-var cppnActivationFunctions = require("./cppnactivationfunctions.js");
+require.register("optimuslime~cppnjs@master/activationFunctions/cppnActivationFactory.js", function (exports, module) {
+var utils = require("optimuslime~cppnjs@master/utility/utilities.js");
+var cppnActivationFunctions = require("optimuslime~cppnjs@master/activationFunctions/cppnactivationfunctions.js");
 
 var Factory = {};
 
@@ -3534,7 +3597,7 @@ Factory.getRandomActivationFunction = function()
 
 });
 
-require.register("optimuslime~cppnjs@0.2.6/activationFunctions/cppnActivationFunctions.js", function (exports, module) {
+require.register("optimuslime~cppnjs@master/activationFunctions/cppnactivationfunctions.js", function (exports, module) {
 var cppnActivationFunctions = {};
 
 module.exports = cppnActivationFunctions;
@@ -3707,7 +3770,7 @@ cppnActivationFunctions.AddActivationFunction(
 
 });
 
-require.register("optimuslime~cppnjs@0.2.6/networks/cppnConnection.js", function (exports, module) {
+require.register("optimuslime~cppnjs@master/networks/cppnConnection.js", function (exports, module) {
 /**
  * Module dependencies.
  */
@@ -3743,11 +3806,11 @@ function cppnConnection(
 }
 });
 
-require.register("optimuslime~cppnjs@0.2.6/networks/cppnNode.js", function (exports, module) {
+require.register("optimuslime~cppnjs@master/networks/cppnNode.js", function (exports, module) {
 /**
  * Module dependencies.
  */
-var NodeType = require("optimuslime~cppnjs@0.2.6/types/nodeType.js");
+var NodeType = require("optimuslime~cppnjs@master/types/nodeType.js");
 
 /**
  * Expose `cppnNode`.
@@ -3776,12 +3839,12 @@ function cppnNode(actFn, neurType, nid){
 }
 });
 
-require.register("optimuslime~cppnjs@0.2.6/networks/cppn.js", function (exports, module) {
+require.register("optimuslime~cppnjs@master/networks/cppn.js", function (exports, module) {
 /**
  * Module dependencies.
  */
 
-var utilities = require("optimuslime~cppnjs@0.2.6/utility/utilities.js");
+var utilities = require("optimuslime~cppnjs@master/utility/utilities.js");
 
 /**
  * Expose `CPPN`.
@@ -4152,7 +4215,7 @@ CPPN.prototype.recursiveCheckRecursive = function(currentNode)
 
 });
 
-require.register("optimuslime~cppnjs@0.2.6/types/nodeType.js", function (exports, module) {
+require.register("optimuslime~cppnjs@master/types/nodeType.js", function (exports, module) {
 var NodeType =
 {
     bias : "Bias",
@@ -4166,7 +4229,7 @@ module.exports = NodeType;
 
 });
 
-require.register("optimuslime~cppnjs@0.2.6/utility/utilities.js", function (exports, module) {
+require.register("optimuslime~cppnjs@master/utility/utilities.js", function (exports, module) {
 var utils = {};
 
 module.exports = utils;
@@ -4373,10 +4436,10 @@ utils.RouletteWheel.selectXFromLargeObject = function(x, objects)
 
 });
 
-require.register("optimuslime~cppnjs@0.2.6/extras/adaptableAdditions.js", function (exports, module) {
+require.register("optimuslime~cppnjs@master/extras/adaptableAdditions.js", function (exports, module) {
 //The purpose of this file is to only extend CPPNs to have additional activation capabilities involving mod connections
 
-var cppnConnection = require("optimuslime~cppnjs@0.2.6/networks/cppnConnection.js");
+var cppnConnection = require("optimuslime~cppnjs@master/networks/cppnConnection.js");
 //default all the variables that need to be added to handle adaptable activation
 var connectionPrototype = cppnConnection.prototype;
 connectionPrototype.a = 0;
@@ -4387,7 +4450,7 @@ connectionPrototype.modConnection = 0;
 connectionPrototype.learningRate = 0;
 
 
-var CPPN = require("optimuslime~cppnjs@0.2.6/networks/cppn.js");
+var CPPN = require("optimuslime~cppnjs@master/networks/cppn.js");
 //default all the variables that need to be added to handle adaptable activation
 var cppnPrototype = CPPN.prototype;
 
@@ -4559,11 +4622,11 @@ cppnPrototype.multipleSteps = function(numberOfSteps)
 
 });
 
-require.register("optimuslime~cppnjs@0.2.6/extras/pureCPPNAdditions.js", function (exports, module) {
+require.register("optimuslime~cppnjs@master/extras/pureCPPNAdditions.js", function (exports, module) {
 //The purpose of this file is to only extend CPPNs to have additional activation capabilities involving turning
 //cppns into a string!
 
-var CPPN = require("optimuslime~cppnjs@0.2.6/networks/cppn.js");
+var CPPN = require("optimuslime~cppnjs@master/networks/cppn.js");
 
 //for convenience, you can require pureCPPNAdditions
 module.exports = CPPN;
@@ -4873,12 +4936,12 @@ CPPNPrototype.recursiveCountThings = function()
 };
 });
 
-require.register("optimuslime~cppnjs@0.2.6/extras/gpuAdditions.js", function (exports, module) {
+require.register("optimuslime~cppnjs@master/extras/gpuAdditions.js", function (exports, module) {
 //this takes in cppn functions, and outputs a shader....
 //radical!
 //needs to be tested more! How large can CPPNs get? inputs/outputs/hiddens?
 //we'll extend a CPPN to produce a GPU shader
-var CPPN = require("optimuslime~cppnjs@0.2.6/networks/cppn.js");
+var CPPN = require("optimuslime~cppnjs@master/networks/cppn.js");
 
 var CPPNPrototype = CPPN.prototype;
 
@@ -5089,6 +5152,11 @@ CPPNPrototype.fullShaderFromCPPN = function(specificAddFunction)
 
 });
 
+require.modules["optimuslime-cppnjs"] = require.modules["optimuslime~cppnjs@master"];
+require.modules["optimuslime~cppnjs"] = require.modules["optimuslime~cppnjs@master"];
+require.modules["cppnjs"] = require.modules["optimuslime~cppnjs@master"];
+
+
 require.register("optimuslime~neatjs@master", function (exports, module) {
 var neatjs = {};
 
@@ -5128,7 +5196,7 @@ require.register("optimuslime~neatjs@master/evolution/iec.js", function (exports
 var NeatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
 
 //pull in variables from cppnjs
-var cppnjs = require("optimuslime~cppnjs@0.2.6");
+var cppnjs = require("optimuslime~cppnjs@master");
 var utilities =  cppnjs.utilities;
 
 /**
@@ -5292,7 +5360,7 @@ var Novelty = require("optimuslime~neatjs@master/evolution/novelty.js");
 
 
 //pull in variables from cppnjs
-var cppnjs = require("optimuslime~cppnjs@0.2.6");
+var cppnjs = require("optimuslime~cppnjs@master");
 var utilities =  cppnjs.utilities;
 
 
@@ -6068,7 +6136,7 @@ require.register("optimuslime~neatjs@master/evolution/novelty.js", function (exp
  */
 
 var NeatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
-var utilities =  require("optimuslime~cppnjs@0.2.6").utilities;
+var utilities =  require("optimuslime~cppnjs@master").utilities;
 
 /**
  * Expose `NeatNode`.
@@ -6506,7 +6574,7 @@ require.register("optimuslime~neatjs@master/genome/neatGenome.js", function (exp
  */
 
 //pull in our cppn lib
-var cppnjs = require("optimuslime~cppnjs@0.2.6");
+var cppnjs = require("optimuslime~cppnjs@master");
 
 //grab our activation factory, cppn object and connections
 var CPPNactivationFactory = cppnjs.cppnActivationFactory;
@@ -6522,7 +6590,7 @@ var neatHelp =  require("optimuslime~neatjs@master/neatHelp/neatHelp.js");
 var neatParameters =  require("optimuslime~neatjs@master/neatHelp/neatParameters.js");
 var neatDecoder =  require("optimuslime~neatjs@master/neatHelp/neatDecoder.js");
 
-var wUtils = require("optimuslime~win-utils@0.1.1");
+var wUtils = require("optimuslime~win-utils@master");
 var uuid = wUtils.cuid;
 
 //going to need to read node types appropriately
@@ -8145,7 +8213,7 @@ require.register("optimuslime~neatjs@master/neatHelp/neatDecoder.js", function (
  */
 
 //pull in our cppn lib
-var cppnjs = require("optimuslime~cppnjs@0.2.6");
+var cppnjs = require("optimuslime~cppnjs@master");
 
 //grab our activation factory, cppn object and connections
 var CPPNactivationFactory = cppnjs.cppnActivationFactory;
@@ -8261,7 +8329,7 @@ require.register("optimuslime~neatjs@master/neatHelp/neatHelp.js", function (exp
 /**
 * Module dependencies.
 */
-var uuid = require("optimuslime~win-utils@0.1.1").cuid;
+var uuid = require("optimuslime~win-utils@master").cuid;
 /**
 * Expose `neatHelp`.
 */
@@ -8745,6 +8813,11 @@ converter.ConvertCSharpToJS = function(xmlGenome)
 };
 
 });
+
+require.modules["optimuslime-neatjs"] = require.modules["optimuslime~neatjs@master"];
+require.modules["optimuslime~neatjs"] = require.modules["optimuslime~neatjs@master"];
+require.modules["neatjs"] = require.modules["optimuslime~neatjs@master"];
+
 
 require.register("optimuslime~win-neat@0.0.1-9/lib/neatSchema.js", function (exports, module) {
 //contains the neat schema setup -- default for neatjs stuff.
@@ -9275,6 +9348,11 @@ function genotypeFromJSON(ngJSON)
 
 
 });
+
+require.modules["optimuslime-win-neat"] = require.modules["optimuslime~win-neat@0.0.1-9"];
+require.modules["optimuslime~win-neat"] = require.modules["optimuslime~win-neat@0.0.1-9"];
+require.modules["win-neat"] = require.modules["optimuslime~win-neat@0.0.1-9"];
+
 
 require.register("techjacker~q@master", function (exports, module) {
 // vim:ts=4:sts=4:sw=4:
@@ -11205,6 +11283,11 @@ return Q;
 
 });
 
+require.modules["techjacker-q"] = require.modules["techjacker~q@master"];
+require.modules["techjacker~q"] = require.modules["techjacker~q@master"];
+require.modules["q"] = require.modules["techjacker~q@master"];
+
+
 require.register("optimuslime~win-backbone@0.0.4-5", function (exports, module) {
 
 //Control all the win module! Need emitter for basic usage. 
@@ -12013,6 +12096,11 @@ function winBB(homeDirectory)
 
 
 });
+
+require.modules["optimuslime-win-backbone"] = require.modules["optimuslime~win-backbone@0.0.4-5"];
+require.modules["optimuslime~win-backbone"] = require.modules["optimuslime~win-backbone@0.0.4-5"];
+require.modules["win-backbone"] = require.modules["optimuslime~win-backbone@0.0.4-5"];
+
 
 require.register("geraintluff~tv4@master/lang/de.js", function (exports, module) {
 (function (global) {
@@ -13672,6 +13760,11 @@ return tv4; // used by _header.js to globalise.
 }));
 });
 
+require.modules["geraintluff-tv4"] = require.modules["geraintluff~tv4@master"];
+require.modules["geraintluff~tv4"] = require.modules["geraintluff~tv4@master"];
+require.modules["tv4"] = require.modules["geraintluff~tv4@master"];
+
+
 require.register("optimuslime~win-schema@master/lib/addSchema.js", function (exports, module) {
 //pull in traverse object for this guy
 var traverse = require("optimuslime~traverse@master");
@@ -15003,6 +15096,11 @@ function winSchema(winback, globalConfiguration, localConfiguration)
 
 
 });
+
+require.modules["optimuslime-win-schema"] = require.modules["optimuslime~win-schema@master"];
+require.modules["optimuslime~win-schema"] = require.modules["optimuslime~win-schema@master"];
+require.modules["win-schema"] = require.modules["optimuslime~win-schema@master"];
+
 
 require.register("optimuslime~win-schema@0.0.5-4/lib/addSchema.js", function (exports, module) {
 //pull in traverse object for this guy
@@ -16336,6 +16434,11 @@ function winSchema(winback, globalConfiguration, localConfiguration)
 
 });
 
+require.modules["optimuslime-win-schema"] = require.modules["optimuslime~win-schema@0.0.5-4"];
+require.modules["optimuslime~win-schema"] = require.modules["optimuslime~win-schema@0.0.5-4"];
+require.modules["win-schema"] = require.modules["optimuslime~win-schema@0.0.5-4"];
+
+
 require.register("optimuslime~win-gen@0.0.2-6", function (exports, module) {
 //need our general utils functions
 var winutils = require("optimuslime~win-utils@master");
@@ -17294,6 +17397,11 @@ function extendObject(self, globalConfiguration, localConfiguration)
 
 });
 
+require.modules["optimuslime-win-gen"] = require.modules["optimuslime~win-gen@0.0.2-6"];
+require.modules["optimuslime~win-gen"] = require.modules["optimuslime~win-gen@0.0.2-6"];
+require.modules["win-gen"] = require.modules["optimuslime~win-gen@0.0.2-6"];
+
+
 require.register("optimuslime~win-data@0.0.1-3", function (exports, module) {
 var request = require("visionmedia~superagent@master");
 
@@ -17402,6 +17510,11 @@ function windata(backbone, globalConfig, localConfig)
 
 
 });
+
+require.modules["optimuslime-win-data"] = require.modules["optimuslime~win-data@0.0.1-3"];
+require.modules["optimuslime~win-data"] = require.modules["optimuslime~win-data@0.0.1-3"];
+require.modules["win-data"] = require.modules["optimuslime~win-data@0.0.1-3"];
+
 
 require.register("optimuslime~win-phylogeny@0.0.1-1", function (exports, module) {
 //this will help us navigate complicated json tree objects
@@ -17805,13 +17918,5065 @@ function winphylogeny(backbone, globalConfig, localConfig)
 
 });
 
+require.modules["optimuslime-win-phylogeny"] = require.modules["optimuslime~win-phylogeny@0.0.1-1"];
+require.modules["optimuslime~win-phylogeny"] = require.modules["optimuslime~win-phylogeny@0.0.1-1"];
+require.modules["win-phylogeny"] = require.modules["optimuslime~win-phylogeny@0.0.1-1"];
+
+
+require.register("component~event@0.1.4", function (exports, module) {
+var bind = window.addEventListener ? 'addEventListener' : 'attachEvent',
+    unbind = window.removeEventListener ? 'removeEventListener' : 'detachEvent',
+    prefix = bind !== 'addEventListener' ? 'on' : '';
+
+/**
+ * Bind `el` event `type` to `fn`.
+ *
+ * @param {Element} el
+ * @param {String} type
+ * @param {Function} fn
+ * @param {Boolean} capture
+ * @return {Function}
+ * @api public
+ */
+
+exports.bind = function(el, type, fn, capture){
+  el[bind](prefix + type, fn, capture || false);
+  return fn;
+};
+
+/**
+ * Unbind `el` event `type`'s callback `fn`.
+ *
+ * @param {Element} el
+ * @param {String} type
+ * @param {Function} fn
+ * @param {Boolean} capture
+ * @return {Function}
+ * @api public
+ */
+
+exports.unbind = function(el, type, fn, capture){
+  el[unbind](prefix + type, fn, capture || false);
+  return fn;
+};
+});
+
+require.modules["component-event"] = require.modules["component~event@0.1.4"];
+require.modules["component~event"] = require.modules["component~event@0.1.4"];
+require.modules["event"] = require.modules["component~event@0.1.4"];
+
+
+require.register("component~query@0.0.3", function (exports, module) {
+function one(selector, el) {
+  return el.querySelector(selector);
+}
+
+exports = module.exports = function(selector, el){
+  el = el || document;
+  return one(selector, el);
+};
+
+exports.all = function(selector, el){
+  el = el || document;
+  return el.querySelectorAll(selector);
+};
+
+exports.engine = function(obj){
+  if (!obj.one) throw new Error('.one callback required');
+  if (!obj.all) throw new Error('.all callback required');
+  one = obj.one;
+  exports.all = obj.all;
+  return exports;
+};
+
+});
+
+require.modules["component-query"] = require.modules["component~query@0.0.3"];
+require.modules["component~query"] = require.modules["component~query@0.0.3"];
+require.modules["query"] = require.modules["component~query@0.0.3"];
+
+
+require.register("component~matches-selector@master", function (exports, module) {
+/**
+ * Module dependencies.
+ */
+
+var query = require("component~query@0.0.3");
+
+/**
+ * Element prototype.
+ */
+
+var proto = Element.prototype;
+
+/**
+ * Vendor function.
+ */
+
+var vendor = proto.matches
+  || proto.webkitMatchesSelector
+  || proto.mozMatchesSelector
+  || proto.msMatchesSelector
+  || proto.oMatchesSelector;
+
+/**
+ * Expose `match()`.
+ */
+
+module.exports = match;
+
+/**
+ * Match `el` to `selector`.
+ *
+ * @param {Element} el
+ * @param {String} selector
+ * @return {Boolean}
+ * @api public
+ */
+
+function match(el, selector) {
+  if (!el || el.nodeType !== 1) return false;
+  if (vendor) return vendor.call(el, selector);
+  var nodes = query.all(selector, el.parentNode);
+  for (var i = 0; i < nodes.length; ++i) {
+    if (nodes[i] == el) return true;
+  }
+  return false;
+}
+
+});
+
+require.modules["component-matches-selector"] = require.modules["component~matches-selector@master"];
+require.modules["component~matches-selector"] = require.modules["component~matches-selector@master"];
+require.modules["matches-selector"] = require.modules["component~matches-selector@master"];
+
+
+require.register("discore~closest@0.1.3", function (exports, module) {
+var matches = require("component~matches-selector@master")
+
+module.exports = function (element, selector, checkYoSelf, root) {
+  element = checkYoSelf ? {parentNode: element} : element
+
+  root = root || document
+
+  // Make sure `element !== document` and `element != null`
+  // otherwise we get an illegal invocation
+  while ((element = element.parentNode) && element !== document) {
+    if (matches(element, selector))
+      return element
+    // After `matches` on the edge case that
+    // the selector matches the root
+    // (when the root is not the document)
+    if (element === root)
+      return  
+  }
+}
+});
+
+require.modules["discore-closest"] = require.modules["discore~closest@0.1.3"];
+require.modules["discore~closest"] = require.modules["discore~closest@0.1.3"];
+require.modules["closest"] = require.modules["discore~closest@0.1.3"];
+
+
+require.register("component~delegate@0.2.2", function (exports, module) {
+/**
+ * Module dependencies.
+ */
+
+var closest = require("discore~closest@0.1.3")
+  , event = require("component~event@0.1.4");
+
+/**
+ * Delegate event `type` to `selector`
+ * and invoke `fn(e)`. A callback function
+ * is returned which may be passed to `.unbind()`.
+ *
+ * @param {Element} el
+ * @param {String} selector
+ * @param {String} type
+ * @param {Function} fn
+ * @param {Boolean} capture
+ * @return {Function}
+ * @api public
+ */
+
+exports.bind = function(el, selector, type, fn, capture){
+  return event.bind(el, type, function(e){
+    var target = e.target || e.srcElement;
+    e.delegateTarget = closest(target, selector, true, el);
+    if (e.delegateTarget) fn.call(el, e);
+  }, capture);
+};
+
+/**
+ * Unbind event `type`'s callback `fn`.
+ *
+ * @param {Element} el
+ * @param {String} type
+ * @param {Function} fn
+ * @param {Boolean} capture
+ * @api public
+ */
+
+exports.unbind = function(el, type, fn, capture){
+  event.unbind(el, type, fn, capture);
+};
+
+});
+
+require.modules["component-delegate"] = require.modules["component~delegate@0.2.2"];
+require.modules["component~delegate"] = require.modules["component~delegate@0.2.2"];
+require.modules["delegate"] = require.modules["component~delegate@0.2.2"];
+
+
+require.register("component~events@1.0.8", function (exports, module) {
+
+/**
+ * Module dependencies.
+ */
+
+var events = require("component~event@0.1.4");
+var delegate = require("component~delegate@0.2.2");
+
+/**
+ * Expose `Events`.
+ */
+
+module.exports = Events;
+
+/**
+ * Initialize an `Events` with the given
+ * `el` object which events will be bound to,
+ * and the `obj` which will receive method calls.
+ *
+ * @param {Object} el
+ * @param {Object} obj
+ * @api public
+ */
+
+function Events(el, obj) {
+  if (!(this instanceof Events)) return new Events(el, obj);
+  if (!el) throw new Error('element required');
+  if (!obj) throw new Error('object required');
+  this.el = el;
+  this.obj = obj;
+  this._events = {};
+}
+
+/**
+ * Subscription helper.
+ */
+
+Events.prototype.sub = function(event, method, cb){
+  this._events[event] = this._events[event] || {};
+  this._events[event][method] = cb;
+};
+
+/**
+ * Bind to `event` with optional `method` name.
+ * When `method` is undefined it becomes `event`
+ * with the "on" prefix.
+ *
+ * Examples:
+ *
+ *  Direct event handling:
+ *
+ *    events.bind('click') // implies "onclick"
+ *    events.bind('click', 'remove')
+ *    events.bind('click', 'sort', 'asc')
+ *
+ *  Delegated event handling:
+ *
+ *    events.bind('click li > a')
+ *    events.bind('click li > a', 'remove')
+ *    events.bind('click a.sort-ascending', 'sort', 'asc')
+ *    events.bind('click a.sort-descending', 'sort', 'desc')
+ *
+ * @param {String} event
+ * @param {String|function} [method]
+ * @return {Function} callback
+ * @api public
+ */
+
+Events.prototype.bind = function(event, method){
+  var e = parse(event);
+  var el = this.el;
+  var obj = this.obj;
+  var name = e.name;
+  var method = method || 'on' + name;
+  var args = [].slice.call(arguments, 2);
+
+  // callback
+  function cb(){
+    var a = [].slice.call(arguments).concat(args);
+    obj[method].apply(obj, a);
+  }
+
+  // bind
+  if (e.selector) {
+    cb = delegate.bind(el, e.selector, name, cb);
+  } else {
+    events.bind(el, name, cb);
+  }
+
+  // subscription for unbinding
+  this.sub(name, method, cb);
+
+  return cb;
+};
+
+/**
+ * Unbind a single binding, all bindings for `event`,
+ * or all bindings within the manager.
+ *
+ * Examples:
+ *
+ *  Unbind direct handlers:
+ *
+ *     events.unbind('click', 'remove')
+ *     events.unbind('click')
+ *     events.unbind()
+ *
+ * Unbind delegate handlers:
+ *
+ *     events.unbind('click', 'remove')
+ *     events.unbind('click')
+ *     events.unbind()
+ *
+ * @param {String|Function} [event]
+ * @param {String|Function} [method]
+ * @api public
+ */
+
+Events.prototype.unbind = function(event, method){
+  if (0 == arguments.length) return this.unbindAll();
+  if (1 == arguments.length) return this.unbindAllOf(event);
+
+  // no bindings for this event
+  var bindings = this._events[event];
+  if (!bindings) return;
+
+  // no bindings for this method
+  var cb = bindings[method];
+  if (!cb) return;
+
+  events.unbind(this.el, event, cb);
+};
+
+/**
+ * Unbind all events.
+ *
+ * @api private
+ */
+
+Events.prototype.unbindAll = function(){
+  for (var event in this._events) {
+    this.unbindAllOf(event);
+  }
+};
+
+/**
+ * Unbind all events for `event`.
+ *
+ * @param {String} event
+ * @api private
+ */
+
+Events.prototype.unbindAllOf = function(event){
+  var bindings = this._events[event];
+  if (!bindings) return;
+
+  for (var method in bindings) {
+    this.unbind(event, method);
+  }
+};
+
+/**
+ * Parse `event`.
+ *
+ * @param {String} event
+ * @return {Object}
+ * @api private
+ */
+
+function parse(event) {
+  var parts = event.split(/ +/);
+  return {
+    name: parts.shift(),
+    selector: parts.join(' ')
+  }
+}
+
+});
+
+require.modules["component-events"] = require.modules["component~events@1.0.8"];
+require.modules["component~events"] = require.modules["component~events@1.0.8"];
+require.modules["events"] = require.modules["component~events@1.0.8"];
+
+
+require.register("component~indexof@0.0.1", function (exports, module) {
+
+var indexOf = [].indexOf;
+
+module.exports = function(arr, obj){
+  if (indexOf) return arr.indexOf(obj);
+  for (var i = 0; i < arr.length; ++i) {
+    if (arr[i] === obj) return i;
+  }
+  return -1;
+};
+});
+
+require.modules["component-indexof"] = require.modules["component~indexof@0.0.1"];
+require.modules["component~indexof"] = require.modules["component~indexof@0.0.1"];
+require.modules["indexof"] = require.modules["component~indexof@0.0.1"];
+
+
+require.register("component~classes@master", function (exports, module) {
+/**
+ * Module dependencies.
+ */
+
+var index = require("component~indexof@0.0.1");
+
+/**
+ * Whitespace regexp.
+ */
+
+var re = /\s+/;
+
+/**
+ * toString reference.
+ */
+
+var toString = Object.prototype.toString;
+
+/**
+ * Wrap `el` in a `ClassList`.
+ *
+ * @param {Element} el
+ * @return {ClassList}
+ * @api public
+ */
+
+module.exports = function(el){
+  return new ClassList(el);
+};
+
+/**
+ * Initialize a new ClassList for `el`.
+ *
+ * @param {Element} el
+ * @api private
+ */
+
+function ClassList(el) {
+  if (!el) throw new Error('A DOM element reference is required');
+  this.el = el;
+  this.list = el.classList;
+}
+
+/**
+ * Add class `name` if not already present.
+ *
+ * @param {String} name
+ * @return {ClassList}
+ * @api public
+ */
+
+ClassList.prototype.add = function(name){
+  // classList
+  if (this.list) {
+    this.list.add(name);
+    return this;
+  }
+
+  // fallback
+  var arr = this.array();
+  var i = index(arr, name);
+  if (!~i) arr.push(name);
+  this.el.className = arr.join(' ');
+  return this;
+};
+
+/**
+ * Remove class `name` when present, or
+ * pass a regular expression to remove
+ * any which match.
+ *
+ * @param {String|RegExp} name
+ * @return {ClassList}
+ * @api public
+ */
+
+ClassList.prototype.remove = function(name){
+  if ('[object RegExp]' == toString.call(name)) {
+    return this.removeMatching(name);
+  }
+
+  // classList
+  if (this.list) {
+    this.list.remove(name);
+    return this;
+  }
+
+  // fallback
+  var arr = this.array();
+  var i = index(arr, name);
+  if (~i) arr.splice(i, 1);
+  this.el.className = arr.join(' ');
+  return this;
+};
+
+/**
+ * Remove all classes matching `re`.
+ *
+ * @param {RegExp} re
+ * @return {ClassList}
+ * @api private
+ */
+
+ClassList.prototype.removeMatching = function(re){
+  var arr = this.array();
+  for (var i = 0; i < arr.length; i++) {
+    if (re.test(arr[i])) {
+      this.remove(arr[i]);
+    }
+  }
+  return this;
+};
+
+/**
+ * Toggle class `name`, can force state via `force`.
+ *
+ * For browsers that support classList, but do not support `force` yet,
+ * the mistake will be detected and corrected.
+ *
+ * @param {String} name
+ * @param {Boolean} force
+ * @return {ClassList}
+ * @api public
+ */
+
+ClassList.prototype.toggle = function(name, force){
+  // classList
+  if (this.list) {
+    if ("undefined" !== typeof force) {
+      if (force !== this.list.toggle(name, force)) {
+        this.list.toggle(name); // toggle again to correct
+      }
+    } else {
+      this.list.toggle(name);
+    }
+    return this;
+  }
+
+  // fallback
+  if ("undefined" !== typeof force) {
+    if (!force) {
+      this.remove(name);
+    } else {
+      this.add(name);
+    }
+  } else {
+    if (this.has(name)) {
+      this.remove(name);
+    } else {
+      this.add(name);
+    }
+  }
+
+  return this;
+};
+
+/**
+ * Return an array of classes.
+ *
+ * @return {Array}
+ * @api public
+ */
+
+ClassList.prototype.array = function(){
+  var str = this.el.className.replace(/^\s+|\s+$/g, '');
+  var arr = str.split(re);
+  if ('' === arr[0]) arr.shift();
+  return arr;
+};
+
+/**
+ * Check if class `name` is present.
+ *
+ * @param {String} name
+ * @return {ClassList}
+ * @api public
+ */
+
+ClassList.prototype.has =
+ClassList.prototype.contains = function(name){
+  return this.list
+    ? this.list.contains(name)
+    : !! ~index(this.array(), name);
+};
+
+});
+
+require.modules["component-classes"] = require.modules["component~classes@master"];
+require.modules["component~classes"] = require.modules["component~classes@master"];
+require.modules["classes"] = require.modules["component~classes@master"];
+
+
+require.register("ramitos~resize@master", function (exports, module) {
+var binds = {};
+
+module.exports.bind = function (element, cb, ms) {
+  if(!binds[element]) binds[element] = {};
+  var height = element.offsetHeight;
+  var width = element.offsetWidth;
+  if(!ms) ms = 250;
+  
+  binds[element][cb] = setInterval(function () {
+    if((width === element.offsetWidth) && (height === element.offsetHeight)) return;
+    height = element.offsetHeight;
+    width = element.offsetWidth;
+    cb(element);
+  }, ms);
+};
+
+module.exports.unbind = function (element, cb) {
+  if(!binds[element][cb]) return;
+  clearInterval(binds[element][cb]);
+};
+});
+
+require.modules["ramitos-resize"] = require.modules["ramitos~resize@master"];
+require.modules["ramitos~resize"] = require.modules["ramitos~resize@master"];
+require.modules["resize"] = require.modules["ramitos~resize@master"];
+
+
+require.register("component~keyname@0.0.1", function (exports, module) {
+
+/**
+ * Key name map.
+ */
+
+var map = {
+  8: 'backspace',
+  9: 'tab',
+  13: 'enter',
+  16: 'shift',
+  17: 'ctrl',
+  18: 'alt',
+  20: 'capslock',
+  27: 'esc',
+  32: 'space',
+  33: 'pageup',
+  34: 'pagedown',
+  35: 'end',
+  36: 'home',
+  37: 'left',
+  38: 'up',
+  39: 'right',
+  40: 'down',
+  45: 'ins',
+  46: 'del',
+  91: 'meta',
+  93: 'meta',
+  224: 'meta'
+};
+
+/**
+ * Return key name for `n`.
+ *
+ * @param {Number} n
+ * @return {String}
+ * @api public
+ */
+
+module.exports = function(n){
+  return map[n];
+};
+});
+
+require.modules["component-keyname"] = require.modules["component~keyname@0.0.1"];
+require.modules["component~keyname"] = require.modules["component~keyname@0.0.1"];
+require.modules["keyname"] = require.modules["component~keyname@0.0.1"];
+
+
+require.register("component~type@1.0.0", function (exports, module) {
+
+/**
+ * toString ref.
+ */
+
+var toString = Object.prototype.toString;
+
+/**
+ * Return the type of `val`.
+ *
+ * @param {Mixed} val
+ * @return {String}
+ * @api public
+ */
+
+module.exports = function(val){
+  switch (toString.call(val)) {
+    case '[object Function]': return 'function';
+    case '[object Date]': return 'date';
+    case '[object RegExp]': return 'regexp';
+    case '[object Arguments]': return 'arguments';
+    case '[object Array]': return 'array';
+    case '[object String]': return 'string';
+  }
+
+  if (val === null) return 'null';
+  if (val === undefined) return 'undefined';
+  if (val && val.nodeType === 1) return 'element';
+  if (val === Object(val)) return 'object';
+
+  return typeof val;
+};
+
+});
+
+require.modules["component-type"] = require.modules["component~type@1.0.0"];
+require.modules["component~type"] = require.modules["component~type@1.0.0"];
+require.modules["type"] = require.modules["component~type@1.0.0"];
+
+
+require.register("component~props@1.1.2", function (exports, module) {
+/**
+ * Global Names
+ */
+
+var globals = /\b(this|Array|Date|Object|Math|JSON)\b/g;
+
+/**
+ * Return immediate identifiers parsed from `str`.
+ *
+ * @param {String} str
+ * @param {String|Function} map function or prefix
+ * @return {Array}
+ * @api public
+ */
+
+module.exports = function(str, fn){
+  var p = unique(props(str));
+  if (fn && 'string' == typeof fn) fn = prefixed(fn);
+  if (fn) return map(str, p, fn);
+  return p;
+};
+
+/**
+ * Return immediate identifiers in `str`.
+ *
+ * @param {String} str
+ * @return {Array}
+ * @api private
+ */
+
+function props(str) {
+  return str
+    .replace(/\.\w+|\w+ *\(|"[^"]*"|'[^']*'|\/([^/]+)\//g, '')
+    .replace(globals, '')
+    .match(/[$a-zA-Z_]\w*/g)
+    || [];
+}
+
+/**
+ * Return `str` with `props` mapped with `fn`.
+ *
+ * @param {String} str
+ * @param {Array} props
+ * @param {Function} fn
+ * @return {String}
+ * @api private
+ */
+
+function map(str, props, fn) {
+  var re = /\.\w+|\w+ *\(|"[^"]*"|'[^']*'|\/([^/]+)\/|[a-zA-Z_]\w*/g;
+  return str.replace(re, function(_){
+    if ('(' == _[_.length - 1]) return fn(_);
+    if (!~props.indexOf(_)) return _;
+    return fn(_);
+  });
+}
+
+/**
+ * Return unique array.
+ *
+ * @param {Array} arr
+ * @return {Array}
+ * @api private
+ */
+
+function unique(arr) {
+  var ret = [];
+
+  for (var i = 0; i < arr.length; i++) {
+    if (~ret.indexOf(arr[i])) continue;
+    ret.push(arr[i]);
+  }
+
+  return ret;
+}
+
+/**
+ * Map with prefix `str`.
+ */
+
+function prefixed(str) {
+  return function(_){
+    return str + _;
+  };
+}
+
+});
+
+require.modules["component-props"] = require.modules["component~props@1.1.2"];
+require.modules["component~props"] = require.modules["component~props@1.1.2"];
+require.modules["props"] = require.modules["component~props@1.1.2"];
+
+
+require.register("component~to-function@2.0.5", function (exports, module) {
+
+/**
+ * Module Dependencies
+ */
+
+var expr;
+try {
+  expr = require("component~props@1.1.2");
+} catch(e) {
+  expr = require("component~props@1.1.2");
+}
+
+/**
+ * Expose `toFunction()`.
+ */
+
+module.exports = toFunction;
+
+/**
+ * Convert `obj` to a `Function`.
+ *
+ * @param {Mixed} obj
+ * @return {Function}
+ * @api private
+ */
+
+function toFunction(obj) {
+  switch ({}.toString.call(obj)) {
+    case '[object Object]':
+      return objectToFunction(obj);
+    case '[object Function]':
+      return obj;
+    case '[object String]':
+      return stringToFunction(obj);
+    case '[object RegExp]':
+      return regexpToFunction(obj);
+    default:
+      return defaultToFunction(obj);
+  }
+}
+
+/**
+ * Default to strict equality.
+ *
+ * @param {Mixed} val
+ * @return {Function}
+ * @api private
+ */
+
+function defaultToFunction(val) {
+  return function(obj){
+    return val === obj;
+  };
+}
+
+/**
+ * Convert `re` to a function.
+ *
+ * @param {RegExp} re
+ * @return {Function}
+ * @api private
+ */
+
+function regexpToFunction(re) {
+  return function(obj){
+    return re.test(obj);
+  };
+}
+
+/**
+ * Convert property `str` to a function.
+ *
+ * @param {String} str
+ * @return {Function}
+ * @api private
+ */
+
+function stringToFunction(str) {
+  // immediate such as "> 20"
+  if (/^ *\W+/.test(str)) return new Function('_', 'return _ ' + str);
+
+  // properties such as "name.first" or "age > 18" or "age > 18 && age < 36"
+  return new Function('_', 'return ' + get(str));
+}
+
+/**
+ * Convert `object` to a function.
+ *
+ * @param {Object} object
+ * @return {Function}
+ * @api private
+ */
+
+function objectToFunction(obj) {
+  var match = {};
+  for (var key in obj) {
+    match[key] = typeof obj[key] === 'string'
+      ? defaultToFunction(obj[key])
+      : toFunction(obj[key]);
+  }
+  return function(val){
+    if (typeof val !== 'object') return false;
+    for (var key in match) {
+      if (!(key in val)) return false;
+      if (!match[key](val[key])) return false;
+    }
+    return true;
+  };
+}
+
+/**
+ * Built the getter function. Supports getter style functions
+ *
+ * @param {String} str
+ * @return {String}
+ * @api private
+ */
+
+function get(str) {
+  var props = expr(str);
+  if (!props.length) return '_.' + str;
+
+  var val, i, prop;
+  for (i = 0; i < props.length; i++) {
+    prop = props[i];
+    val = '_.' + prop;
+    val = "('function' == typeof " + val + " ? " + val + "() : " + val + ")";
+
+    // mimic negative lookbehind to avoid problems with nested properties
+    str = stripNested(prop, str, val);
+  }
+
+  return str;
+}
+
+/**
+ * Mimic negative lookbehind to avoid problems with nested properties.
+ *
+ * See: http://blog.stevenlevithan.com/archives/mimic-lookbehind-javascript
+ *
+ * @param {String} prop
+ * @param {String} str
+ * @param {String} val
+ * @return {String}
+ * @api private
+ */
+
+function stripNested (prop, str, val) {
+  return str.replace(new RegExp('(\\.)?' + prop, 'g'), function($0, $1) {
+    return $1 ? $0 : val;
+  });
+}
+
+});
+
+require.modules["component-to-function"] = require.modules["component~to-function@2.0.5"];
+require.modules["component~to-function"] = require.modules["component~to-function@2.0.5"];
+require.modules["to-function"] = require.modules["component~to-function@2.0.5"];
+
+
+require.register("component~each@0.2.5", function (exports, module) {
+
+/**
+ * Module dependencies.
+ */
+
+try {
+  var type = require("component~type@1.0.0");
+} catch (err) {
+  var type = require("component~type@1.0.0");
+}
+
+var toFunction = require("component~to-function@2.0.5");
+
+/**
+ * HOP reference.
+ */
+
+var has = Object.prototype.hasOwnProperty;
+
+/**
+ * Iterate the given `obj` and invoke `fn(val, i)`
+ * in optional context `ctx`.
+ *
+ * @param {String|Array|Object} obj
+ * @param {Function} fn
+ * @param {Object} [ctx]
+ * @api public
+ */
+
+module.exports = function(obj, fn, ctx){
+  fn = toFunction(fn);
+  ctx = ctx || this;
+  switch (type(obj)) {
+    case 'array':
+      return array(obj, fn, ctx);
+    case 'object':
+      if ('number' == typeof obj.length) return array(obj, fn, ctx);
+      return object(obj, fn, ctx);
+    case 'string':
+      return string(obj, fn, ctx);
+  }
+};
+
+/**
+ * Iterate string chars.
+ *
+ * @param {String} obj
+ * @param {Function} fn
+ * @param {Object} ctx
+ * @api private
+ */
+
+function string(obj, fn, ctx) {
+  for (var i = 0; i < obj.length; ++i) {
+    fn.call(ctx, obj.charAt(i), i);
+  }
+}
+
+/**
+ * Iterate object keys.
+ *
+ * @param {Object} obj
+ * @param {Function} fn
+ * @param {Object} ctx
+ * @api private
+ */
+
+function object(obj, fn, ctx) {
+  for (var key in obj) {
+    if (has.call(obj, key)) {
+      fn.call(ctx, key, obj[key]);
+    }
+  }
+}
+
+/**
+ * Iterate array-ish.
+ *
+ * @param {Array|Object} obj
+ * @param {Function} fn
+ * @param {Object} ctx
+ * @api private
+ */
+
+function array(obj, fn, ctx) {
+  for (var i = 0; i < obj.length; ++i) {
+    fn.call(ctx, obj[i], i);
+  }
+}
+
+});
+
+require.modules["component-each"] = require.modules["component~each@0.2.5"];
+require.modules["component~each"] = require.modules["component~each@0.2.5"];
+require.modules["each"] = require.modules["component~each@0.2.5"];
+
+
+require.register("component~set@1.0.0", function (exports, module) {
+
+/**
+ * Expose `Set`.
+ */
+
+module.exports = Set;
+
+/**
+ * Initialize a new `Set` with optional `vals`
+ *
+ * @param {Array} vals
+ * @api public
+ */
+
+function Set(vals) {
+  if (!(this instanceof Set)) return new Set(vals);
+  this.vals = [];
+  if (vals) {
+    for (var i = 0; i < vals.length; ++i) {
+      this.add(vals[i]);
+    }
+  }
+}
+
+/**
+ * Add `val`.
+ *
+ * @param {Mixed} val
+ * @api public
+ */
+
+Set.prototype.add = function(val){
+  if (this.has(val)) return;
+  this.vals.push(val);
+};
+
+/**
+ * Check if this set has `val`.
+ *
+ * @param {Mixed} val
+ * @return {Boolean}
+ * @api public
+ */
+
+Set.prototype.has = function(val){
+  return !! ~this.indexOf(val);
+};
+
+/**
+ * Return the indexof `val`.
+ *
+ * @param {Mixed} val
+ * @return {Number}
+ * @api private
+ */
+
+Set.prototype.indexOf = function(val){
+  for (var i = 0, len = this.vals.length; i < len; ++i) {
+    var obj = this.vals[i];
+    if (obj.equals && obj.equals(val)) return i;
+    if (obj == val) return i;
+  }
+  return -1;
+};
+
+/**
+ * Iterate each member and invoke `fn(val)`.
+ *
+ * @param {Function} fn
+ * @return {Set}
+ * @api public
+ */
+
+Set.prototype.each = function(fn){
+  for (var i = 0; i < this.vals.length; ++i) {
+    fn(this.vals[i]);
+  }
+  return this;
+};
+
+/**
+ * Return the values as an array.
+ *
+ * @return {Array}
+ * @api public
+ */
+
+Set.prototype.values = 
+Set.prototype.toJSON = function(){
+  return this.vals;
+};
+
+/**
+ * Return the set size.
+ *
+ * @return {Number}
+ * @api public
+ */
+
+Set.prototype.size = function(){
+  return this.vals.length;
+};
+
+/**
+ * Empty the set and return old values.
+ *
+ * @return {Array}
+ * @api public
+ */
+
+Set.prototype.clear = function(){
+  var old = this.vals;
+  this.vals = [];
+  return old;
+};
+
+/**
+ * Remove `val`, returning __true__ when present, otherwise __false__.
+ *
+ * @param {Mixed} val
+ * @return {Mixed}
+ * @api public
+ */
+
+Set.prototype.remove = function(val){
+  var i = this.indexOf(val);
+  if (~i) this.vals.splice(i, 1);
+  return !! ~i;
+};
+
+/**
+ * Perform a union on `set`.
+ *
+ * @param {Set} set
+ * @return {Set} new set
+ * @api public
+ */
+
+Set.prototype.union = function(set){
+  var ret = new Set;
+  var a = this.vals;
+  var b = set.vals;
+  for (var i = 0; i < a.length; ++i) ret.add(a[i]);
+  for (var i = 0; i < b.length; ++i) ret.add(b[i]);
+  return ret;
+};
+
+/**
+ * Perform an intersection on `set`.
+ *
+ * @param {Set} set
+ * @return {Set} new set
+ * @api public
+ */
+
+Set.prototype.intersect = function(set){
+  var ret = new Set;
+  var a = this.vals;
+  var b = set.vals;
+
+  for (var i = 0; i < a.length; ++i) {
+    if (set.has(a[i])) {
+      ret.add(a[i]);
+    }
+  }
+
+  for (var i = 0; i < b.length; ++i) {
+    if (this.has(b[i])) {
+      ret.add(b[i]);
+    }
+  }
+
+  return ret;
+};
+
+/**
+ * Check if the set is empty.
+ *
+ * @return {Boolean}
+ * @api public
+ */
+
+Set.prototype.isEmpty = function(){
+  return 0 == this.vals.length;
+};
+
+
+});
+
+require.modules["component-set"] = require.modules["component~set@1.0.0"];
+require.modules["component~set"] = require.modules["component~set@1.0.0"];
+require.modules["set"] = require.modules["component~set@1.0.0"];
+
+
+require.register("component~pillbox@1.3.1", function (exports, module) {
+
+/**
+ * Module dependencies.
+ */
+
+var Emitter = require("component~emitter@master")
+  , keyname = require("component~keyname@0.0.1")
+  , events = require("component~events@1.0.8")
+  , each = require("component~each@0.2.5")
+  , Set = require("component~set@1.0.0");
+
+/**
+ * Expose `Pillbox`.
+ */
+
+module.exports = Pillbox
+
+/**
+ * Initialize a `Pillbox` with the given
+ * `input` element and `options`.
+ *
+ * @param {Element} input
+ * @param {Object} options
+ * @api public
+ */
+
+function Pillbox(input, options) {
+  if (!(this instanceof Pillbox)) return new Pillbox(input, options);
+  var self = this
+  this.options = options || {}
+  this.input = input;
+  this.tags = new Set;
+  this.el = document.createElement('div');
+  this.el.className = 'pillbox';
+  this.el.style = input.style;
+  input.parentNode.insertBefore(this.el, input);
+  input.parentNode.removeChild(input);
+  this.el.appendChild(input);
+  this.events = events(this.el, this);
+  this.bind();
+}
+
+/**
+ * Mixin emitter.
+ */
+
+Emitter(Pillbox.prototype);
+
+/**
+ * Bind internal events.
+ *
+ * @return {Pillbox}
+ * @api public
+ */
+
+Pillbox.prototype.bind = function(){
+  this.events.bind('click');
+  this.events.bind('keydown');
+  return this;
+};
+
+/**
+ * Unbind internal events.
+ *
+ * @return {Pillbox}
+ * @api public
+ */
+
+Pillbox.prototype.unbind = function(){
+  this.events.unbind();
+  return this;
+};
+
+/**
+ * Handle keyup.
+ *
+ * @api private
+ */
+
+Pillbox.prototype.onkeydown = function(e){
+  switch (keyname(e.which)) {
+    case 'enter':
+      e.preventDefault();
+      this.add(e.target.value);
+      e.target.value = '';
+      break;
+    case 'space':
+      if (!this.options.space) return;
+      e.preventDefault();
+      this.add(e.target.value);
+      e.target.value = '';
+      break;
+    case 'backspace':
+      if ('' == e.target.value) {
+        this.remove(this.last());
+      }
+      break;
+  }
+};
+
+/**
+ * Handle click.
+ *
+ * @api private
+ */
+
+Pillbox.prototype.onclick = function(){
+  this.input.focus();
+};
+
+/**
+ * Set / Get all values.
+ *
+ * @param {Array} vals
+ * @return {Array|Pillbox}
+ * @api public
+ */
+
+Pillbox.prototype.values = function(vals){
+  var self = this;
+
+  if (0 == arguments.length) {
+    return this.tags.values();
+  }
+
+  each(vals, function(value){
+    self.add(value);
+  });
+
+  return this;
+};
+
+/**
+ * Return the last member of the set.
+ *
+ * @return {String}
+ * @api private
+ */
+
+Pillbox.prototype.last = function(){
+  return this.tags.vals[this.tags.vals.length - 1];
+};
+
+/**
+ * Add `tag`.
+ *
+ * @param {String} tag
+ * @return {Pillbox} self
+ * @api public
+ */
+
+Pillbox.prototype.add = function(tag) {
+  var self = this
+  tag = tag.trim();
+
+  // blank
+  if ('' == tag) return;
+
+  // exists
+  if (this.tags.has(tag)) return;
+
+  // lowercase
+  if (this.options.lowercase) tag = tag.toLowerCase();
+
+  // add it
+  this.tags.add(tag);
+
+  // list item
+  var span = document.createElement('span');
+  span.setAttribute('data', tag);
+  span.appendChild(document.createTextNode(tag));
+  span.onclick = function(e) {
+    e.preventDefault();
+    self.input.focus();
+  };
+
+  // delete link
+  var del = document.createElement('a');
+  del.appendChild(document.createTextNode('✕'));
+  del.href = '#';
+  del.onclick = this.remove.bind(this, tag);
+  span.appendChild(del);
+
+  this.el.insertBefore(span, this.input);
+  this.emit('add', tag);
+
+  return this;
+}
+
+/**
+ * Remove `tag`.
+ *
+ * @param {String} tag
+ * @return {Pillbox} self
+ * @api public
+ */
+
+Pillbox.prototype.remove = function(tag) {
+  if (!this.tags.has(tag)) return this;
+  this.tags.remove(tag);
+
+  var span;
+  for (var i = 0; i < this.el.childNodes.length; ++i) {
+    span = this.el.childNodes[i];
+    if (tag == span.getAttribute('data')) break;
+  }
+
+  this.el.removeChild(span);
+  this.emit('remove', tag);
+
+  return this;
+}
+
+
+});
+
+require.modules["component-pillbox"] = require.modules["component~pillbox@1.3.1"];
+require.modules["component~pillbox"] = require.modules["component~pillbox@1.3.1"];
+require.modules["pillbox"] = require.modules["component~pillbox@1.3.1"];
+
+
+require.register("component~domify@1.3.1", function (exports, module) {
+
+/**
+ * Expose `parse`.
+ */
+
+module.exports = parse;
+
+/**
+ * Tests for browser support.
+ */
+
+var div = document.createElement('div');
+// Setup
+div.innerHTML = '  <link/><table></table><a href="/a">a</a><input type="checkbox"/>';
+// Make sure that link elements get serialized correctly by innerHTML
+// This requires a wrapper element in IE
+var innerHTMLBug = !div.getElementsByTagName('link').length;
+div = undefined;
+
+/**
+ * Wrap map from jquery.
+ */
+
+var map = {
+  legend: [1, '<fieldset>', '</fieldset>'],
+  tr: [2, '<table><tbody>', '</tbody></table>'],
+  col: [2, '<table><tbody></tbody><colgroup>', '</colgroup></table>'],
+  // for script/link/style tags to work in IE6-8, you have to wrap
+  // in a div with a non-whitespace character in front, ha!
+  _default: innerHTMLBug ? [1, 'X<div>', '</div>'] : [0, '', '']
+};
+
+map.td =
+map.th = [3, '<table><tbody><tr>', '</tr></tbody></table>'];
+
+map.option =
+map.optgroup = [1, '<select multiple="multiple">', '</select>'];
+
+map.thead =
+map.tbody =
+map.colgroup =
+map.caption =
+map.tfoot = [1, '<table>', '</table>'];
+
+map.text =
+map.circle =
+map.ellipse =
+map.line =
+map.path =
+map.polygon =
+map.polyline =
+map.rect = [1, '<svg xmlns="http://www.w3.org/2000/svg" version="1.1">','</svg>'];
+
+/**
+ * Parse `html` and return a DOM Node instance, which could be a TextNode,
+ * HTML DOM Node of some kind (<div> for example), or a DocumentFragment
+ * instance, depending on the contents of the `html` string.
+ *
+ * @param {String} html - HTML string to "domify"
+ * @param {Document} doc - The `document` instance to create the Node for
+ * @return {DOMNode} the TextNode, DOM Node, or DocumentFragment instance
+ * @api private
+ */
+
+function parse(html, doc) {
+  if ('string' != typeof html) throw new TypeError('String expected');
+
+  // default to the global `document` object
+  if (!doc) doc = document;
+
+  // tag name
+  var m = /<([\w:]+)/.exec(html);
+  if (!m) return doc.createTextNode(html);
+
+  html = html.replace(/^\s+|\s+$/g, ''); // Remove leading/trailing whitespace
+
+  var tag = m[1];
+
+  // body support
+  if (tag == 'body') {
+    var el = doc.createElement('html');
+    el.innerHTML = html;
+    return el.removeChild(el.lastChild);
+  }
+
+  // wrap map
+  var wrap = map[tag] || map._default;
+  var depth = wrap[0];
+  var prefix = wrap[1];
+  var suffix = wrap[2];
+  var el = doc.createElement('div');
+  el.innerHTML = prefix + html + suffix;
+  while (depth--) el = el.lastChild;
+
+  // one element
+  if (el.firstChild == el.lastChild) {
+    return el.removeChild(el.firstChild);
+  }
+
+  // several elements
+  var fragment = doc.createDocumentFragment();
+  while (el.firstChild) {
+    fragment.appendChild(el.removeChild(el.firstChild));
+  }
+
+  return fragment;
+}
+
+});
+
+require.modules["component-domify"] = require.modules["component~domify@1.3.1"];
+require.modules["component~domify"] = require.modules["component~domify@1.3.1"];
+require.modules["domify"] = require.modules["component~domify@1.3.1"];
+
+
+require.register("segmentio~on-escape@0.0.3", function (exports, module) {
+
+var bind = require("component~event@0.1.4").bind
+  , indexOf = require("component~indexof@0.0.1");
+
+
+/**
+ * Expose `onEscape`.
+ */
+
+module.exports = exports = onEscape;
+
+
+/**
+ * Handlers.
+ */
+
+var fns = [];
+
+
+/**
+ * Escape binder.
+ *
+ * @param {Function} fn
+ */
+
+function onEscape (fn) {
+  fns.push(fn);
+}
+
+
+/**
+ * Bind a handler, for symmetry.
+ */
+
+exports.bind = onEscape;
+
+
+/**
+ * Unbind a handler.
+ *
+ * @param {Function} fn
+ */
+
+exports.unbind = function (fn) {
+  var index = indexOf(fns, fn);
+  if (index !== -1) fns.splice(index, 1);
+};
+
+
+/**
+ * Bind to `document` once.
+ */
+
+bind(document, 'keydown', function (e) {
+  if (27 !== e.keyCode) return;
+  for (var i = 0, fn; fn = fns[i]; i++) fn(e);
+});
+});
+
+require.modules["segmentio-on-escape"] = require.modules["segmentio~on-escape@0.0.3"];
+require.modules["segmentio~on-escape"] = require.modules["segmentio~on-escape@0.0.3"];
+require.modules["on-escape"] = require.modules["segmentio~on-escape@0.0.3"];
+
+
+require.register("timoxley~next-tick@0.0.2", function (exports, module) {
+"use strict"
+
+if (typeof setImmediate == 'function') {
+  module.exports = function(f){ setImmediate(f) }
+}
+// legacy node.js
+else if (typeof process != 'undefined' && typeof process.nextTick == 'function') {
+  module.exports = process.nextTick
+}
+// fallback for other environments / postMessage behaves badly on IE8
+else if (typeof window == 'undefined' || window.ActiveXObject || !window.postMessage) {
+  module.exports = function(f){ setTimeout(f) };
+} else {
+  var q = [];
+
+  window.addEventListener('message', function(){
+    var i = 0;
+    while (i < q.length) {
+      try { q[i++](); }
+      catch (e) {
+        q = q.slice(i);
+        window.postMessage('tic!', '*');
+        throw e;
+      }
+    }
+    q.length = 0;
+  }, true);
+
+  module.exports = function(fn){
+    if (!q.length) window.postMessage('tic!', '*');
+    q.push(fn);
+  }
+}
+
+});
+
+require.modules["timoxley-next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
+require.modules["timoxley~next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
+require.modules["next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
+
+
+require.register("yields~has-transitions@0.0.1", function (exports, module) {
+
+/**
+ * Check if `el` or browser supports transitions.
+ *
+ * @param {Element} el
+ * @return {Boolean}
+ * @api public
+ */
+
+exports = module.exports = function(el){
+  switch (arguments.length) {
+    case 0: return bool;
+    case 1: return bool
+      ? transitions(el)
+      : bool;
+  }
+};
+
+/**
+ * Check if the given `el` has transitions.
+ *
+ * @param {Element} el
+ * @return {Boolean}
+ * @api private
+ */
+
+function transitions(el, styl){
+  if (el.transition) return true;
+  styl = window.getComputedStyle(el);
+  return !! styl.transition;
+}
+
+/**
+ * Style.
+ */
+
+var styl = document.body.style;
+
+/**
+ * Export support.
+ */
+
+var bool = 'transition' in styl
+  || 'webkitTransition' in styl
+  || 'MozTransition' in styl
+  || 'msTransition' in styl;
+
+});
+
+require.modules["yields-has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
+require.modules["yields~has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
+require.modules["has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
+
+
+require.register("ecarter~css-emitter@0.0.1", function (exports, module) {
+/**
+ * Module Dependencies
+ */
+
+var events = require("component~event@0.1.4");
+
+// CSS events
+
+var watch = [
+  'transitionend'
+, 'webkitTransitionEnd'
+, 'oTransitionEnd'
+, 'MSTransitionEnd'
+, 'animationend'
+, 'webkitAnimationEnd'
+, 'oAnimationEnd'
+, 'MSAnimationEnd'
+];
+
+/**
+ * Expose `CSSnext`
+ */
+
+module.exports = CssEmitter;
+
+/**
+ * Initialize a new `CssEmitter`
+ *
+ */
+
+function CssEmitter(element){
+  if (!(this instanceof CssEmitter)) return new CssEmitter(element);
+  this.el = element;
+}
+
+/**
+ * Bind CSS events.
+ *
+ * @api public
+ */
+
+CssEmitter.prototype.bind = function(fn){
+  for (var i=0; i < watch.length; i++) {
+    events.bind(this.el, watch[i], fn);
+  }
+  return this;
+};
+
+/**
+ * Unbind CSS events
+ * 
+ * @api public
+ */
+
+CssEmitter.prototype.unbind = function(fn){
+  for (var i=0; i < watch.length; i++) {
+    events.unbind(this.el, watch[i], fn);
+  }
+  return this;
+};
+
+/**
+ * Fire callback only once
+ * 
+ * @api public
+ */
+
+CssEmitter.prototype.once = function(fn){
+  var self = this;
+  function on(){
+    self.unbind(on);
+    fn.apply(self.el, arguments);
+  }
+  self.bind(on);
+  return this;
+};
+
+
+});
+
+require.modules["ecarter-css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
+require.modules["ecarter~css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
+require.modules["css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
+
+
+require.register("component~once@0.0.1", function (exports, module) {
+
+/**
+ * Identifier.
+ */
+
+var n = 0;
+
+/**
+ * Global.
+ */
+
+var global = (function(){ return this })();
+
+/**
+ * Make `fn` callable only once.
+ *
+ * @param {Function} fn
+ * @return {Function}
+ * @api public
+ */
+
+module.exports = function(fn) {
+  var id = n++;
+
+  function once(){
+    // no receiver
+    if (this == global) {
+      if (once.called) return;
+      once.called = true;
+      return fn.apply(this, arguments);
+    }
+
+    // receiver
+    var key = '__called_' + id + '__';
+    if (this[key]) return;
+    this[key] = true;
+    return fn.apply(this, arguments);
+  }
+
+  return once;
+};
+
+});
+
+require.modules["component-once"] = require.modules["component~once@0.0.1"];
+require.modules["component~once"] = require.modules["component~once@0.0.1"];
+require.modules["once"] = require.modules["component~once@0.0.1"];
+
+
+require.register("yields~after-transition@0.0.1", function (exports, module) {
+
+/**
+ * dependencies
+ */
+
+var has = require("yields~has-transitions@0.0.1")
+  , emitter = require("ecarter~css-emitter@0.0.1")
+  , once = require("component~once@0.0.1");
+
+/**
+ * Transition support.
+ */
+
+var supported = has();
+
+/**
+ * Export `after`
+ */
+
+module.exports = after;
+
+/**
+ * Invoke the given `fn` after transitions
+ *
+ * It will be invoked only if the browser
+ * supports transitions __and__
+ * the element has transitions
+ * set in `.style` or css.
+ *
+ * @param {Element} el
+ * @param {Function} fn
+ * @return {Function} fn
+ * @api public
+ */
+
+function after(el, fn){
+  if (!supported || !has(el)) return fn();
+  emitter(el).bind(fn);
+  return fn;
+};
+
+/**
+ * Same as `after()` only the function is invoked once.
+ *
+ * @param {Element} el
+ * @param {Function} fn
+ * @return {Function}
+ * @api public
+ */
+
+after.once = function(el, fn){
+  var callback = once(fn);
+  after(el, fn = function(){
+    emitter(el).unbind(fn);
+    callback();
+  });
+};
+
+});
+
+require.modules["yields-after-transition"] = require.modules["yields~after-transition@0.0.1"];
+require.modules["yields~after-transition"] = require.modules["yields~after-transition@0.0.1"];
+require.modules["after-transition"] = require.modules["yields~after-transition@0.0.1"];
+
+
+require.register("segmentio~showable@0.1.1", function (exports, module) {
+var after = require("yields~after-transition@0.0.1").once;
+var nextTick = require("timoxley~next-tick@0.0.2");
+
+/**
+ * Hide the view
+ */
+function hide(fn){
+  var self = this;
+
+  if(this.hidden == null) {
+    this.hidden = this.el.classList.contains('hidden');
+  }
+
+  if(this.hidden || this.animating) return;
+
+  this.hidden = true;
+  this.animating = true;
+
+  after(self.el, function(){
+    self.animating = false;
+    self.emit('hide');
+    if(fn) fn();
+  });
+
+  self.el.classList.add('hidden');
+  this.emit('hiding');
+  return this;
+}
+
+/**
+ * Show the view. This waits until after any transitions
+ * are finished. It also removed the hide class on the next
+ * tick so that the transition actually paints.
+ */
+function show(fn){
+  var self = this;
+
+  if(this.hidden == null) {
+    this.hidden = this.el.classList.contains('hidden');
+  }
+
+  if(this.hidden === false || this.animating) return;
+
+  this.hidden = false;
+  this.animating = true;
+
+  this.emit('showing');
+
+  after(self.el, function(){
+    self.animating = false;
+    self.emit('show');
+    if(fn) fn();
+  });
+
+  this.el.offsetHeight;
+
+  nextTick(function(){
+    self.el.classList.remove('hidden');
+  });
+
+  return this;
+}
+
+/**
+ * Mixin methods into the view
+ *
+ * @param {Emitter} obj
+ */
+module.exports = function(obj) {
+  obj.hide = hide;
+  obj.show = show;
+  return obj;
+};
+});
+
+require.modules["segmentio-showable"] = require.modules["segmentio~showable@0.1.1"];
+require.modules["segmentio~showable"] = require.modules["segmentio~showable@0.1.1"];
+require.modules["showable"] = require.modules["segmentio~showable@0.1.1"];
+
+
+require.register("jkroso~classes@1.1.0", function (exports, module) {
+
+module.exports = document.createElement('div').classList
+  ? require("jkroso~classes@1.1.0/modern.js")
+  : require("jkroso~classes@1.1.0/fallback.js")
+});
+
+require.register("jkroso~classes@1.1.0/fallback.js", function (exports, module) {
+
+var index = require("component~indexof@0.0.1")
+
+exports.add = function(name, el){
+	var arr = exports.array(el)
+	if (index(arr, name) < 0) {
+		arr.push(name)
+		el.className = arr.join(' ')
+	}
+}
+
+exports.remove = function(name, el){
+	if (name instanceof RegExp) {
+		return exports.removeMatching(name, el)
+	}
+	var arr = exports.array(el)
+	var i = index(arr, name)
+	if (i >= 0) {
+		arr.splice(i, 1)
+		el.className = arr.join(' ')
+	}
+}
+
+exports.removeMatching = function(re, el){
+	var arr = exports.array(el)
+	for (var i = 0; i < arr.length;) {
+		if (re.test(arr[i])) arr.splice(i, 1)
+		else i++
+	}
+	el.className = arr.join(' ')
+}
+
+exports.toggle = function(name, el){
+	if (exports.has(name, el)) {
+		exports.remove(name, el)
+	} else {
+		exports.add(name, el)
+	}
+}
+
+exports.array = function(el){
+	return el.className.match(/([^\s]+)/g) || []
+}
+
+exports.has =
+exports.contains = function(name, el){
+	return index(exports.array(el), name) >= 0
+}
+});
+
+require.register("jkroso~classes@1.1.0/modern.js", function (exports, module) {
+
+/**
+ * Add class `name` if not already present.
+ *
+ * @param {String} name
+ * @param {Element} el
+ * @api public
+ */
+
+exports.add = function(name, el){
+	el.classList.add(name)
+}
+
+/**
+ * Remove `name` if present
+ *
+ * @param {String|RegExp} name
+ * @param {Element} el
+ * @api public
+ */
+
+exports.remove = function(name, el){
+	if (name instanceof RegExp) {
+		return exports.removeMatching(name, el)
+	}
+	el.classList.remove(name)
+}
+
+/**
+ * Remove all classes matching `re`.
+ *
+ * @param {RegExp} re
+ * @param {Element} el
+ * @api public
+ */
+
+exports.removeMatching = function(re, el){
+	var arr = exports.array(el)
+	for (var i = 0; i < arr.length; i++) {
+		if (re.test(arr[i])) el.classList.remove(arr[i])
+	}
+}
+
+/**
+ * Toggle class `name`.
+ *
+ * @param {String} name
+ * @param {Element} el
+ * @api public
+ */
+
+exports.toggle = function(name, el){
+	el.classList.toggle(name)
+}
+
+/**
+ * Return an array of classes.
+ *
+ * @param {Element} el
+ * @return {Array}
+ * @api public
+ */
+
+exports.array = function(el){
+	return el.className.match(/([^\s]+)/g) || []
+}
+
+/**
+ * Check if class `name` is present.
+ *
+ * @param {String} name
+ * @param {Element} el
+ * @api public
+ */
+
+exports.has =
+exports.contains = function(name, el){
+	return el.classList.contains(name)
+}
+});
+
+require.modules["jkroso-classes"] = require.modules["jkroso~classes@1.1.0"];
+require.modules["jkroso~classes"] = require.modules["jkroso~classes@1.1.0"];
+require.modules["classes"] = require.modules["jkroso~classes@1.1.0"];
+
+
+require.register("ianstormtaylor~classes@0.1.0", function (exports, module) {
+
+var classes = require("jkroso~classes@1.1.0");
+
+
+/**
+ * Expose `mixin`.
+ */
+
+module.exports = exports = mixin;
+
+
+/**
+ * Mixin the classes methods.
+ *
+ * @param {Object} object
+ * @return {Object}
+ */
+
+function mixin (obj) {
+  for (var method in exports) obj[method] = exports[method];
+  return obj;
+}
+
+
+/**
+ * Add a class.
+ *
+ * @param {String} name
+ * @return {Object}
+ */
+
+exports.addClass = function (name) {
+  classes.add(name, this.el);
+  return this;
+};
+
+
+/**
+ * Remove a class.
+ *
+ * @param {String} name
+ * @return {Object}
+ */
+
+exports.removeClass = function (name) {
+  classes.remove(name, this.el);
+  return this;
+};
+
+
+/**
+ * Has a class?
+ *
+ * @param {String} name
+ * @return {Boolean}
+ */
+
+exports.hasClass = function (name) {
+  return classes.has(name, this.el);
+};
+
+
+/**
+ * Toggle a class.
+ *
+ * @param {String} name
+ * @return {Object}
+ */
+
+exports.toggleClass = function (name) {
+  classes.toggle(name, this.el);
+  return this;
+};
+
+});
+
+require.modules["ianstormtaylor-classes"] = require.modules["ianstormtaylor~classes@0.1.0"];
+require.modules["ianstormtaylor~classes"] = require.modules["ianstormtaylor~classes@0.1.0"];
+require.modules["classes"] = require.modules["ianstormtaylor~classes@0.1.0"];
+
+
+require.register("segmentio~overlay@0.2.2", function (exports, module) {
+var template = require("./index.html");
+var domify = require("component~domify@1.3.1");
+var emitter = require("component~emitter@master");
+var showable = require("segmentio~showable@0.1.1");
+var classes = require("ianstormtaylor~classes@0.1.0");
+
+/**
+ * Export `Overlay`
+ */
+module.exports = Overlay;
+
+
+/**
+ * Initialize a new `Overlay`.
+ *
+ * @param {Element} target The element to attach the overlay to
+ * @api public
+ */
+
+function Overlay(target) {
+  if(!(this instanceof Overlay)) return new Overlay(target);
+
+  this.target = target || document.body;
+  this.el = domify(template);
+  this.el.addEventListener('click', this.handleClick.bind(this));
+
+  var el = this.el;
+  var parent = this.target;
+
+  this.on('showing', function(){
+    parent.appendChild(el);
+  });
+
+  this.on('hide', function(){
+    parent.removeChild(el);
+  });
+}
+
+
+/**
+ * When the overlay is click, emit an event so that
+ * the view that is using this overlay can choose
+ * to close the overlay if they want
+ *
+ * @param {Event} e
+ */
+Overlay.prototype.handleClick = function(e){
+  this.emit('click', e);
+};
+
+
+/**
+ * Mixins
+ */
+emitter(Overlay.prototype);
+showable(Overlay.prototype);
+classes(Overlay.prototype);
+});
+
+require.modules["segmentio-overlay"] = require.modules["segmentio~overlay@0.2.2"];
+require.modules["segmentio~overlay"] = require.modules["segmentio~overlay@0.2.2"];
+require.modules["overlay"] = require.modules["segmentio~overlay@0.2.2"];
+
+
+require.register("segmentio~modal@0.3.3", function (exports, module) {
+var domify = require("component~domify@1.3.1");
+var Emitter = require("component~emitter@master");
+var overlay = require("segmentio~overlay@0.2.2");
+var onEscape = require("segmentio~on-escape@0.0.3");
+var template = require("./index.html");
+var Showable = require("segmentio~showable@0.1.1");
+var Classes = require("ianstormtaylor~classes@0.1.0");
+
+/**
+ * Expose `Modal`.
+ */
+
+module.exports = Modal;
+
+
+/**
+ * Initialize a new `Modal`.
+ *
+ * @param {Element} el The element to put into a modal
+ */
+
+function Modal (el) {
+  if (!(this instanceof Modal)) return new Modal(el);
+  this.el = domify(template);
+  this.el.appendChild(el);
+  this._overlay = overlay();
+
+  var el = this.el;
+
+  this.on('showing', function(){
+    document.body.appendChild(el);
+  });
+
+  this.on('hide', function(){
+    document.body.removeChild(el);
+  });
+}
+
+
+/**
+ * Mixin emitter.
+ */
+
+Emitter(Modal.prototype);
+Showable(Modal.prototype);
+Classes(Modal.prototype);
+
+
+/**
+ * Set the transition in/out effect
+ *
+ * @param {String} type
+ *
+ * @return {Modal}
+ */
+
+Modal.prototype.effect = function(type) {
+  this.el.setAttribute('effect', type);
+  return this;
+};
+
+
+/**
+ * Add an overlay
+ *
+ * @param {Object} opts
+ *
+ * @return {Modal}
+ */
+
+Modal.prototype.overlay = function(){
+  var self = this;
+  this.on('showing', function(){
+    self._overlay.show();
+  });
+  this.on('hiding', function(){
+    self._overlay.hide();
+  });
+  return this;
+};
+
+
+/**
+ * Make the modal closeable.
+ *
+ * @return {Modal}
+ */
+
+Modal.prototype.closeable =
+Modal.prototype.closable = function () {
+  var self = this;
+
+  function hide(){
+    self.hide();
+  }
+
+  this._overlay.on('click', hide);
+  onEscape(hide);
+  return this;
+};
+});
+
+require.modules["segmentio-modal"] = require.modules["segmentio~modal@0.3.3"];
+require.modules["segmentio~modal"] = require.modules["segmentio~modal@0.3.3"];
+require.modules["modal"] = require.modules["segmentio~modal@0.3.3"];
+
+
+require.register("./libs/win-home-ui", function (exports, module) {
+
+var emitter = require("component~emitter@master");
+var element = require("optimuslime~el.js@master");
+// var dimensions = require('dimensions');
+
+module.exports = winhome; 
+
+var uFlexID = 0;
+
+function winhome(backbone, globalConfig, localConfig)
+{
+	// console.log(divValue); 
+	var self = this;
+
+	self.winFunction = "ui";
+
+	self.backEmit = backbone.getEmitter(self);
+	self.log = backbone.getLogger(self);
+
+	//add appropriate classes to our given div
+
+	self.uid = "home" + uFlexID++;
+
+	var emitterIDs = 0;
+	self.uiEmitters = {};
+	self.homeElements = {};
+
+
+	self.requiredEvents = function(){return ["query:getHomeQuery"];};
+
+	self.eventCallbacks = function()
+	{
+		return {
+			"ui:home-initializeDisplay" : self.initializeDisplay,
+			"ui:home-ready" : self.ready
+		}
+
+	}
+
+	self.initializeDisplay = function(div, options, finished)
+	{
+		if(typeof options == "function")
+		{
+			finished = options;
+			options = {};
+		}
+		else //make sure it exists
+			options = options || {};
+
+		var homeHolder = element('div.winhome.og-grid');
+
+		var title = options.title || "WIN Domain (customize with title option)"; 
+
+
+		var th2 = document.createElement('h1');
+		th2.innerHTML = title;
+
+	
+
+		var tEl = element('div', {style: "font-size: 2em;"}, th2);
+		
+		var phyloTitle = options.phylogenyLocation;
+
+		//if specified, link out to a new site!
+		if(phyloTitle){
+			var phyloLink = document.createElement('h3');
+			var link = element('a', {href: phyloTitle, class: "phyloLink"}, 'Browse full phylogeny here');
+			phyloLink.appendChild(link)
+
+			tEl.appendChild(phyloLink);
+		}
+
+		var loading = element('div', "(images loading...)");
+		
+
+		homeHolder.appendChild(tEl);
+		homeHolder.appendChild(loading);
+		
+		var uID = emitterIDs++;
+		var uie = {uID: uID};
+		emitter(uie);
+
+		self.uiEmitters[uID] = uie;
+		self.homeElements[uID] = homeHolder;
+
+		div.appendChild(homeHolder);
+
+
+		//all done making the display -- added a title and some stuff dooooooop
+		finished(undefined, {ui: homeHolder, emitter: uie, uID: uID});
+		
+	}
+
+	self.createElement = function(wid, category, options)
+	{
+
+		var size = options.objectSize || {width: 150, height: 150};
+
+		var addWidth = options.additionalElementWidth || 0;
+		var addHeight = options.additionalElementHeight || 50;
+
+		var trueElementSize = "width: " + (size.width) + "px; height: " + (size.height) + "px;"; 
+		var fullWidthAndHeight = "width: " + (size.width + addWidth) + "px; height: " + (size.height + addHeight) + "px;"; 
+		var id = category + "-" + wid;
+
+		//for now, everything has a border! 
+
+		//now we add some buttons
+		var aImg = element('div', {style: trueElementSize, class: "border"});
+		var evoBut = element('div', {style: "", class: "homeElementButton"}, "Branch");
+		// var history = element('div', {style: "", class: "homeElementButton border"}, "Ancestors");
+
+		//this is where the artifact stuff goes
+		var aElement = element('a', {style: fullWidthAndHeight, class: "border"}, 
+			[aImg, 
+			evoBut
+			// , history
+			]); 
+
+		var simpleElement = element('li', {id:id, class: "home"}, [aElement]);
+
+
+
+		//we also need to add on some extra space for buttons buttons buttons ! need to branch and stuff
+
+		return {full: simpleElement, artifactElement: aImg, branch: evoBut, ancestors: history};
+	}
+
+	self.emitElementCreation = function(emit, wid, artifact, eDiv)
+	{
+		//let 
+		emit.emit("elementCreated", wid, artifact, eDiv, function()
+		{
+			//maybe we do somehitng her in the future -- nuffin' for now gov'nor
+		});
+	}
+
+	self.clickBranchButton  = function(emit, wid, artifact, eDiv)
+	{
+		eDiv.addEventListener('click', function()
+		{
+			emit.emit("artifactBranch", wid, artifact, eDiv);
+		});
+	}
+
+	self.clickAncestorsButton  = function(emit, wid, artifact, eDiv)
+	{
+		eDiv.addEventListener('click', function()
+		{
+			emit.emit("artifactAncestors", wid, artifact, eDiv);
+		});
+	}
+
+
+	self.ready = function(uID, options, finished)
+	{
+		if(typeof options == "function")
+		{
+			finished = options;
+			options = {};
+		}
+		else //make sure it exists
+			options = options || {};
+
+
+		//pull the emitter for letting know about new objects
+		var emit = self.uiEmitters[uID];
+		var home = self.homeElements[uID];
+
+		//okay let's setup up everything for real
+		var itemStart = options.itemStart || 0;
+		var itemsToDisplay = options.itemsToDisplay || 10;
+
+		self.log("Item query - start: ", itemStart, " end: ", (itemStart + itemsToDisplay));
+
+
+		//then we make a query request
+		self.backEmit("query:getHomeQuery", itemStart, (itemStart + itemsToDisplay), function(err, categories)
+		{
+			//all the categories returned from the home query, and associated objects
+			if(err)
+			{
+				finished(err);
+				return;
+			}
+
+			console.log("Ready home query ret: ", categories);
+
+			var singleCatID;
+
+			for(var cat in categories)
+			{
+				singleCatID = cat + "-" + uID ;
+				//set up the category title section
+				var elWrapper = element('ul#' + singleCatID + ".og-grid", {class: "thumbwrap"});
+
+				var catTitle = document.createElement('h2');
+					catTitle.innerHTML = cat;
+				var catTitle = element('div', {}, [catTitle, elWrapper]);
+
+				home.appendChild(catTitle);
+
+				//now we let it be known we're creeating elelemtns
+				var arts = categories[cat].artifacts;
+
+				for(var i=0; i < arts.length; i++)
+				{
+					var artifact = arts[i];
+					var wid = artifact.wid;
+
+					var elObj = self.createElement(wid, cat, options);
+
+					//add this object to our other elements in the category list
+					elWrapper.appendChild(elObj.full);
+
+					self.clickBranchButton(emit, wid, artifact, elObj.branch);
+					// self.clickAncestorsButton(emit, wid, artifact, elObj.ancestors);
+
+					self.emitElementCreation(emit, wid, artifact, elObj.artifactElement);
+				}
+			}
+
+			if(finished)
+				finished();
+
+		});
+	}
+
+	return self;
+}
+
+
+
+
+});
+
+require.modules["win-home-ui"] = require.modules["./libs/win-home-ui"];
+
+
+require.register("./libs/webworker-queue", function (exports, module) {
+
+var WebWorkerClass = require("component~worker@master");
+
+module.exports = webworkerqueue;
+
+function webworkerqueue(scriptName, workerCount)
+{ 
+    var self = this;
+
+    self.nextWorker = 0;
+    
+    //queue to pull from 
+    self.taskQueue = [];
+    self.taskCallbacks = {};
+
+    //store the web workers
+    self.workers = [];
+
+    //how many workers available
+    self.availableWorkers = workerCount;
+
+    //note who is in use
+    self.inUseWorkers = {};
+    
+    //and the full count of workers
+    self.totalWorkers = workerCount;
+
+    for(var i=0; i < workerCount; i++){
+
+        var webworker = new WebWorkerClass(scriptName);
+
+        //create a new worker id (simply the index will do)
+        var workerID = i;
+
+        //label our workers
+        webworker.workerID = workerID;
+
+        //create a webworker message callback unique for this worker
+        //webworker in this case is not a raw webworker, but an emitter object -- so we attach to the message object
+        webworker.on('message', uniqueWorkerCallback(workerID));
+
+        //store the worker inside here
+        self.workers.push(webworker);
+    }
+
+
+    function uniqueWorkerCallback(workerID)
+    {
+        return function(data){
+            //simply pass on the message with the tagged worker
+            workerMessage(workerID, data);
+        }
+    }
+
+    function getNextAvailableWorker()
+    {
+        //none available, return null
+        if(self.availableWorkers == 0)
+            return;
+
+        //otherwise, we know someone is available
+        setNextAvailableIx();
+
+        //grab the next worker available
+        var worker = self.workers[self.nextWorker];
+
+        //note that it's now in use
+        self.inUseWorkers[self.nextWorker] = true;
+
+        //less workers available
+        self.availableWorkers--;
+
+        //send back the worker
+        return worker;
+    }
+
+    function setNextAvailableIx()
+    {
+        for(var i=0; i < self.totalWorkers; i++)
+        {
+            //check if it's in use
+            if(!self.inUseWorkers[i])
+            {
+                self.nextWorker = i;
+                break;
+            }
+        }
+    }
+
+    //this function takes a workerID and a data object -- called from the worker
+    function workerMessage(workerID, data)
+    {
+        //we got our message, we pass it for callback
+
+        //we know what workerID, so pull the associated callback
+        var cb = self.taskCallbacks[workerID];
+
+        //now remove all things associated with the task
+        delete self.taskCallbacks[workerID];
+
+        //free the worker
+        delete self.inUseWorkers[workerID];
+
+        //now on the market :)
+        self.availableWorkers++;
+
+        //prepare the callback -- if it exists
+        if(cb)
+        {
+            //send the data back, pure and simple
+            cb(data);
+        }
+
+        //now, do we have any queue events waiting?
+        if(self.taskQueue.length > 0)
+        {
+            //now we need to process the task
+            var taskObject = self.taskQueue.shift();
+
+            //okay, queue it up! -- this should work immediately becuase we just freed a worker
+            self.queueJob(taskObject.data, taskObject.callback);
+        }
+    }
+
+
+    self.queueJob = function(data, callback)
+    {
+
+        //if we have any available workers, just assign it directly, with a callback stored
+        var worker = getNextAvailableWorker();
+
+        if(worker)
+        {
+            //we have a worker to issue commands to now
+            //this is the callback we engage once the message comes back
+            self.taskCallbacks[worker.workerID] = callback;
+
+            //send the data now, thanks -- we'll handle callback in workerMessage function
+            worker.send(data);
+        }
+        else
+        {   
+            //otherwise, we need to add the item to the queue
+            self.taskQueue.push({data: data, callback: callback});
+            //the queue is cleared when the other workers return from their functions
+        }
+    }
+
+}
+
+});
+
+require.modules["webworker-queue"] = require.modules["./libs/webworker-queue"];
+
+
+require.register("./libs/geno-to-picture", function (exports, module) {
+//here we test the insert functions
+//making sure the database is filled with objects of the schema type
+// var wMath = require('win-utils').math;
+
+module.exports = genoToPicture;
+
+var cppnjs = require("optimuslime~cppnjs@master");
+//need to add the pure cppn functions -- for enclosure stuff
+cppnjs.addPureCPPN();
+
+var neatjs = require("optimuslime~neatjs@master");
+var winneat = require("optimuslime~win-neat@0.0.1-9");
+
+var generateBitmap = require("./libs/geno-to-picture/generateBitmap.js");
+
+function genoToPicture(size, ngJSON)
+{ 
+    var ngObject = winneat.genotypeFromJSON(ngJSON);
+
+    //then we are going to do this crazy thing where we grab the function representing the genome
+    //then we run the function a bunch of times looping over our image, compiling the data
+    //that data is then turned into a string which is sent to the dataurl object of a picture
+
+    return createImageFromGenome(size, ngObject);
+}
+
+function createImageFromGenome(size, ng)
+{
+    var cppn = ng.networkDecode();
+
+    // console.log('Decoded now recrusive processing!');
+    // console.log(ng);
+
+    var dt = Date.now();
+
+    console.log(cppn);
+
+    var functionObject = cppn.createPureCPPNFunctions();
+    console.log("Pure cppn: ", functionObject);
+    var activationFunction= functionObject.contained;
+
+
+    var inSqrt2 = Math.sqrt(2);
+
+    var allX = size.width, allY = size.height;
+    var width = size.width, height= size.height;
+
+    var startX = -1, startY = -1;
+    var dx = 2.0/(allX-1), dy = 2.0/(allY-1);
+
+    var currentX = startX, currentY = startY;
+
+    var newRow;
+    var rows = [];
+
+    var clampZeroOne = function(val)
+    {
+        return Math.max(0.0, Math.min(val,1.0));
+    };
+    // 0 to 1
+    var zeroToOne = function(val) {
+        return (val+1)/2;//Math.floor(Math.max(0, Math.min(255, (val + 1)/2*255)));
+    };
+
+    var inRange = function(val) {
+        if(val < 0) return (val+1);
+
+        return val;//Math.floor(Math.max(0, Math.min(255, (val + 1)/2*255)));
+    };
+
+
+    var oCount = 0;
+    var inputs = [];
+
+    //we go by the rows
+    for(var y=allY-1; y >=0; y--){
+
+        //init and push new row
+        var newRow = [];
+        rows.push(newRow);
+        for(var x=0; x < allX; x++){
+
+            //just like in picbreeder!
+            var currentX = ((x << 1) - width + 1) / width;
+            var currentY = ((y << 1) - height + 1) / height;
+
+
+            var output0, output1, output2;
+            var rgb;
+
+            inputs = [currentX, currentY, Math.sqrt(currentX*currentX + currentY*currentY)*inSqrt2];
+
+            var newActivation = true;
+            var outputs;
+
+            outputs = activationFunction(inputs);
+
+            if(outputs.length ==1 || ng.phenotype == 'structure')
+            {
+                var singleOutput = ng.phenotype == 'structure' ? outputs[2] : outputs[0];
+                var byte = Math.floor(Math.min(Math.abs(singleOutput), 1.0)*255.0);
+                //var byte = Math.floor(Math.max(0.0, Math.min(1.0, output0))*255.0);
+
+                rgb= [byte,byte,byte];//generateBitmap.HSVtoRGB(zeroToOne(output0), zeroToOne(output0), zeroToOne(output0));
+
+            }
+            else
+            {
+                rgb = generateBitmap.FloatToByte(generateBitmap.PicHSBtoRGB(outputs[0], clampZeroOne(outputs[1]), Math.abs(outputs[2])));
+            }
+
+            newRow.push(rgb);
+
+        }
+
+    }
+
+
+    //let's get our bitmap from rbg results!
+    var imgSrc = generateBitmap.generateBitmapDataURL(rows);
+
+    console.log("Gen time: ", (Date.now() - dt));
+
+    return imgSrc;
+}
+});
+
+require.register("./libs/geno-to-picture/generateBitmap.js", function (exports, module) {
+
+var base64 = require("./libs/geno-to-picture/base64.js");
+
+var generateBitmap = {};
+module.exports = generateBitmap;
+
+/*
+* Code to generate Bitmap images (using data urls) from rows of RGB arrays.
+* Specifically for use with http://mrcoles.com/low-rest-paint/
+*
+* Research:
+*
+* RFC 2397 data URL
+* http://www.xs4all.nl/~wrb/Articles/Article_IMG_RFC2397_P1_01.htm
+*
+* BMP file Format
+* http://en.wikipedia.org/wiki/BMP_file_format#Example_of_a_2.C3.972_Pixel.2C_24-Bit_Bitmap_.28Windows_V3_DIB.29
+*
+* BMP Notes
+*
+* - Integer values are little-endian, including RGB pixels, e.g., (255, 0, 0) -> \x00\x00\xFF
+* - Bitmap data starts at lower left (and reads across rows)
+* - In the BMP data, padding bytes are inserted in order to keep the lines of data in multiples of four,
+*   e.g., a 24-bit bitmap with width 1 would have 3 bytes of data per row (R, G, B) + 1 byte of padding
+*/
+
+function _asLittleEndianHex(value, bytes) {
+    // Convert value into little endian hex bytes
+    // value - the number as a decimal integer (representing bytes)
+    // bytes - the number of bytes that this value takes up in a string
+
+    // Example:
+    // _asLittleEndianHex(2835, 4)
+    // > '\x13\x0b\x00\x00'
+
+    var result = [];
+
+    for (; bytes>0; bytes--) {
+        result.push(String.fromCharCode(value & 255));
+        value >>= 8;
+    }
+
+    return result.join('');
+}
+
+function _collapseData(rows, row_padding) {
+    // Convert rows of RGB arrays into BMP data
+    var i,
+        rows_len = rows.length,
+        j,
+        pixels_len = rows_len ? rows[0].length : 0,
+        pixel,
+        padding = '',
+        result = [];
+
+    for (; row_padding > 0; row_padding--) {
+        padding += '\x00';
+    }
+
+    for (i=0; i<rows_len; i++) {
+        for (j=0; j<pixels_len; j++) {
+            pixel = rows[i][j];
+            result.push(String.fromCharCode(pixel[2]) +
+                String.fromCharCode(pixel[1]) +
+                String.fromCharCode(pixel[0]));
+        }
+        result.push(padding);
+    }
+
+    return result.join('');
+}
+
+function _scaleRows(rows, scale) {
+    // Simplest scaling possible
+    var real_w = rows.length,
+        scaled_w = parseInt(real_w * scale),
+        real_h = real_w ? rows[0].length : 0,
+        scaled_h = parseInt(real_h * scale),
+        new_rows = [],
+        new_row, x, y;
+
+    for (y=0; y<scaled_h; y++) {
+        new_rows.push(new_row = []);
+        for (x=0; x<scaled_w; x++) {
+            new_row.push(rows[parseInt(y/scale)][parseInt(x/scale)]);
+        }
+    }
+    return new_rows;
+}
+
+//generate bitmaps from rows of rgb values
+//from: http://mrcoles.com/low-res-paint/
+//and: http://mrcoles.com/blog/making-images-byte-by-byte-javascript/
+generateBitmap.generateBitmapDataURL = function(rows, scale) {
+    // Expects rows starting in bottom left
+    // formatted like this: [[[255, 0, 0], [255, 255, 0], ...], ...]
+    // which represents: [[red, yellow, ...], ...]
+
+    if (!base64) {
+        alert('Oops, base64 encode fail!!');
+        return false;
+    }
+
+    scale = scale || 1;
+    if (scale != 1) {
+        rows = _scaleRows(rows, scale);
+    }
+
+    var height = rows.length,                                // the number of rows
+        width = height ? rows[0].length : 0,                 // the number of columns per row
+        row_padding = (4 - (width * 3) % 4) % 4,             // pad each row to a multiple of 4 bytes
+        num_data_bytes = (width * 3 + row_padding) * height, // size in bytes of BMP data
+        num_file_bytes = 54 + num_data_bytes,                // full header size (offset) + size of data
+        file;
+
+    height = _asLittleEndianHex(height, 4);
+    width = _asLittleEndianHex(width, 4);
+    num_data_bytes = _asLittleEndianHex(num_data_bytes, 4);
+    num_file_bytes = _asLittleEndianHex(num_file_bytes, 4);
+
+    // these are the actual bytes of the file...
+
+    file = ('BM' +               // "Magic Number"
+        num_file_bytes +     // size of the file (bytes)*
+        '\x00\x00' +         // reserved
+        '\x00\x00' +         // reserved
+        '\x36\x00\x00\x00' + // offset of where BMP data lives (54 bytes)
+        '\x28\x00\x00\x00' + // number of remaining bytes in header from here (40 bytes)
+        width +              // the width of the bitmap in pixels*
+        height +             // the height of the bitmap in pixels*
+        '\x01\x00' +         // the number of color planes (1)
+        '\x18\x00' +         // 24 bits / pixel
+        '\x00\x00\x00\x00' + // No compression (0)
+        num_data_bytes +     // size of the BMP data (bytes)*
+        '\x13\x0B\x00\x00' + // 2835 pixels/meter - horizontal resolution
+        '\x13\x0B\x00\x00' + // 2835 pixels/meter - the vertical resolution
+        '\x00\x00\x00\x00' + // Number of colors in the palette (keep 0 for 24-bit)
+        '\x00\x00\x00\x00' + // 0 important colors (means all colors are important)
+        _collapseData(rows, row_padding)
+        );
+
+    return 'data:image/bmp;base64,' + base64.encode(file);
+};
+
+
+generateBitmap.CMYKtoRGB = function (c,m,y,k)
+{
+    var r = 1 - Math.min( 1, c * ( 1 - k ) + k );
+    var g = 1 - Math.min( 1, m * ( 1 - k ) + k );
+    var b = 1 - Math.min( 1, y * ( 1 - k ) + k );
+
+    r = Math.round( r * 255 );
+    g = Math.round( g * 255 );
+    b = Math.round( b * 255 );
+
+    return [r,g,b];
+};
+
+generateBitmap.HSVtoRGB = function(h,s,v) {
+    //javascript from: http://jsres.blogspot.com/2008/01/convert-hsv-to-rgb-equivalent.html
+    // Adapted from http://www.easyrgb.com/math.html
+    // hsv values = 0 - 1, rgb values = 0 - 255
+    var r, g, b;
+    var RGB = [];
+    if(s==0){
+        var equalRGB = Math.round(v*255);
+        RGB.push(equalRGB); RGB.push(equalRGB); RGB.push(equalRGB);
+    }else{
+
+        var var_r, var_g, var_b;
+        // h must be < 1
+        var var_h = h * 6;
+        if (var_h==6) var_h = 0;
+        //Or ... var_i = floor( var_h )
+        var var_i = Math.floor( var_h );
+        var var_1 = v*(1-s);
+        var var_2 = v*(1-s*(var_h-var_i));
+        var var_3 = v*(1-s*(1-(var_h-var_i)));
+        if(var_i==0){
+            var_r = v;
+            var_g = var_3;
+            var_b = var_1;
+        }else if(var_i==1){
+            var_r = var_2;
+            var_g = v;
+            var_b = var_1;
+        }else if(var_i==2){
+            var_r = var_1;
+            var_g = v;
+            var_b = var_3
+        }else if(var_i==3){
+            var_r = var_1;
+            var_g = var_2;
+            var_b = v;
+        }else if (var_i==4){
+            var_r = var_3;
+            var_g = var_1;
+            var_b = v;
+        }else{
+            var_r = v;
+            var_g = var_1;
+            var_b = var_2
+        }
+        //rgb results = 0 ÷ 255
+        RGB.push(Math.round(var_r * 255));
+        RGB.push(Math.round(var_g * 255));
+        RGB.push(Math.round(var_b * 255));
+    }
+    return RGB;
+};
+
+var count = 0;
+
+generateBitmap.FloatToByte = function(arr)
+{
+    var conv = [];
+
+    arr.forEach(function(col)
+    {
+        conv.push(Math.floor(col*255.0));
+    });
+
+    return conv;
+};
+
+generateBitmap.PicHSBtoRGB = function(h,s,v)
+{
+
+    h = (h*6.0)%6.0;//Math.min(6.0, (h * 6.0));
+
+//        if(++count % 2000 === 0)
+//            console.log(h + ' and mod: ' + (h%6.0));
+
+    var r = 0.0, g = 0.0, b = 0.0;
+
+    if(h < 0.0) h += 6.0;
+    var hi = Math.floor(h);
+    var f = h - hi;
+
+    var vs = v * s;
+    var vsf = vs * f;
+
+    var p = v - vs;
+    var q = v - vsf;
+    var t = v - vs + vsf;
+
+    switch(hi) {
+        case 0: r = v; g = t; b = p; break;
+        case 1: r = q; g = v; b = p; break;
+        case 2: r = p; g = v; b = t; break;
+        case 3: r = p; g = q; b = v; break;
+        case 4: r = t; g = p; b = v; break;
+        case 5: r = v; g = p; b = q; break;
+    }
+
+
+
+    return [r,g,b];
+};
+});
+
+require.register("./libs/geno-to-picture/base64.js", function (exports, module) {
+
+var base64 = {};
+
+//send out our base64 object!
+module.exports = base64;
+
+//from:
+//https://code.google.com/p/stringencoders/source/browse/trunk/javascript/base64.js?r=230
+
+/*
+ * Copyright (c) 2010 Nick Galbreath
+ * http://code.google.com/p/stringencoders/source/browse/#svn/trunk/javascript
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+/* base64 encode/decode compatible with window.btoa/atob
+ *
+ * window.atob/btoa is a Firefox extension to convert binary data (the "b")
+ * to base64 (ascii, the "a").
+ *
+ * It is also found in Safari and Chrome.  It is not available in IE.
+ *
+ * if (!window.btoa) window.btoa = base64.encode
+ * if (!window.atob) window.atob = base64.decode
+ *
+ * The original spec's for atob/btoa are a bit lacking
+ * https://developer.mozilla.org/en/DOM/window.atob
+ * https://developer.mozilla.org/en/DOM/window.btoa
+ *
+ * window.btoa and base64.encode takes a string where charCodeAt is [0,255]
+ * If any character is not [0,255], then an DOMException(5) is thrown.
+ *
+ * window.atob and base64.decode take a base64-encoded string
+ * If the input length is not a multiple of 4, or contains invalid characters
+ *   then an DOMException(5) is thrown.
+ */
+
+base64.PADCHAR = '=';
+base64.ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+base64.makeDOMException = function() {
+    // sadly in FF,Safari,Chrome you can't make a DOMException
+    var e, tmp;
+
+    try {
+        return new DOMException(DOMException.INVALID_CHARACTER_ERR);
+    } catch (tmp) {
+        // not available, just passback a duck-typed equiv
+        // https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Global_Objects/Error
+        // https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Global_Objects/Error/prototype
+        var ex = new Error("DOM Exception 5");
+
+        // ex.number and ex.description is IE-specific.
+        ex.code = ex.number = 5;
+        ex.name = ex.description = "INVALID_CHARACTER_ERR";
+
+        // Safari/Chrome output format
+        ex.toString = function() { return 'Error: ' + ex.name + ': ' + ex.message; };
+        return ex;
+    }
+};
+
+base64.getbyte64 = function(s,i) {
+    // This is oddly fast, except on Chrome/V8.
+    //  Minimal or no improvement in performance by using a
+    //   object with properties mapping chars to value (eg. 'A': 0)
+    var idx = base64.ALPHA.indexOf(s.charAt(i));
+    if (idx === -1) {
+        throw base64.makeDOMException();
+    }
+    return idx;
+};
+
+base64.decode = function(s) {
+    // convert to string
+    s = '' + s;
+    var getbyte64 = base64.getbyte64;
+    var pads, i, b10;
+    var imax = s.length;
+    if (imax === 0) {
+        return s;
+    }
+
+    if (imax % 4 !== 0) {
+        throw base64.makeDOMException();
+    }
+
+    pads = 0
+    if (s.charAt(imax - 1) === base64.PADCHAR) {
+        pads = 1;
+        if (s.charAt(imax - 2) === base64.PADCHAR) {
+            pads = 2;
+        }
+        // either way, we want to ignore this last block
+        imax -= 4;
+    }
+
+    var x = [];
+    for (i = 0; i < imax; i += 4) {
+        b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12) |
+            (getbyte64(s,i+2) << 6) | getbyte64(s,i+3);
+        x.push(String.fromCharCode(b10 >> 16, (b10 >> 8) & 0xff, b10 & 0xff));
+    }
+
+    switch (pads) {
+        case 1:
+            b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12) | (getbyte64(s,i+2) << 6);
+            x.push(String.fromCharCode(b10 >> 16, (b10 >> 8) & 0xff));
+            break;
+        case 2:
+            b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12);
+            x.push(String.fromCharCode(b10 >> 16));
+            break;
+    }
+    return x.join('');
+};
+
+base64.getbyte = function(s,i) {
+    var x = s.charCodeAt(i);
+    if (x > 255) {
+        throw base64.makeDOMException();
+    }
+    return x;
+};
+
+base64.encode = function(s) {
+    if (arguments.length !== 1) {
+        throw new SyntaxError("Not enough arguments");
+    }
+    var padchar = base64.PADCHAR;
+    var alpha   = base64.ALPHA;
+    var getbyte = base64.getbyte;
+
+    var i, b10;
+    var x = [];
+
+    // convert to string
+    s = '' + s;
+
+    var imax = s.length - s.length % 3;
+
+    if (s.length === 0) {
+        return s;
+    }
+    for (i = 0; i < imax; i += 3) {
+        b10 = (getbyte(s,i) << 16) | (getbyte(s,i+1) << 8) | getbyte(s,i+2);
+        x.push(alpha.charAt(b10 >> 18));
+        x.push(alpha.charAt((b10 >> 12) & 0x3F));
+        x.push(alpha.charAt((b10 >> 6) & 0x3f));
+        x.push(alpha.charAt(b10 & 0x3f));
+    }
+    switch (s.length - imax) {
+        case 1:
+            b10 = getbyte(s,i) << 16;
+            x.push(alpha.charAt(b10 >> 18) + alpha.charAt((b10 >> 12) & 0x3F) +
+                padchar + padchar);
+            break;
+        case 2:
+            b10 = (getbyte(s,i) << 16) | (getbyte(s,i+1) << 8);
+            x.push(alpha.charAt(b10 >> 18) + alpha.charAt((b10 >> 12) & 0x3F) +
+                alpha.charAt((b10 >> 6) & 0x3f) + padchar);
+            break;
+    }
+    return x.join('');
+};
+
+
+});
+
+require.modules["geno-to-picture"] = require.modules["./libs/geno-to-picture"];
+
+
+require.register("./libs/cppn-additions", function (exports, module) {
+//here we test the insert functions
+//making sure the database is filled with objects of the schema type
+// var wMath = require('win-utils').math;
+
+module.exports = cppnAdditions;
+
+var cppnjs = require("optimuslime~cppnjs@master");
+
+function cppnAdditions()
+{ 
+   var self = this;
+
+
+   self.winFunction = "cppnAdditions";
+   
+   self.requiredEvents = function(){return [];};
+   self.eventCallbacks = function(){return {};};
+
+   self.initialize = function(done)
+   {
+        //we do our damage here!
+         self.addCPPNFunctionsToLibrary();
+         done();
+   };
+
+   //these are the names of our cppn objects
+   var pbActivationFunctions = {sigmoid: 'PBBipolarSigmoid', gaussian: 'PBGaussian', sine: 'Sine', cos: "PBCos", identity: 'pbLinear'};
+
+    //in order to use certain activation functions
+    self.addCPPNFunctionsToLibrary = function()
+    {
+        var actFunctions = cppnjs.cppnActivationFunctions;
+        var actFactory = cppnjs.cppnActivationFactory;
+
+         actFunctions[pbActivationFunctions.sigmoid] = function(){
+                return new actFunctions.ActivationFunction({
+                    functionID: pbActivationFunctions.sigmoid ,
+                    functionString: "2.0/(1.0+(exp(-inputSignal))) - 1.0",
+                    functionDescription: "Plain sigmoid [xrange -5.0,5.0][yrange, 0.0,1.0]",
+                    functionCalculate: function(inputSignal)
+                    {
+                        return 2.0/(1.0+(Math.exp(-inputSignal))) - 1.0;
+                    },
+                    functionEnclose: function(stringToEnclose)
+                    {
+                        return "(2.0/(1.0+(Math.exp(-1.0*" + stringToEnclose + "))) - 1.0)";
+                    }
+                });
+            };
+
+        actFunctions[pbActivationFunctions.gaussian] = function(){
+            return new actFunctions.ActivationFunction({
+                    functionID: pbActivationFunctions.gaussian,
+                    functionString: "2*e^(-(input)^2) - 1",
+                    functionDescription:"bimodal gaussian",
+                    functionCalculate :function(inputSignal)
+                    {
+                        return 2 * Math.exp(-Math.pow(inputSignal, 2)) - 1;
+                    },
+                    functionEnclose: function(stringToEnclose)
+                    {
+                        return "(2.0 * Math.exp(-Math.pow(" + stringToEnclose + ", 2.0)) - 1.0)";
+                    }
+                });
+            };
+
+        actFunctions[pbActivationFunctions.identity] = function(){
+            return new actFunctions.ActivationFunction({
+                functionID: pbActivationFunctions.identity,
+                functionString: "x",
+                functionDescription:"Linear",
+                functionCalculate: function(inputSignal)
+                {
+                    return inputSignal;
+                },
+                functionEnclose: function(stringToEnclose)
+                {
+                    return "(" + stringToEnclose + ")";
+                }
+            });
+        };
+
+        actFunctions[pbActivationFunctions.cos] = function(){
+           return new actFunctions.ActivationFunction({
+                functionID: pbActivationFunctions.cos,
+                functionString: "Cos(inputSignal)",
+                functionDescription: "Cos function with normal period",
+                functionCalculate: function(inputSignal)
+                {
+                    return Math.cos(inputSignal);
+                },
+                functionEnclose: function(stringToEnclose)
+                {
+                    return "(Math.cos(" + stringToEnclose + "))";
+                }
+            });
+        };
+
+        //makes these the only activation functions being generated by picbreeder genotypes
+        var probs = {};
+        probs[pbActivationFunctions.sigmoid] = .22;
+        probs[pbActivationFunctions.gaussian] = .22;
+        probs[pbActivationFunctions.sine] = .22;
+        probs[pbActivationFunctions.cos] = .22;
+        probs[pbActivationFunctions.identity] = .12;
+        actFactory.setProbabilities(probs);
+    };
+
+
+
+    return self;
+}
+});
+
+require.modules["cppn-additions"] = require.modules["./libs/cppn-additions"];
+
+
+require.register("./libs/win-setup", function (exports, module) {
+//here we test the insert functions
+//making sure the database is filled with objects of the schema type
+// var wMath = require('win-utils').math;
+
+module.exports = winsetup;
+
+function winsetup(requiredEvents, moduleJSON, moduleConfigs, finished)
+{ 
+    var winback = require("optimuslime~win-backbone@0.0.4-5");
+
+    var Q = require("techjacker~q@master");
+
+    var backbone, generator, backEmit, backLog;
+
+    var emptyModule = 
+    {
+        winFunction : "experiment",
+        eventCallbacks : function(){ return {}; },
+        requiredEvents : function() {
+            return requiredEvents;
+        }
+    };
+
+    //add our own empty module onto this object
+    moduleJSON["setupExperiment"] = emptyModule;
+    
+    var qBackboneResponse = function()
+    {
+        var defer = Q.defer();
+        // self.log('qBBRes: Original: ', arguments);
+
+        //first add our own function type
+        var augmentArgs = arguments;
+        // [].splice.call(augmentArgs, 0, 0, self.winFunction);
+        //make some assumptions about the returning call
+        var callback = function(err)
+        {
+            if(err)
+            {
+              backLog("QCall fail: ", err);
+                defer.reject(err);
+            }
+            else
+            {
+                //remove the error object, send the info onwards
+                [].shift.call(arguments);
+                if(arguments.length > 1)
+                    defer.resolve(arguments);
+                else
+                    defer.resolve.apply(defer, arguments);
+            }
+        };
+
+        //then we add our callback to the end of our function -- which will get resolved here with whatever arguments are passed back
+        [].push.call(augmentArgs, callback);
+
+        // self.log('qBBRes: Augmented: ', augmentArgs);
+        //make the call, we'll catch it inside the callback!
+        backEmit.apply(backEmit, augmentArgs);
+
+        return defer.promise;
+    }
+
+    //do this up front yo
+    backbone = new winback();
+
+    backbone.logLevel = backbone.testing;
+
+    backEmit = backbone.getEmitter(emptyModule);
+    backLog = backbone.getLogger({winFunction:"experiment"});
+    backLog.logLevel = backbone.testing;
+
+    //loading modules is synchronous
+    backbone.loadModules(moduleJSON, moduleConfigs);
+
+    var registeredEvents = backbone.registeredEvents();
+    var requiredEvents = backbone.moduleRequirements();
+      
+    backLog('Backbone Events registered: ', registeredEvents);
+    backLog('Required: ', requiredEvents);
+
+    backbone.initializeModules(function(err)
+    {
+      backLog("Finished Module Init");
+      finished(err, {logger: backLog, emitter: backEmit, backbone: backbone, qCall: qBackboneResponse});
+    });
+}
+});
+
+require.modules["win-setup"] = require.modules["./libs/win-setup"];
+
+
+require.register("./libs/pbEncoding", function (exports, module) {
+//here we test the insert functions
+//making sure the database is filled with objects of the schema type
+// var wMath = require('win-utils').math;
+
+var picbreederSchema = require("./libs/pbEncoding/picbreederSchema.js");
+
+module.exports = pbEncoding;
+
+function pbEncoding(backbone, globalConfig, localConfig)
+{
+	var self = this;
+
+	//boom, let's get right into the business of encoding
+	self.winFunction = "encoding";
+
+    //for convenience, this is our artifact type
+	self.encodingName = "picArtifact";
+
+	self.log = backbone.getLogger(self);
+	//only vital stuff goes out for normal logs
+	self.log.logLevel = localConfig.logLevel || self.log.normal;
+
+	self.eventCallbacks = function()
+	{ 
+		return {
+			// //easy to handle neat geno full offspring
+			// "encoding:iesor-createNonReferenceOffspring" : function(genProps, parentProps, sessionObject, done) { 
+				
+   //              //session might be undefined -- depending on win-gen behavior
+   //              //make sure session exists
+   //              sessionObject = sessionObject || {};
+
+			// 	//need to engage parent creation here -- could be complicated
+			// 	var parents = parentProps.parents;
+
+   //              //how many to make
+			// 	var count = genProps.count;
+
+   //              //these will be the final objects to return
+			// 	var allParents = [];
+			// 	var children = [];
+
+			// 	//pull potential forced parents
+			// 	var forced = sessionObject.forceParents;
+
+   //              //go through all the children -- using parents or force parents to create the new offspring
+   //              for(var c=0; c < count; c++)
+   //              {
+   //                  //we simply randomly pull environment from a parent
+   //                  var randomParentIx = wMath.next(parents.length);
+
+   //                  //if we have parents that are forced upon us
+   //                  if(forced){
+   //                      //pull random ix
+   //                      var rIx = wMath.next(forced[c].length);
+   //                      //use random index of forced parent as the actual ix
+   //                      randomParentIx = forced[c][rIx];
+   //                  }
+
+   //                  //our child together!
+   //                  var rOffspring = {};
+
+   //                  //all we need to do (for the current schema)
+   //                  //is to copy the environment
+   //                  rOffspring.meta = JSON.parse(JSON.stringify(parents[randomParentIx].meta));
+
+   //                  //just return our simple object with a randomly chosen environment
+   //                  children.push(rOffspring);
+
+   //                  //random parent was involved, make sure to mark who!
+   //                  allParents.push([randomParentIx]);
+   //              }
+
+			// 	//done, send er back
+			// 	done(undefined, children, allParents);
+
+			//  	return; 
+			//  }
+		};
+	};
+
+	//need to be able to add our schema
+	self.requiredEvents = function() {
+		return [
+			"schema:addSchema"
+		];
+	};
+
+	self.initialize = function(done)
+    {
+    	self.log("Init win-iesor encoding: ", picbreederSchema);
+
+		//how we talk to the backbone by emitting events
+    	var emitter = backbone.getEmitter(self);
+
+		//add our neat genotype schema -- loaded neatschema from another file -- 
+		//this is just the standard neat schema type -- others can make neatjs changes that require a different schema
+        emitter.emit("schema:addSchema", self.encodingName, picbreederSchema, function(err)
+        {
+        	if(err){
+        		done(new Error(err));
+        		return;
+        	}
+        	done();
+        });
+    }
+
+
+	return self;
+}
+});
+
+require.register("./libs/pbEncoding/picbreederSchema.js", function (exports, module) {
+//contains the neat schema setup -- default for neatjs stuff.
+
+//Need a way to override schema inside WIN -- for now, neat comes with its own schema. Will be able to add variations later
+//(for things looking to add extra neat features while still having all the custom code). 
+
+//Alternatively, they could just copy this module, and add their own stuff. Module is small. 
+ 
+module.exports = {
+    "genome": { 
+        "$ref" : "NEATGenotype"
+    }
+    //some meta info about this object being stored
+    ,"meta": {
+        "imageTitle": "string",
+        "imageTags": {type: "array", items: {type: "string"}}
+    }
+};
+
+
+
+});
+
+require.modules["pbEncoding"] = require.modules["./libs/pbEncoding"];
+
+
+require.register("./libs/flexstatic", function (exports, module) {
+
+var Emitter = require("component~emitter@master");
+// var dimensions = require('dimensions');
+
+module.exports = flexstatic; 
+
+var uFlexID = 0;
+
+
+function flexstatic(divValue, reqOptions)
+{
+	// console.log(divValue);
+ 
+	var self = this;
+
+	console.log("POP POP!!d!");
+
+	if(!reqOptions || !reqOptions.objectSize || !reqOptions.objectSize.width || !reqOptions.objectSize.height)
+		throw new Error("Can't use flexforever without options or objectSize");
+
+	//deep clone the required options object
+	reqOptions = JSON.parse(JSON.stringify(reqOptions));
+
+	//add emitter properties to this object
+	Emitter(self);
+
+	//add appropriate classes to our given div
+	self.uid = "iec" + uFlexID++;
+
+	self.objectSize = reqOptions.objectSize;
+
+	reqOptions.extraHeightPerObject = reqOptions.extraHeightPerObject || 0;
+
+	//for external ids, where should we start -- not necessarily 0!
+	self.startIx = reqOptions.startIx || 0;
+
+	//add a certain amount to our height object to compensate for any additional padding
+	self.objectSize.height = self.objectSize.height + reqOptions.extraHeightPerObject;
+
+	var fstatBase = self.uid + "-fstatic-#@#";
+	var outerFlexID = fstatBase.replace(/#@#/g, "container");
+	var wrapFlexID = fstatBase.replace(/#@#/g, "wrapper");
+	
+	//console check!
+	// console.log('Base: ', fstatBase, " contain: ", outerFlexID, " wrap: ", wrapFlexID);
+
+	//set the innerHTML of the supplied div to now be setup for swiper integration
+	divValue.innerHTML = "<div id=\"" + outerFlexID + "\" class=\"fstat-container\">" + 
+	// "<div id=" + wrapFlexID + " class=\"fstat-wrapper\">" + 
+	// "</div>" +
+	"</div>";
+
+	self.borderSize = 1;
+
+	// console.log(divValue.innerHTML);
+
+	// var innerWrapper = document.querySelector("#" + wrapFlexID);
+	var outerContainer = document.querySelector("#" + outerFlexID);
+	// var dimWrapper = dimensions(innerWrapper);
+
+	var itemsPerRow = function()
+	{
+		// console.log("Outer: ", outerContainer.offsetWidth, " objects: " , (self.objectSize.width + 2*(self.objectSize.rowMargin || 0 )));
+		return Math.floor(outerContainer.offsetWidth/(self.objectSize.width + 2*(self.objectSize.rowMargin || 0)));
+	}
+
+	var itemsPerColumn = function()
+	{
+		return Math.floor(outerContainer.offsetHeight/(self.objectSize.height + 2*(self.objectSize.columnMargin || 0)));
+	}
+
+	var maxItemsPerPage = function()
+	{
+		//the number = number holdable in a row * number of columns
+		//at least 1 will be created -- old code -- maybe later
+		return Math.max(itemsPerRow()*itemsPerColumn(), 0);// 1);
+	}
+
+	var itemsOnPage, itemStart, flexInner;
+
+	var htmlObjects = {};
+	var itemCount = 0;
+	var itemsOnScreen = 0;
+
+	var init = false;
+	self.initialize = function()
+	{
+		// console.log("Begin init!");
+		if(init)
+			return;
+
+		//don't do this multiple times
+		init = true;
+
+		var flexID = self.uid + "-flex-inner";
+		outerContainer.innerHTML = "<div id=\"" + flexID + "\" class=\"flexvcenter\" style=\"border: 1px solid black; height:100%;\"></div>";
+
+		flexInner = document.querySelector("#"+flexID);
+
+		//need to fill our current box with everything we can fit
+		var maxIPP = maxItemsPerPage();
+
+		itemStart = 0;
+
+
+		for(var i=0; i < maxIPP; i++)
+		{
+			var el = internalCreate(i);
+			itemsOnScreen++;
+			flexInner.appendChild(el);
+		}
+	}
+
+	function externalID(i)
+	{
+		return i + self.startIx;
+	}
+
+	function internalCreate(i)
+	{
+		var el = createElement(i);
+		htmlObjects[i] = el;
+		itemCount++;
+		self.emit('elementCreated', externalID(i), el);
+		return el;
+	}
+
+
+	self.removeExcessChildren = function()
+	{
+		var aRemove = [];
+		//if you have too many chilrdren, the extras have to go!
+		for(var i = itemsOnScreen; i < flexInner.children.length; i++)
+		{
+			aRemove.push(flexInner.children[i]);
+		}
+		aRemove.forEach(function(rm)
+		{
+			flexInner.removeChild(rm);
+		});
+	}
+	self.previousPage = function()
+	{
+		//no going left when no more room
+		if(itemStart == 0)
+			return;
+		//we're going to the previous page -- this won't require creating a bunch of elements
+		var maxIPP = maxItemsPerPage();
+
+		//hide the current elements
+		for(var i= itemStart; i < itemStart + itemsOnScreen; i++)
+		{
+			self.emit('elementHidden', externalID(i), htmlObjects[i]);
+		}
+
+		//we can't go below 0!
+		var movement = Math.min(itemStart, maxIPP);
+
+		//going backwards a mighty step!
+		itemStart -= movement;
+
+		//items on csreen changes
+		itemsOnScreen = movement;
+
+		//Loop through and pull the relevant children
+		for(var i=itemStart; i < itemStart + movement; i++)
+		{
+			var el = htmlObjects[i];
+			self.emit('elementVisible', externalID(i));
+
+			if(flexInner.children.length > i - itemStart)
+				//replace the children of our container
+				flexInner.replaceChild(el, flexInner.children[i-itemStart]);
+			else
+				flexInner.appendChild(el);	
+		}
+
+		self.removeExcessChildren();
+	}
+
+	self.nextPage = function()
+	{
+		//we're going to the next page -- this might require creating a new bunch of elements
+		var maxIPP = maxItemsPerPage();
+
+		console.log("Maxpp: ", maxIPP);
+
+		//hide the current elements
+		for(var i= itemStart; i < itemStart + itemsOnScreen; i++)
+		{
+			self.emit('elementHidden', externalID(i), htmlObjects[i]);
+		}
+
+		//now let's move to the next page
+		itemStart += itemsOnScreen;
+
+		//reset items on screen 
+		itemsOnScreen = maxIPP;
+
+		//and create if necessary
+		for(var i=itemStart; i < itemStart + maxIPP; i++)
+		{
+			var el = htmlObjects[i];
+			
+			//we already made this object
+			if(el)
+			{
+				self.emit('elementVisible', externalID(i), el);
+			}
+			else
+			{
+				el = internalCreate(i);
+			}
+
+			//replace the child -- or append it depending on circumstances
+			if(flexInner.children.length > i - itemStart)
+				flexInner.replaceChild(el, flexInner.children[i-itemStart]);
+			else
+				flexInner.appendChild(el);	
+		}
+
+		self.removeExcessChildren();
+	}
+
+	var objectIDToUID = function(idCount)
+	{
+		return self.uid + "-object-" + externalID(idCount);
+	}
+
+	//create an element from scratch (using the given identifier)
+	var createElement = function(ix)
+	{
+		var element = document.createElement('div');
+		var objectUID = objectIDToUID(ix);
+
+		element.id = objectUID;
+		element.style.width = self.objectSize.width + "px";
+		element.style.height = self.objectSize.height + "px";
+
+		element.style.marginLeft = self.objectSize.rowMargin + "px" || 0;
+		element.style.marginRight = self.objectSize.rowMargin + "px" || 0;
+
+		element.style.marginTop = self.objectSize.columnMargin + "px" || 0;
+		element.style.marginBottom = self.objectSize.columnMargin + "px" || 0;
+
+		// element.style.border = (self.borderSize ? (self.borderSize + "px solid black") : 0);
+
+		//make it a border class element
+		element.className += "border";
+
+		element.style.overflow = "hidden";
+
+		return element;
+	}
+
+	return self;
+}
+
+
+
+
+});
+
+require.modules["flexstatic"] = require.modules["./libs/flexstatic"];
+
+
+require.register("./libs/flexparents", function (exports, module) {
+
+var Emitter = require("component~emitter@master");
+var resize = require("ramitos~resize@master");
+// var dimensions = require('dimensions');
+
+module.exports = parentList; 
+
+var uFlexID = 0;
+
+function parentList(divValue, reqOptions)
+{
+	// console.log(divValue);
+ 
+	var self = this;
+
+	if(!reqOptions || !reqOptions.objectSize || !reqOptions.objectSize.width || !reqOptions.objectSize.height)
+		throw new Error("Can't use flexforever without options or objectSize");
+
+	//deep clone the required options object
+	reqOptions = JSON.parse(JSON.stringify(reqOptions));
+
+	//prepend the new objects
+	self.append = reqOptions.append || false;
+
+	//add emitter properties to this object
+	Emitter(self);
+
+	//add appropriate classes to our given div
+	self.uid = "plist" + uFlexID++;
+
+	self.objectSize = reqOptions.objectSize;
+	// console.log(reqOptions.maxItemCount);
+	//we auto determin
+	self.autoDetermineMax = reqOptions.autoDetermineMax == undefined ? true : reqOptions.autoDetermineMax;
+
+	self.maxItemCount = reqOptions.maxItemCount || Number.MAX_VALUE;
+
+	reqOptions.extraHeightPerObject = reqOptions.extraHeightPerObject || 0;
+
+	//add a certain amount to our height object to compensate for any additional padding
+	self.objectSize.height = self.objectSize.height + reqOptions.extraHeightPerObject;
+
+	var plistBase = self.uid + "-#@#";
+	var outerFlexID = plistBase.replace(/#@#/g, "container");
+	
+	//set the innerHTML of the supplied div to now be setup for swiper integration
+	divValue.innerHTML = "<div id=" + outerFlexID + " class=\"plist-container parentflex\" style=\"border: 1px solid black; height:100%;\">" 
+	+ "</div>";
+
+
+	var outerContainer = document.querySelector("#" + outerFlexID);
+
+	var itemsPerColumn = function()
+	{
+		return Math.floor(outerContainer.offsetHeight/(self.objectSize.height + 2*(self.objectSize.columnMargin || 0 + self.borderSize)));
+	}
+
+	if(self.autoDetermineMax)
+	{
+		self.maxItemCount = itemsPerColumn();
+		// console.log("Max items: ", self.maxItemCount);
+	}
+
+	resize.bind(outerContainer, function()
+	{
+		//we've received a resize event 
+		//adjust element counts and the like
+		if(self.autoDetermineMax)
+			self.maxItemCount = itemsPerColumn();
+
+		// console.log("Size change deteced, max items: ", self.maxItemCount);
+
+
+		if(activeElements > self.maxItemCount)
+		{
+			//don't remove EVERYTHING -- need to leave 1 element no matter what size
+			var max = Math.max(1, self.maxItemCount);
+
+			for(var i = max; i < activeElements; i++)
+			{
+				//remove oldest first always -- however many times we need to do this
+				self.removeOldest();
+			}
+		}
+	})
+
+
+	self.borderSize = 1;
+
+	var nextItem = 0;
+	var activeElements = 0;
+	
+	var htmlObjects = {};
+	var dataObjects = {};
+
+	//internal create the parent
+	function internalCreate(i, data)
+	{
+		// console.log("\t\thapkjsdflkjsdflkjsdlfkj: calling create: ", i, " d: ", data)
+		var el = createElement(i);
+		htmlObjects[i] = el;
+		dataObjects[i] = data;
+		activeElements++;
+		self.emit('elementCreated', data, i, el);
+		return el;
+	}
+
+	self.activeParents = function(){return activeElements;};
+
+	//really simple, just append to our container a new element
+	self.addElement = function(data)
+	{
+		var newID = nextItem++;
+
+		var el = internalCreate(newID, data);
+
+		// console.log("activeElements: ", activeElements, " count: ", self.maxItemCount)
+			//need to remove the lowest element
+		if(activeElements > self.maxItemCount)
+			self.removeOldest();
+
+		//prepend
+		if(!self.append)
+			outerContainer.insertBefore(el, outerContainer.firstChild);
+		else //otherwise we're appending the object
+			outerContainer.append(el);
+	}
+	self.removeOldest = function()
+	{
+		var keys = Object.keys(htmlObjects);
+		keys.sort(function(a,b){return parseInt(a) - parseInt(b);});
+
+		//grab the lowest key we have
+		var rmKey = keys[0];
+
+		//now we remove that object at the bottom of the list
+		self.removeElement(rmKey);		
+	}
+
+	self.removeElement = function(id)
+	{
+		// console.log("Removing: ", id);
+		//get the object from our list of objects
+		var el = htmlObjects[id];
+		var data = dataObjects[id];
+
+		//minus an element
+		activeElements--;
+
+		//let it be known, it's over! We're about to remove the parent
+		self.emit('elementRemoved', data, id);
+
+		//remove the object!
+		outerContainer.removeChild(el);
+
+		delete htmlObjects[id];
+		delete dataObjects[id];
+
+	}
+
+	self.removeRandom = function()
+	{
+		var keys = Object.keys(htmlObjects);
+		var rmIx = Math.floor(Math.random()*keys.length);
+
+		//jusst remove something random -- for testing purposes
+		self.removeElement(keys[rmIx]);
+	}
+
+	var objectIDToUID = function(idCount)
+	{
+		return self.uid + "-object-" + idCount;
+	}
+
+	var getElement = function(ix)
+	{
+		var objectUID = objectIDToUID(ix);
+		return htmlObjects[objectUID];
+	}
+
+	//create an element from scratch (using the given identifier)
+	var createElement = function(ix)
+	{
+		var element = document.createElement('div');
+		var objectUID = objectIDToUID(ix);
+
+		element.id = objectUID;
+		element.style.width = self.objectSize.width + "px";
+		element.style.height = self.objectSize.height + "px";
+
+		element.style.marginLeft = self.objectSize.rowMargin + "px" || 0;
+		element.style.marginRight = self.objectSize.rowMargin + "px" || 0;
+
+		element.style.marginTop = self.objectSize.columnMargin + "px" || 0;
+		element.style.marginBottom = self.objectSize.columnMargin + "px" || 0;
+
+		// element.style.border = (self.borderSize ? (self.borderSize + "px solid black") : 0);
+
+		//make it a border class element
+		element.className += "border pobject";
+
+		element.style.overflow = "hidden";
+
+		return element;
+	}
+
+	return self;
+}
+
+
+
+
+});
+
+require.modules["flexparents"] = require.modules["./libs/flexparents"];
+
+
+require.register("./libs/publishUI", function (exports, module) {
+
+var modal = require("segmentio~modal@0.3.3");
+var emitter = require("component~emitter@master");
+var element = require("optimuslime~el.js@master");
+var pillbox = require("component~pillbox@1.3.1");
+var classes = require("component~classes@master");
+
+      
+module.exports = function(options)
+{	
+	var self = this;
+
+	//have emit capabilities -- let other know when certain events are triggered
+	emitter(self);
+
+	//given a div, we need to make our publishing adjustments
+	if(!options.objectSize)
+		throw new Error("Need object size for publish view!");
+
+	var modalNames = {
+		bPublish: "modal-publish",
+		bCancel: "modal-cancel",
+		iTitle: "modal-title",
+		iTags : "modal-tags",
+		dArtifact : "modal-artifact-object",
+		dTop : "modal-top",
+		dBottom: "modal-bottom",
+		dParent : "modal-parent"
+	}
+
+
+	//now, we setup our div objects
+	self.createModalWindow = function()
+	{
+		//we need to make a full blown UI and hook it up to events that will be emitted
+
+		var div = element('div', {id: modalNames.dParent, class: "container fullSize flexContainerColumn"});
+
+		var row = element('div', {id: modalNames.dTop, class: "noPadding flexRow flexSeparate"});
+
+		var titleObject = element('div', {class: "title fullWidth flexContainerRow noPadding"}, 
+			[ 
+				element('div', {class: "col-xs-3 noPadding"}, 'Title: '),
+				element('input', {id: modalNames.iTitle, type : "text", class: "col-auto noPadding titleText"})
+			]);
+
+		var tagObject = element('div', {id: "tag-holder", class: "fullSize flexContainerRow noPadding"}, 
+			[
+				element('div', {class: "col-xs-3 noPadding"}, 'Tags: '),
+				element('input', {id: modalNames.iTags, type: "text", class: "col-auto noPadding"})
+			]);
+
+		var rightColumn = element('div', {id: "text-col"}, [titleObject, tagObject]);
+
+
+		var widthAndHeight = "width: " + options.objectSize.width + "px; height: " + options.objectSize.height + "px;"; 
+		var leftColumn = element('div', {id: "art-col", class: "col-xs-5"}, element('div', {id: modalNames.dArtifact, style: widthAndHeight, class: "border"}, "artifact here"));
+
+		row.appendChild(leftColumn);
+		row.appendChild(rightColumn);
+
+
+		var pubButton = element('div', {id: modalNames.bPublish, class: "col-auto modalButton publish centerRow"}, "Publish");
+		var cancelButton = element('div', {id: modalNames.bCancel, class: "col-auto modalButton cancel centerRow"}, "Cancel");
+
+		var bottom = element('div', {id: modalNames.dBottom, class: "noPadding fullWidth flexContainerRow flexSeparate"}, [pubButton, cancelButton]);
+
+		//now add the top row
+		div.appendChild(row);
+		div.appendChild(bottom);
+
+		return div;
+	}
+
+	var div = self.createModalWindow();
+
+	//do we need this piece?
+	document.body.appendChild(div);
+
+	var artifactDiv = document.getElementById(modalNames.dArtifact);
+
+	var title = document.getElementById(modalNames.iTitle);
+	//add tags to artifact-tag object
+	var tags = document.getElementById(modalNames.iTags);
+
+	var input = pillbox(tags, { lowercase : true, space: true });
+	classes(tags.parentNode)
+		.add("col-auto")
+		.add("noPadding");
+
+	//now we add listeners for publish/cancel
+	var pub = document.getElementById(modalNames.bPublish);
+
+	pub.addEventListener('click', function()
+	{
+		//for right now, we just close the modal
+		self.publishArtifact();
+	})
+
+	var cancel = document.getElementById(modalNames.bCancel);
+	cancel.addEventListener('click', function()
+	{
+		//for right now, we just close the modal
+		self.cancelArtifact();
+	})
+
+	var view = modal(div)
+		.overlay()
+	    .effect('fade-and-scale');
+
+
+    var currentID;
+
+    self.launchPublishModal = function(eID)
+    {
+    	if(currentID != eID)
+    	{
+    		//clear tag and titles
+    		tags.value = "";
+    		title.value = "";
+    	}
+    	currentID = eID;
+    	view.show();
+
+    	var fc;
+    	while((fc = artifactDiv.firstChild) != undefined)
+    	{
+    		artifactDiv.removeChild(fc);
+    	}
+
+    	//showing an object with a given id -- removed the innards for replacement
+    	self.emit("publishShown", eID, artifactDiv, function()
+		{
+			//this doesn't have to be called, but it's good to be in the habbit -- since we may also want to display a loading gif
+		});
+    }
+
+    self.cancelArtifact = function()
+    {
+    	view.hide();
+    	self.emit("publishHidden", currentID);
+    }
+
+    self.publishArtifact = function()
+    {
+    	if(!self.hasListeners("publishArtifact"))
+    	{
+    		console.log("Warning: No listeners for publishing");
+    		view.hide();
+    	}
+    	else{
+    		var meta = {title: title.value, tags: input.values()};
+	    	self.emit("publishArtifact", currentID, meta, function()
+	    	{
+	    		//when finished -- hide the mofo!p
+	    		view.hide();
+	    	});
+	    }
+    }
+
+
+     return self;
+}
+
+});
+
+require.modules["publishUI"] = require.modules["./libs/publishUI"];
+
+
+require.register("./libs/flexIEC", function (exports, module) {
+
+var Emitter = require("component~emitter@master");
+var resize = require("ramitos~resize@master");
+var classes = require("component~classes@master");
+var events = require("component~events@1.0.8");
+
+var publish = require("publishui");
+
+//
+var element = require("optimuslime~el.js@master");
+
+var flexstatic = require("./libs/flexstatic");
+var flexparents = require("./libs/flexparents");
+// var dimensions = require('dimensions');
+
+module.exports = flexIEC; 
+
+var uFlexID = 0;
+
+function flexIEC(divValue, reqOptions)
+{
+	// console.log(divValue);
+	var self = this;
+
+	if(!reqOptions || !reqOptions.evoOptions  || !reqOptions.parentOptions)
+		throw new Error("Can't use flexforever without options or objectSize");
+
+	//deep clone the required options object
+	reqOptions = JSON.parse(JSON.stringify(reqOptions));
+
+	//someobody needs to tell us where to start the count 
+	reqOptions.evoOptions.startIx = reqOptions.startIx || reqOptions.evoOptions.startIx || 0;
+
+	self.bottomElementSize = reqOptions.bottomElementSize || 47;
+
+	//need to add some space to our objects
+	reqOptions.evoOptions.extraHeightPerObject = self.bottomElementSize;
+
+	reqOptions.publishOptions = reqOptions.publishOptions || {objectSize: reqOptions.evoOptions.objectSize};
+
+	//add emitter properties to this object
+	Emitter(self);
+
+	//add appropriate classes to our given div
+	self.uid = "flexIEC" + uFlexID++;
+
+	self.objectSize = reqOptions.objectSize;
+
+	var iecBase = self.uid + "-#@#";
+	var outerFlexID = iecBase.replace(/#@#/g, "container");
+	
+	//set the innerHTML of the supplied div to now be setup for swiper integration
+	divValue.innerHTML = "<div id=" + outerFlexID + " class=\"iec-container flexIEC border\" style=\"height:100%;\">" 
+	+ "</div>";
+
+	var outerContainer = document.querySelector("#" + outerFlexID);
+
+
+	//Out yo face, tell us when your changing sizes
+	resize.bind(outerContainer, function()
+	{
+		// console.log('IEC Resize: ', outerContainer.offsetWidth, " height: ",)
+	});
+
+	//now we need to setup the parent section and the iec children section
+	var container = element('div', {id: "test",  class: "container fullWH pOR"});	
+
+	//simple test at first
+	var row = element('div', {id: "test", class : "row mOR fullWH"});
+
+
+	var parentFlexDiv, evoFlexDiv;
+
+	var loadingIndividuals = {};
+	var finishedLoading = {};
+	var fullObjects = {};
+
+	var parentObjects = {};
+
+
+
+	self.createEvolutionGrid = function()
+	{
+		//build piece by piece the evo grid
+		var rightColumn = element('div', {id: "evo-col", class: "col-auto fullWH colObject border mOR pOR"});
+		var tabs = element('div', {id: "evoTabs", class : "tabs row mOR"});
+
+		var evoBottom = element('div', {id: "evo-bot", class : "innerObject colObject"});
+		evoFlexDiv = evoBottom;
+
+		rightColumn.appendChild(tabs);
+		rightColumn.appendChild(evoBottom);
+
+		return rightColumn;
+	}
+
+	self.createParentList = function()
+	{
+		//creat the top level container
+		var parentColumn = element('div', 
+			{id: "parent-col", style: "width: " + (reqOptions.parentOptions.objectSize.width  + 25) + "px", 
+			class: "col-xs-3 fullWH colObject border mOR pOR"});
+		
+		//then we break it into the title row, and the actual parent list object 
+		var parentTopRow = element('div', {id: "p-top", class : ""});
+		var parentBottomRow = element('div', {id: "p-bot", class : "innerObject colObject border"});
+
+		var choice = element('div', {id: "p-top-choice", class : "border"});
+		choice.innerHTML = "Parent Artifacts";
+
+		//add the choice object to our top row (to have something to display)
+		parentTopRow.appendChild(choice);
+		parentColumn.appendChild(parentTopRow);
+		parentColumn.appendChild(parentBottomRow);
+
+		parentFlexDiv = parentBottomRow;
+
+		return parentColumn;
+	}
+
+	//set it to like, then start parent creation process
+	self.createParent = function(eID)
+	{
+		//create parent using element info
+		self.parentFlex.addElement(eID);
+	}
+	self.deleteParent = function(eID)
+	{
+		var pObject = parentObjects[eID];
+
+		//remove this object from our parent
+		self.parentFlex.removeElement(pObject.pID);
+	}
+
+	//a parent has been removed!
+	self.parentDeleted = function(evoID, pID)
+	{
+		var el = fullObjects[evoID];
+
+		// console.log("Deleted parent: ", evoID, el);
+
+		if(el)
+		{
+			var cl = classes(el);
+
+			if(cl.has('like'))
+				cl.toggle('like'); 
+		}
+
+		//delete parent using element info
+		delete parentObjects[evoID];
+
+		//let it be known wassup
+		self.emit("parentUnselected", evoID);
+	}
+
+	var pSelected = function(evoID)
+	{
+		return function()
+		{
+			//don't really do anything after selecting parents
+		};
+	}
+
+	self.parentCreated = function(evoID, parID, eDiv)
+	{
+		var el = fullObjects[evoID];
+		if(el)
+		{
+			var cl = classes(el);
+
+			if(!cl.has('like'))
+				cl.toggle('like'); 
+		}
+
+		//when a parent is created, we make note
+		parentObjects[evoID] = {pID: parID, el: eDiv};
+
+		//make it known that this parent was selected for real -- we'll handle the UI
+		self.emit("parentSelected", evoID, eDiv, pSelected(evoID));
+	}
+
+	self.likeElement = function(e)
+	{
+		//either you  or your parent have an ID -- pull that id info
+		var tID = e.target.id || e.target.parentElement.id;
+
+		//replace element name to get teh original eID
+		var elementID = tID.replace(/-like/g, "");
+
+		//already a parent, toggle -- remove parent
+		if(parentObjects[elementID])
+		{
+			// console.log("Start delete parent: ", elementID)
+			self.deleteParent(elementID);
+		}
+		else{
+			// console.log("Start make parent: ", elementID)
+			self.createParent(elementID);
+		}
+
+
+		//we toggle adding this to our parent objects
+	}
+
+	self.publishElement = function(e)
+	{
+		//either you  or your parent have an ID -- pull that id info
+		var tID = e.target.id || e.target.parentElement.id;
+
+		var elementID = tID.replace(/-publish/g, "");
+
+		//launch a publish attempt using this ID
+		self.publish.launchPublishModal(elementID);
+	}
+
+	self.createLoadingWrapper = function(eID)
+	{
+		var wrapDiv = element('div', {id: eID + "-wrap", class: "colObject"});
+		var loadingDiv = element('div', {id: eID + "-object", class: "loading innerObject"});
+
+		var bottomRow = element('div', {id: eID + "-bot", style : "height: " + self.bottomElementSize + "px;", class: "row mOR border"});
+
+		//create a like button with an inner like div -- content == like graphic
+		var likeButton = element('div', {id: eID + "-like", class: "col-auto pOR border"}, element('div', 'like'));
+		var publishButton = element('div', {id: eID + "-publish", class: "col-auto pOR border"}, element('div', 'pub'));
+	
+		//create some managers...
+		var likeManager = events(likeButton, self);
+		var pubManager = events(publishButton, self);
+
+		//bind click events to self.like and self.publish callbacks
+		likeManager.bind('click', 'likeElement');
+		pubManager.bind('click', 'publishElement');	
+
+
+		bottomRow.appendChild(likeButton);
+		bottomRow.appendChild(publishButton);
+
+		wrapDiv.appendChild(loadingDiv);
+		wrapDiv.appendChild(bottomRow);
+
+		//send it back all done up
+		return {full: wrapDiv, object: loadingDiv};
+	}
+
+	//create the left parent side
+
+	// var parentColumn = element('div', {id: "parent-col", class: "col-xs-3 fullWH colObject border mOR pOR"});
+	var pColumn = self.createParentList();
+	var evoColumn = self.createEvolutionGrid();
+
+	//append both columns to the iec object
+	row.appendChild(pColumn);
+	row.appendChild(evoColumn);
+
+	container.appendChild(row);
+
+	outerContainer.appendChild(container);
+
+
+
+	//create our flex parent
+	self.parentFlex = new flexparents(parentFlexDiv, reqOptions.parentOptions || {});
+
+	self.parentFlex.on('elementCreated', self.parentCreated);
+	self.parentFlex.on('elementRemoved', self.parentDeleted);
+
+
+	//create the evolution grid -- self initializes
+	self.evoFlex = new flexstatic(evoFlexDiv, reqOptions.evoOptions || {});
+
+	self.activeParents = function(){return self.parentFlex.activeParents();};
+
+	self.individualLoaded = function(eID)
+	{
+		return function()
+		{
+			//grab our loading individual using the ID
+			var eDiv = loadingIndividuals[eID];
+
+			//grab class information,
+			var c = classes(eDiv);
+			//use class info to toggle loading backgroung (if it still exists)
+			if(c.has('loading'))
+				c.toggle('loading');
+
+			for(var i=0; i < eDiv.children.length; i++)
+			{	
+				var c = classes(eDiv.children[i]);
+				if(c.has('loading'))
+					c.toggle('loading');
+			}
+
+			finishedLoading[eID] = eDiv;
+			//get rid of the other stuff
+			delete loadingIndividuals[eID];
+		}
+	}
+
+	self.evoFlex.on('elementCreated', function(eID, eDiv)
+	{
+		var wrapDiv = self.createLoadingWrapper(eID);
+		
+		eDiv.appendChild(wrapDiv.full);
+
+		//save full object
+		fullObjects[eID] = eDiv;
+
+		//now officially loading this object
+		loadingIndividuals[eID] = wrapDiv.object;
+
+		self.emit('createIndividual', eID, wrapDiv.object, self.individualLoaded(eID));
+	});
+
+	self.evoFlex.on('elementVisible', function(eID)
+	{
+		console.log("Visible: ", eID);
+		// element.className += "grid-cell";
+		// eDiv.innerHTML = "<div>Vis: "+eID+"</div>";
+	});
+
+	self.evoFlex.on('elementHidden', function(eID)
+	{
+		console.log("Hidden: ", eID);
+		// element.className += "grid-cell";
+		// eDiv.innerHTML = "<div>Invis: "+eID+"</div>";
+	});
+
+
+	//signify that it's time to init everything
+	self.ready = function()
+	{
+		self.evoFlex.initialize();
+	}
+
+	//deal with publishing	-- add in our publishing object according to publishUI setup
+	self.publish = publish(reqOptions.publishOptions);
+
+	//this is the real deal! We have what we need to publish
+	self.publish.on('publishArtifact', function(eID, meta, finished)
+	{
+		//we now pass this on to those above us for proper publishing behavior
+		self.emit('publishArtifact', eID, meta, finished);
+	});
+
+	self.publish.on('publishShown', function(eID, eDiv, finished){
+
+		//we have space in eDiv for our objects (according to size already determined)
+		//we have nothing to add to this info
+		self.emit('publishShown', eID, eDiv, finished);
+	});
+
+	self.publish.on('publishHidden', function(eID, eDiv, finished){
+
+		//we have space in eDiv for our objects (according to size already determined)
+		//we have nothing to add to this info
+		self.emit('publishHidden', eID);
+	});
+
+
+
+	return self;
+}
+
+
+
+
+});
+
+require.modules["flexIEC"] = require.modules["./libs/flexIEC"];
+
+
+require.register("./libs/win-flexIEC", function (exports, module) {
+var flexIEC = require("flexiec");
+var winIEC = require("optimuslime~win-iec@0.0.2-6");
+
+var emitter = require("component~emitter@master");
+
+//we need to combine the two! Also, we're a win module -- so shape up!
+module.exports = winflex;
+
+function winflex(backbone, globalConfig, localConfig)
+{
+	//pull in backbone info, we gotta set our logger/emitter up
+	var self = this;
+
+	self.winFunction = "ui";
+
+	//this is how we talk to win-backbone
+	self.backEmit = backbone.getEmitter(self);
+
+	//grab our logger
+	self.log = backbone.getLogger(self);
+
+	//only vital stuff goes out for normal logs
+	self.log.logLevel = localConfig.logLevel || self.log.normal;
+
+	self.moreThanOneDisplay = localConfig.moreThanOneDisplay || false;
+
+	//we have logger and emitter, set up some of our functions
+
+	self.htmlEvoObjects = {};
+
+	//what events do we need?
+	self.requiredEvents = function()
+	{
+		return [
+			"evolution:loadSeeds",
+			"evolution:getOrCreateOffspring",
+			"evolution:selectParents",
+			"evolution:publishArtifact",
+			"evolution:unselectParents"
+			//in the future we will also need to save objects according to our save tendencies
+		];
+	}
+
+	//what events do we respond to?
+	self.eventCallbacks = function()
+	{ 
+		return {
+			"ui:initializeDisplay" : self.initializeDiv,
+			"ui:ready" : self.ready
+		};
+	}
+
+	var uiCount = 0;
+	var single = false;
+
+	var uiObjects = {};
+
+	self.chooseRandomSeed = function(seedMap)
+	{
+		var seedKeys = Object.keys(seedMap);
+		var rIx = Math.floor(Math.random()*seedKeys.length);
+		return seedKeys[rIx];
+	}
+
+	//initialize 
+	self.initializeDiv = function(seeds, div, flexOptions, done)
+	{
+		if(single && self.moreThanOneDisplay)
+			return;
+
+		if(!seeds.length)
+		{
+			done("Must send at least 1 seed to initialization -- for now");
+			return;
+		}
+
+		if(seeds.length > 1)
+			self.log("Undefined behavior with more than one seed in this UI object. You were warned, sorry :/")
+		//not getting stuck with an undefined issue
+		flexOptions = flexOptions || {};
+
+		//if you only ever allow one div to take over 
+		single = true;
+
+		//seed related -- start generating ids AFTER the seed count -- this is important
+		//why? Because effectively there is a mapping between ids created in the ui and ids of objects created in evoltuion
+		//they stay in sync all the time, except for seeds, where more ids exist than there are visuals. 
+		//for that purpose, seeds occupy [0, startIx), 
+		var startIx = seeds.length;
+		flexOptions.startIx = Math.max(startIx, flexOptions.startIx || 0);
+
+		//part of the issue here is that flexIEC uses the ids as an indicator of order because they are assumed to be numbers
+		//therefor remove oldest uses that info -- but in reality, it just needs to time stamp the creation of evo objects, and this can all be avoided in the future
+		var seedMap = {};
+		for(var i=0; i < seeds.length; i++)
+			seedMap["" + i] = seeds[i];
+
+		//untested if you switch that!
+		var nf = new flexIEC(div, flexOptions);
+
+		//add some stuff to our thing for emitting
+		var uiEmitter = {};
+		emitter(uiEmitter);
+
+		//a parent was selected by flex
+		nf.on('parentSelected', function(eID, eDiv, finished)
+		{
+			//now a parent has been selected -- let's get that parent selection to evolution!
+			 self.backEmit("evolution:selectParents", [eID], function(err, parents)
+			 {
+			 	//index into parent object, grab our single object
+			 	var parent = parents[eID];
+
+			 	//now we use this info and pass it along for other ui business we don't care about
+			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
+			 	uiEmitter.emit('parentSelected', eID, eDiv, parent, finished);
+			 });
+		});
+
+		//parent is no longer rocking it. Sorry to say. 
+		nf.on('parentUnselected', function(eID)
+		{
+			//now a parent has been selected -- let's get that parent selection to evolution!
+			 self.backEmit("evolution:unselectParents", [eID], function(err)
+			 {
+			 	//now we use this info and pass it along for other ui business we don't care about
+			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
+			 	uiEmitter.emit('parentUnselected', eID);
+
+		 		self.log("act pars: ",nf.activeParents());
+			 	//are we empty? fall back to the chosen seed please!
+			 	if(nf.activeParents() == 0)
+			 	 	nf.createParent(self.chooseRandomSeed(seedMap));
+
+			 });
+		});
+
+		//individual created inside the UI system -- let's make a corresponding object in evolution
+		nf.on('createIndividual', function(eID, eDiv, finished)
+		{
+			//let it be known that we are looking for a sweet payday -- them kids derr
+			 self.backEmit("evolution:getOrCreateOffspring", [eID], function(err, allIndividuals)
+			 {
+			 	// console.error("shitidjfdijfdf");
+			 	//we got the juice!
+			 	var individual = allIndividuals[eID];
+
+			 	self.log("Create ind. create returned: ", allIndividuals);
+
+			 	//now we use this info and pass it along for other ui business we don't care about
+			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
+			 	uiEmitter.emit('individualCreated', eID, eDiv, individual, finished);
+			 });
+		});
+
+		nf.on('publishArtifact', function(eID, meta, finished)
+		{
+			//let it be known that we are looking for a sweet payday -- them kids derr
+			 self.backEmit("evolution:publishArtifact", eID, meta, function(err)
+			 {
+			 	if(err)
+			 	{
+			 		uiEmitter.emit('publishError', eID, err);
+			 	}
+			 	else
+			 	{
+			 		uiEmitter.emit('publishSuccess', eID);
+			 	}
+
+			 	//now we are done publishing
+			 	finished();
+
+			 });
+		});
+
+		//might be published-- we are looking at the modal window
+		nf.on('publishShown', function(eID, eDiv, finished)
+		{
+			//we simply send back the indentifier, and where to put your display in the html object
+		 	uiEmitter.emit('publishShown', eID, eDiv, finished);
+		});
+
+		//we hid the object -- maybe animation needs to stop or something, let it be known
+		nf.on('publishHidden', function(eID)
+		{
+			uiEmitter.emit('publishHidden', eID);
+		});
+
+		//this is a temporary measure for now
+		//send the seeds for loading into iec -- there will be a better way to do this in the future
+		self.backEmit("evolution:loadSeeds", seedMap, function(err)
+		{
+			if(err)
+			{
+				done(err);
+			}
+			else
+			{
+				var uID = uiCount++;
+				var uiObj = {uID: uID, ui: nf, emitter: uiEmitter, seeds: seedMap};
+				uiObjects[uID] = uiObj;
+				//send back the ui object
+				done(undefined, uiObj);
+			}
+		});
+	}
+
+	self.ready = function(uID, done)
+	{
+		var uio = uiObjects[uID];
+
+		var nf = uio.ui;
+
+		//pull a random seed to set as the single parent (that's just our choice)
+		//we could pull 2 if they existed, but we don't
+		
+		var parentSeedID = self.chooseRandomSeed(uio.seeds);
+
+		//auto select parent -- this will cause changes to evolution
+		nf.createParent(parentSeedID);
+
+		//start up the display inside of the div passed in
+		nf.ready();
+
+	}
+
+
+	return self;
+}
+});
+
+require.modules["win-flexIEC"] = require.modules["./libs/win-flexIEC"];
+
+
 require.register("win-picbreeder", function (exports, module) {
-var flexStatic = require("flexstatic");
+var flexStatic = require("./libs/flexstatic");
 
 
 
 console.log("Static a go!");
 });
 
-require.define("win-picbreeder/pbConfig.json", {"doofus":"was here"});
+require.define("win-picbreeder/pbConfig.json", {"serverRoot":"http://winark.org","apiRoot":"/apps/win-Picbreeder","winHostPort":3001});
+
+require.modules["win-picbreeder"] = require.modules["win-picbreeder"];
+
 

@@ -1,3 +1,5 @@
 {
-	"doofus" : "was here"
+	"serverRoot" : "http://winark.org",
+	"apiRoot" : "/apps/win-Picbreeder",
+	"winHostPort" : 3001
 }

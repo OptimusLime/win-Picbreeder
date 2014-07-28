@@ -11,6 +11,7 @@ var cl = require('colors');
   // executes `component install`
 var fs = require('fs');
 var resolve = require('component-resolver');
+// var Builder = require('component-builder');
 var build = require('component-builder');
 
 var sys = require('sys')
@@ -55,8 +56,10 @@ function buildProject(configFile, options)
       //inject some json objects for processing!
       tree.node.json = [configFile];
 
+      // var build = new Builder()
+
       // only include `.js` files from components' `.scripts` field
-      build.scripts(tree)
+      build.scripts(tree, {alias: "dependency"})
         .use('scripts', build.plugins.js())
         .use('scripts', build.plugins.json())
         .use('json', build.plugins.json())

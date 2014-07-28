@@ -220,12 +220,6 @@ function winhome(backbone, globalConfig, localConfig)
 				}
 			}
 
-			//only 1 grid right now
-			// var Grid = require('thumbnail-grid');
-
-			// var grid = new Grid(document.getElementById(singleCatID));
-			// grid.init();
-
 			if(finished)
 				finished();
 

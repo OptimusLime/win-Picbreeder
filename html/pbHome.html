@@ -3,11 +3,11 @@
 <head>
 	<meta charset=utf-8 />
 	<title></title>
-	<link rel="stylesheet" type="text/css" media="screen" href="/apps/win-Picbreeder/build/build.css" />
-	<script type="text/javascript" src="/apps/win-Picbreeder/build/build.js"></script>
-	<script type="text/javascript" src="/apps/win-Picbreeder/js/modernizr.custom.js"></script>
-	
-	<script type="text/javascript" src="/apps/win-Picbreeder/js/cppnWorkerActivation.js"></script>
+
+	<link rel="stylesheet" type="text/css" media="screen" href="./build/build.css" />
+	<script type="text/javascript" src="./build/build.js"></script>
+	<script type="text/javascript" src="./js/modernizr.custom.js"></script>
+	<script type="text/javascript" src="./js/cppnWorkerActivation.js"></script>
 
 
 </head>
@@ -24,7 +24,7 @@
 
 	<!-- Now we start messing with the flex object -->
 	<script type="text/javascript">
-
+	console.log("Loading PBHome");
 	//this will automatically decode query string in to urlParams argument!
         var urlParams;
         (window.onpopstate = function () {
@@ -71,12 +71,19 @@
 
 			var testingLogLevel = 10;
 
+			var pbConfig = require('win-picbreeder/pbConfig.json');
+
 			var globalConfig = {
 				// staticServer:  "http://localhost:8000",
-				server : "http://winark.org/apps/win-Picbreeder"
+
+				server : pbConfig.serverRoot + (pbConfig.serverPort ? pbConfig.serverPort : "") + pbConfig.apiRoot 
+				// "http://winark.org/apps/win-Picbreeder"
 				// ,
 				// port: 3000
 			};
+
+
+			console.log('PB Server config: ', globalConfig.server);
 
 			var configurations = 
 			{
@@ -218,7 +225,7 @@
 						{
 							backLog("Branch artifact: ", wid, "art: ", artifact);
 
-							var branchLocation = "/apps/win-Picbreeder/pbIEC.html?branch=" + wid;
+							var branchLocation = pbConfig.apiRoot + "/pbIEC.html?branch=" + wid;
 							window.location.href = branchLocation;
 
 						})
