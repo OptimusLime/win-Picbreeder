@@ -52,938 +52,6 @@ require.define = function (name, exports) {
     exports: exports
   };
 };
-require.register("component~emitter@master", function (exports, module) {
-
-/**
- * Expose `Emitter`.
- */
-
-module.exports = Emitter;
-
-/**
- * Initialize a new `Emitter`.
- *
- * @api public
- */
-
-function Emitter(obj) {
-  if (obj) return mixin(obj);
-};
-
-/**
- * Mixin the emitter properties.
- *
- * @param {Object} obj
- * @return {Object}
- * @api private
- */
-
-function mixin(obj) {
-  for (var key in Emitter.prototype) {
-    obj[key] = Emitter.prototype[key];
-  }
-  return obj;
-}
-
-/**
- * Listen on the given `event` with `fn`.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.on =
-Emitter.prototype.addEventListener = function(event, fn){
-  this._callbacks = this._callbacks || {};
-  (this._callbacks[event] = this._callbacks[event] || [])
-    .push(fn);
-  return this;
-};
-
-/**
- * Adds an `event` listener that will be invoked a single
- * time then automatically removed.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.once = function(event, fn){
-  var self = this;
-  this._callbacks = this._callbacks || {};
-
-  function on() {
-    self.off(event, on);
-    fn.apply(this, arguments);
-  }
-
-  on.fn = fn;
-  this.on(event, on);
-  return this;
-};
-
-/**
- * Remove the given callback for `event` or all
- * registered callbacks.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.off =
-Emitter.prototype.removeListener =
-Emitter.prototype.removeAllListeners =
-Emitter.prototype.removeEventListener = function(event, fn){
-  this._callbacks = this._callbacks || {};
-
-  // all
-  if (0 == arguments.length) {
-    this._callbacks = {};
-    return this;
-  }
-
-  // specific event
-  var callbacks = this._callbacks[event];
-  if (!callbacks) return this;
-
-  // remove all handlers
-  if (1 == arguments.length) {
-    delete this._callbacks[event];
-    return this;
-  }
-
-  // remove specific handler
-  var cb;
-  for (var i = 0; i < callbacks.length; i++) {
-    cb = callbacks[i];
-    if (cb === fn || cb.fn === fn) {
-      callbacks.splice(i, 1);
-      break;
-    }
-  }
-  return this;
-};
-
-/**
- * Emit `event` with the given args.
- *
- * @param {String} event
- * @param {Mixed} ...
- * @return {Emitter}
- */
-
-Emitter.prototype.emit = function(event){
-  this._callbacks = this._callbacks || {};
-  var args = [].slice.call(arguments, 1)
-    , callbacks = this._callbacks[event];
-
-  if (callbacks) {
-    callbacks = callbacks.slice(0);
-    for (var i = 0, len = callbacks.length; i < len; ++i) {
-      callbacks[i].apply(this, args);
-    }
-  }
-
-  return this;
-};
-
-/**
- * Return array of callbacks for `event`.
- *
- * @param {String} event
- * @return {Array}
- * @api public
- */
-
-Emitter.prototype.listeners = function(event){
-  this._callbacks = this._callbacks || {};
-  return this._callbacks[event] || [];
-};
-
-/**
- * Check if this emitter has `event` handlers.
- *
- * @param {String} event
- * @return {Boolean}
- * @api public
- */
-
-Emitter.prototype.hasListeners = function(event){
-  return !! this.listeners(event).length;
-};
-
-});
-
-require.modules["component-emitter"] = require.modules["component~emitter@master"];
-require.modules["component~emitter"] = require.modules["component~emitter@master"];
-require.modules["emitter"] = require.modules["component~emitter@master"];
-
-
-require.register("component~worker@master", function (exports, module) {
-
-/**
- * Module dependencies.
- */
-
-var Emitter = require("component~emitter@master");
-var WebWorker = window.Worker;
-
-/**
- * Expose `Worker`.
- */
-
-module.exports = Worker;
-
-/**
- * Initialize a new `Worker` with `script`.
- *
- * @param {String} script
- * @api public
- */
-
-function Worker(script) {
-  var self = this;
-  this.ids = 0;
-  this.script = script;
-  this.worker = new WebWorker(script);
-  this.worker.addEventListener('message', this.onmessage.bind(this));
-  this.worker.addEventListener('error', this.onerror.bind(this));
-}
-
-/**
- * Mixin emitter.
- */
-
-Emitter(Worker.prototype);
-
-/**
- * Handle messages.
- */
-
-Worker.prototype.onmessage = function(e){
-  this.emit('message', e.data, e);
-};
-
-/**
- * Handle errors.
- */
-
-Worker.prototype.onerror = function(e){
-  var err = new Error(e.message);
-  err.event = e;
-  this.emit('error', err);
-};
-
-/**
- * Terminate the worker.
- */
-
-Worker.prototype.close = function(){
-  this.worker.terminate();
-};
-
-/**
- * Send a `msg` with optional callback `fn`.
- *
- * TODO: allow passing of transferrables
- *
- * @param {Mixed} msg
- * @param {Function} [fn]
- * @api public
- */
-
-Worker.prototype.send = function(msg, fn){
-  if (fn) this.request(msg, fn);
-  this.worker.postMessage(msg);
-};
-
-/**
- * Send a `msg` as a request with `fn`.
- *
- * @param {Mixed} msg
- * @param {Function} fn
- * @param {Array} [transferables]
- * @api public
- */
-
-Worker.prototype.request = function(msg, fn, transferables){
-  var self = this;
-  var id = ++this.ids;
-
-  // req
-  msg.id = id;
-  this.worker.postMessage(msg, transferables);
-
-  // rep
-  this.on('message', onmessage);
-
-  function onmessage(msg) {
-    if (id != msg.id) return;
-    self.off('message', onmessage);
-    delete msg.id;
-    fn(msg);
-  }
-};
-
-});
-
-require.modules["component-worker"] = require.modules["component~worker@master"];
-require.modules["component~worker"] = require.modules["component~worker@master"];
-require.modules["worker"] = require.modules["component~worker@master"];
-
-
-require.register("optimuslime~traverse@master", function (exports, module) {
-var traverse = module.exports = function (obj) {
-    return new Traverse(obj);
-};
-
-function Traverse (obj) {
-    this.value = obj;
-}
-
-Traverse.prototype.get = function (ps) {
-    var node = this.value;
-    for (var i = 0; i < ps.length; i ++) {
-        var key = ps[i];
-        if (!node || !hasOwnProperty.call(node, key)) {
-            node = undefined;
-            break;
-        }
-        node = node[key];
-    }
-    return node;
-};
-
-Traverse.prototype.has = function (ps) {
-    var node = this.value;
-    for (var i = 0; i < ps.length; i ++) {
-        var key = ps[i];
-        if (!node || !hasOwnProperty.call(node, key)) {
-            return false;
-        }
-        node = node[key];
-    }
-    return true;
-};
-
-Traverse.prototype.set = function (ps, value) {
-    var node = this.value;
-    for (var i = 0; i < ps.length - 1; i ++) {
-        var key = ps[i];
-        if (!hasOwnProperty.call(node, key)) node[key] = {};
-        node = node[key];
-    }
-    node[ps[i]] = value;
-    return value;
-};
-
-Traverse.prototype.map = function (cb) {
-    return walk(this.value, cb, true);
-};
-
-Traverse.prototype.forEach = function (cb) {
-    this.value = walk(this.value, cb, false);
-    return this.value;
-};
-
-Traverse.prototype.reduce = function (cb, init) {
-    var skip = arguments.length === 1;
-    var acc = skip ? this.value : init;
-    this.forEach(function (x) {
-        if (!this.isRoot || !skip) {
-            acc = cb.call(this, acc, x);
-        }
-    });
-    return acc;
-};
-
-Traverse.prototype.paths = function () {
-    var acc = [];
-    this.forEach(function (x) {
-        acc.push(this.path); 
-    });
-    return acc;
-};
-
-Traverse.prototype.nodes = function () {
-    var acc = [];
-    this.forEach(function (x) {
-        acc.push(this.node);
-    });
-    return acc;
-};
-
-Traverse.prototype.clone = function () {
-    var parents = [], nodes = [];
-    
-    return (function clone (src) {
-        for (var i = 0; i < parents.length; i++) {
-            if (parents[i] === src) {
-                return nodes[i];
-            }
-        }
-        
-        if (typeof src === 'object' && src !== null) {
-            var dst = copy(src);
-            
-            parents.push(src);
-            nodes.push(dst);
-            
-            forEach(objectKeys(src), function (key) {
-                dst[key] = clone(src[key]);
-            });
-            
-            parents.pop();
-            nodes.pop();
-            return dst;
-        }
-        else {
-            return src;
-        }
-    })(this.value);
-};
-
-function walk (root, cb, immutable) {
-    var path = [];
-    var parents = [];
-    var alive = true;
-    
-    return (function walker (node_) {
-        var node = immutable ? copy(node_) : node_;
-        var modifiers = {};
-        
-        var keepGoing = true;
-        
-        var state = {
-            node : node,
-            node_ : node_,
-            path : [].concat(path),
-            parent : parents[parents.length - 1],
-            parents : parents,
-            key : path.slice(-1)[0],
-            isRoot : path.length === 0,
-            level : path.length,
-            circular : null,
-            update : function (x, stopHere) {
-                if (!state.isRoot) {
-                    state.parent.node[state.key] = x;
-                }
-                state.node = x;
-                if (stopHere) keepGoing = false;
-            },
-            'delete' : function (stopHere) {
-                delete state.parent.node[state.key];
-                if (stopHere) keepGoing = false;
-            },
-            remove : function (stopHere) {
-                if (isArray(state.parent.node)) {
-                    state.parent.node.splice(state.key, 1);
-                }
-                else {
-                    delete state.parent.node[state.key];
-                }
-                if (stopHere) keepGoing = false;
-            },
-            keys : null,
-            before : function (f) { modifiers.before = f },
-            after : function (f) { modifiers.after = f },
-            pre : function (f) { modifiers.pre = f },
-            post : function (f) { modifiers.post = f },
-            stop : function () { alive = false },
-            block : function () { keepGoing = false }
-        };
-        
-        if (!alive) return state;
-        
-        function updateState() {
-            if (typeof state.node === 'object' && state.node !== null) {
-                if (!state.keys || state.node_ !== state.node) {
-                    state.keys = objectKeys(state.node)
-                }
-                
-                state.isLeaf = state.keys.length == 0;
-                
-                for (var i = 0; i < parents.length; i++) {
-                    if (parents[i].node_ === node_) {
-                        state.circular = parents[i];
-                        break;
-                    }
-                }
-            }
-            else {
-                state.isLeaf = true;
-                state.keys = null;
-            }
-            
-            state.notLeaf = !state.isLeaf;
-            state.notRoot = !state.isRoot;
-        }
-        
-        updateState();
-        
-        // use return values to update if defined
-        var ret = cb.call(state, state.node);
-        if (ret !== undefined && state.update) state.update(ret);
-        
-        if (modifiers.before) modifiers.before.call(state, state.node);
-        
-        if (!keepGoing) return state;
-        
-        if (typeof state.node == 'object'
-        && state.node !== null && !state.circular) {
-            parents.push(state);
-            
-            updateState();
-            
-            forEach(state.keys, function (key, i) {
-                path.push(key);
-                
-                if (modifiers.pre) modifiers.pre.call(state, state.node[key], key);
-                
-                var child = walker(state.node[key]);
-                if (immutable && hasOwnProperty.call(state.node, key)) {
-                    state.node[key] = child.node;
-                }
-                
-                child.isLast = i == state.keys.length - 1;
-                child.isFirst = i == 0;
-                
-                if (modifiers.post) modifiers.post.call(state, child);
-                
-                path.pop();
-            });
-            parents.pop();
-        }
-        
-        if (modifiers.after) modifiers.after.call(state, state.node);
-        
-        return state;
-    })(root).node;
-}
-
-function copy (src) {
-    if (typeof src === 'object' && src !== null) {
-        var dst;
-        
-        if (isArray(src)) {
-            dst = [];
-        }
-        else if (isDate(src)) {
-            dst = new Date(src.getTime ? src.getTime() : src);
-        }
-        else if (isRegExp(src)) {
-            dst = new RegExp(src);
-        }
-        else if (isError(src)) {
-            dst = { message: src.message };
-        }
-        else if (isBoolean(src)) {
-            dst = new Boolean(src);
-        }
-        else if (isNumber(src)) {
-            dst = new Number(src);
-        }
-        else if (isString(src)) {
-            dst = new String(src);
-        }
-        else if (Object.create && Object.getPrototypeOf) {
-            dst = Object.create(Object.getPrototypeOf(src));
-        }
-        else if (src.constructor === Object) {
-            dst = {};
-        }
-        else {
-            var proto =
-                (src.constructor && src.constructor.prototype)
-                || src.__proto__
-                || {}
-            ;
-            var T = function () {};
-            T.prototype = proto;
-            dst = new T;
-        }
-        
-        forEach(objectKeys(src), function (key) {
-            dst[key] = src[key];
-        });
-        return dst;
-    }
-    else return src;
-}
-
-var objectKeys = Object.keys || function keys (obj) {
-    var res = [];
-    for (var key in obj) res.push(key)
-    return res;
-};
-
-function toS (obj) { return Object.prototype.toString.call(obj) }
-function isDate (obj) { return toS(obj) === '[object Date]' }
-function isRegExp (obj) { return toS(obj) === '[object RegExp]' }
-function isError (obj) { return toS(obj) === '[object Error]' }
-function isBoolean (obj) { return toS(obj) === '[object Boolean]' }
-function isNumber (obj) { return toS(obj) === '[object Number]' }
-function isString (obj) { return toS(obj) === '[object String]' }
-
-var isArray = Array.isArray || function isArray (xs) {
-    return Object.prototype.toString.call(xs) === '[object Array]';
-};
-
-var forEach = function (xs, fn) {
-    if (xs.forEach) return xs.forEach(fn)
-    else for (var i = 0; i < xs.length; i++) {
-        fn(xs[i], i, xs);
-    }
-};
-
-forEach(objectKeys(Traverse.prototype), function (key) {
-    traverse[key] = function (obj) {
-        var args = [].slice.call(arguments, 1);
-        var t = new Traverse(obj);
-        return t[key].apply(t, args);
-    };
-});
-
-var hasOwnProperty = Object.hasOwnProperty || function (obj, key) {
-    return key in obj;
-};
-
-});
-
-require.modules["optimuslime-traverse"] = require.modules["optimuslime~traverse@master"];
-require.modules["optimuslime~traverse"] = require.modules["optimuslime~traverse@master"];
-require.modules["traverse"] = require.modules["optimuslime~traverse@master"];
-
-
-require.register("optimuslime~traverse@0.6.6-1", function (exports, module) {
-var traverse = module.exports = function (obj) {
-    return new Traverse(obj);
-};
-
-function Traverse (obj) {
-    this.value = obj;
-}
-
-Traverse.prototype.get = function (ps) {
-    var node = this.value;
-    for (var i = 0; i < ps.length; i ++) {
-        var key = ps[i];
-        if (!node || !hasOwnProperty.call(node, key)) {
-            node = undefined;
-            break;
-        }
-        node = node[key];
-    }
-    return node;
-};
-
-Traverse.prototype.has = function (ps) {
-    var node = this.value;
-    for (var i = 0; i < ps.length; i ++) {
-        var key = ps[i];
-        if (!node || !hasOwnProperty.call(node, key)) {
-            return false;
-        }
-        node = node[key];
-    }
-    return true;
-};
-
-Traverse.prototype.set = function (ps, value) {
-    var node = this.value;
-    for (var i = 0; i < ps.length - 1; i ++) {
-        var key = ps[i];
-        if (!hasOwnProperty.call(node, key)) node[key] = {};
-        node = node[key];
-    }
-    node[ps[i]] = value;
-    return value;
-};
-
-Traverse.prototype.map = function (cb) {
-    return walk(this.value, cb, true);
-};
-
-Traverse.prototype.forEach = function (cb) {
-    this.value = walk(this.value, cb, false);
-    return this.value;
-};
-
-Traverse.prototype.reduce = function (cb, init) {
-    var skip = arguments.length === 1;
-    var acc = skip ? this.value : init;
-    this.forEach(function (x) {
-        if (!this.isRoot || !skip) {
-            acc = cb.call(this, acc, x);
-        }
-    });
-    return acc;
-};
-
-Traverse.prototype.paths = function () {
-    var acc = [];
-    this.forEach(function (x) {
-        acc.push(this.path); 
-    });
-    return acc;
-};
-
-Traverse.prototype.nodes = function () {
-    var acc = [];
-    this.forEach(function (x) {
-        acc.push(this.node);
-    });
-    return acc;
-};
-
-Traverse.prototype.clone = function () {
-    var parents = [], nodes = [];
-    
-    return (function clone (src) {
-        for (var i = 0; i < parents.length; i++) {
-            if (parents[i] === src) {
-                return nodes[i];
-            }
-        }
-        
-        if (typeof src === 'object' && src !== null) {
-            var dst = copy(src);
-            
-            parents.push(src);
-            nodes.push(dst);
-            
-            forEach(objectKeys(src), function (key) {
-                dst[key] = clone(src[key]);
-            });
-            
-            parents.pop();
-            nodes.pop();
-            return dst;
-        }
-        else {
-            return src;
-        }
-    })(this.value);
-};
-
-function walk (root, cb, immutable) {
-    var path = [];
-    var parents = [];
-    var alive = true;
-    
-    return (function walker (node_) {
-        var node = immutable ? copy(node_) : node_;
-        var modifiers = {};
-        
-        var keepGoing = true;
-        
-        var state = {
-            node : node,
-            node_ : node_,
-            path : [].concat(path),
-            parent : parents[parents.length - 1],
-            parents : parents,
-            key : path.slice(-1)[0],
-            isRoot : path.length === 0,
-            level : path.length,
-            circular : null,
-            update : function (x, stopHere) {
-                if (!state.isRoot) {
-                    state.parent.node[state.key] = x;
-                }
-                state.node = x;
-                if (stopHere) keepGoing = false;
-            },
-            'delete' : function (stopHere) {
-                delete state.parent.node[state.key];
-                if (stopHere) keepGoing = false;
-            },
-            remove : function (stopHere) {
-                if (isArray(state.parent.node)) {
-                    state.parent.node.splice(state.key, 1);
-                }
-                else {
-                    delete state.parent.node[state.key];
-                }
-                if (stopHere) keepGoing = false;
-            },
-            keys : null,
-            before : function (f) { modifiers.before = f },
-            after : function (f) { modifiers.after = f },
-            pre : function (f) { modifiers.pre = f },
-            post : function (f) { modifiers.post = f },
-            stop : function () { alive = false },
-            block : function () { keepGoing = false }
-        };
-        
-        if (!alive) return state;
-        
-        function updateState() {
-            if (typeof state.node === 'object' && state.node !== null) {
-                if (!state.keys || state.node_ !== state.node) {
-                    state.keys = objectKeys(state.node)
-                }
-                
-                state.isLeaf = state.keys.length == 0;
-                
-                for (var i = 0; i < parents.length; i++) {
-                    if (parents[i].node_ === node_) {
-                        state.circular = parents[i];
-                        break;
-                    }
-                }
-            }
-            else {
-                state.isLeaf = true;
-                state.keys = null;
-            }
-            
-            state.notLeaf = !state.isLeaf;
-            state.notRoot = !state.isRoot;
-        }
-        
-        updateState();
-        
-        // use return values to update if defined
-        var ret = cb.call(state, state.node);
-        if (ret !== undefined && state.update) state.update(ret);
-        
-        if (modifiers.before) modifiers.before.call(state, state.node);
-        
-        if (!keepGoing) return state;
-        
-        if (typeof state.node == 'object'
-        && state.node !== null && !state.circular) {
-            parents.push(state);
-            
-            updateState();
-            
-            forEach(state.keys, function (key, i) {
-                path.push(key);
-                
-                if (modifiers.pre) modifiers.pre.call(state, state.node[key], key);
-                
-                var child = walker(state.node[key]);
-                if (immutable && hasOwnProperty.call(state.node, key)) {
-                    state.node[key] = child.node;
-                }
-                
-                child.isLast = i == state.keys.length - 1;
-                child.isFirst = i == 0;
-                
-                if (modifiers.post) modifiers.post.call(state, child);
-                
-                path.pop();
-            });
-            parents.pop();
-        }
-        
-        if (modifiers.after) modifiers.after.call(state, state.node);
-        
-        return state;
-    })(root).node;
-}
-
-function copy (src) {
-    if (typeof src === 'object' && src !== null) {
-        var dst;
-        
-        if (isArray(src)) {
-            dst = [];
-        }
-        else if (isDate(src)) {
-            dst = new Date(src.getTime ? src.getTime() : src);
-        }
-        else if (isRegExp(src)) {
-            dst = new RegExp(src);
-        }
-        else if (isError(src)) {
-            dst = { message: src.message };
-        }
-        else if (isBoolean(src)) {
-            dst = new Boolean(src);
-        }
-        else if (isNumber(src)) {
-            dst = new Number(src);
-        }
-        else if (isString(src)) {
-            dst = new String(src);
-        }
-        else if (Object.create && Object.getPrototypeOf) {
-            dst = Object.create(Object.getPrototypeOf(src));
-        }
-        else if (src.constructor === Object) {
-            dst = {};
-        }
-        else {
-            var proto =
-                (src.constructor && src.constructor.prototype)
-                || src.__proto__
-                || {}
-            ;
-            var T = function () {};
-            T.prototype = proto;
-            dst = new T;
-        }
-        
-        forEach(objectKeys(src), function (key) {
-            dst[key] = src[key];
-        });
-        return dst;
-    }
-    else return src;
-}
-
-var objectKeys = Object.keys || function keys (obj) {
-    var res = [];
-    for (var key in obj) res.push(key)
-    return res;
-};
-
-function toS (obj) { return Object.prototype.toString.call(obj) }
-function isDate (obj) { return toS(obj) === '[object Date]' }
-function isRegExp (obj) { return toS(obj) === '[object RegExp]' }
-function isError (obj) { return toS(obj) === '[object Error]' }
-function isBoolean (obj) { return toS(obj) === '[object Boolean]' }
-function isNumber (obj) { return toS(obj) === '[object Number]' }
-function isString (obj) { return toS(obj) === '[object String]' }
-
-var isArray = Array.isArray || function isArray (xs) {
-    return Object.prototype.toString.call(xs) === '[object Array]';
-};
-
-var forEach = function (xs, fn) {
-    if (xs.forEach) return xs.forEach(fn)
-    else for (var i = 0; i < xs.length; i++) {
-        fn(xs[i], i, xs);
-    }
-};
-
-forEach(objectKeys(Traverse.prototype), function (key) {
-    traverse[key] = function (obj) {
-        var args = [].slice.call(arguments, 1);
-        var t = new Traverse(obj);
-        return t[key].apply(t, args);
-    };
-});
-
-var hasOwnProperty = Object.hasOwnProperty || function (obj, key) {
-    return key in obj;
-};
-
-});
-
-require.modules["optimuslime-traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
-require.modules["optimuslime~traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
-require.modules["traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
-
-
 require.register("optimuslime~win-utils@master", function (exports, module) {
 
 var winutils = {};
@@ -2364,6 +1432,938 @@ function winiec(backbone, globalConfig, localConfig)
 require.modules["optimuslime-win-iec"] = require.modules["optimuslime~win-iec@0.0.2-6"];
 require.modules["optimuslime~win-iec"] = require.modules["optimuslime~win-iec@0.0.2-6"];
 require.modules["win-iec"] = require.modules["optimuslime~win-iec@0.0.2-6"];
+
+
+require.register("optimuslime~traverse@master", function (exports, module) {
+var traverse = module.exports = function (obj) {
+    return new Traverse(obj);
+};
+
+function Traverse (obj) {
+    this.value = obj;
+}
+
+Traverse.prototype.get = function (ps) {
+    var node = this.value;
+    for (var i = 0; i < ps.length; i ++) {
+        var key = ps[i];
+        if (!node || !hasOwnProperty.call(node, key)) {
+            node = undefined;
+            break;
+        }
+        node = node[key];
+    }
+    return node;
+};
+
+Traverse.prototype.has = function (ps) {
+    var node = this.value;
+    for (var i = 0; i < ps.length; i ++) {
+        var key = ps[i];
+        if (!node || !hasOwnProperty.call(node, key)) {
+            return false;
+        }
+        node = node[key];
+    }
+    return true;
+};
+
+Traverse.prototype.set = function (ps, value) {
+    var node = this.value;
+    for (var i = 0; i < ps.length - 1; i ++) {
+        var key = ps[i];
+        if (!hasOwnProperty.call(node, key)) node[key] = {};
+        node = node[key];
+    }
+    node[ps[i]] = value;
+    return value;
+};
+
+Traverse.prototype.map = function (cb) {
+    return walk(this.value, cb, true);
+};
+
+Traverse.prototype.forEach = function (cb) {
+    this.value = walk(this.value, cb, false);
+    return this.value;
+};
+
+Traverse.prototype.reduce = function (cb, init) {
+    var skip = arguments.length === 1;
+    var acc = skip ? this.value : init;
+    this.forEach(function (x) {
+        if (!this.isRoot || !skip) {
+            acc = cb.call(this, acc, x);
+        }
+    });
+    return acc;
+};
+
+Traverse.prototype.paths = function () {
+    var acc = [];
+    this.forEach(function (x) {
+        acc.push(this.path); 
+    });
+    return acc;
+};
+
+Traverse.prototype.nodes = function () {
+    var acc = [];
+    this.forEach(function (x) {
+        acc.push(this.node);
+    });
+    return acc;
+};
+
+Traverse.prototype.clone = function () {
+    var parents = [], nodes = [];
+    
+    return (function clone (src) {
+        for (var i = 0; i < parents.length; i++) {
+            if (parents[i] === src) {
+                return nodes[i];
+            }
+        }
+        
+        if (typeof src === 'object' && src !== null) {
+            var dst = copy(src);
+            
+            parents.push(src);
+            nodes.push(dst);
+            
+            forEach(objectKeys(src), function (key) {
+                dst[key] = clone(src[key]);
+            });
+            
+            parents.pop();
+            nodes.pop();
+            return dst;
+        }
+        else {
+            return src;
+        }
+    })(this.value);
+};
+
+function walk (root, cb, immutable) {
+    var path = [];
+    var parents = [];
+    var alive = true;
+    
+    return (function walker (node_) {
+        var node = immutable ? copy(node_) : node_;
+        var modifiers = {};
+        
+        var keepGoing = true;
+        
+        var state = {
+            node : node,
+            node_ : node_,
+            path : [].concat(path),
+            parent : parents[parents.length - 1],
+            parents : parents,
+            key : path.slice(-1)[0],
+            isRoot : path.length === 0,
+            level : path.length,
+            circular : null,
+            update : function (x, stopHere) {
+                if (!state.isRoot) {
+                    state.parent.node[state.key] = x;
+                }
+                state.node = x;
+                if (stopHere) keepGoing = false;
+            },
+            'delete' : function (stopHere) {
+                delete state.parent.node[state.key];
+                if (stopHere) keepGoing = false;
+            },
+            remove : function (stopHere) {
+                if (isArray(state.parent.node)) {
+                    state.parent.node.splice(state.key, 1);
+                }
+                else {
+                    delete state.parent.node[state.key];
+                }
+                if (stopHere) keepGoing = false;
+            },
+            keys : null,
+            before : function (f) { modifiers.before = f },
+            after : function (f) { modifiers.after = f },
+            pre : function (f) { modifiers.pre = f },
+            post : function (f) { modifiers.post = f },
+            stop : function () { alive = false },
+            block : function () { keepGoing = false }
+        };
+        
+        if (!alive) return state;
+        
+        function updateState() {
+            if (typeof state.node === 'object' && state.node !== null) {
+                if (!state.keys || state.node_ !== state.node) {
+                    state.keys = objectKeys(state.node)
+                }
+                
+                state.isLeaf = state.keys.length == 0;
+                
+                for (var i = 0; i < parents.length; i++) {
+                    if (parents[i].node_ === node_) {
+                        state.circular = parents[i];
+                        break;
+                    }
+                }
+            }
+            else {
+                state.isLeaf = true;
+                state.keys = null;
+            }
+            
+            state.notLeaf = !state.isLeaf;
+            state.notRoot = !state.isRoot;
+        }
+        
+        updateState();
+        
+        // use return values to update if defined
+        var ret = cb.call(state, state.node);
+        if (ret !== undefined && state.update) state.update(ret);
+        
+        if (modifiers.before) modifiers.before.call(state, state.node);
+        
+        if (!keepGoing) return state;
+        
+        if (typeof state.node == 'object'
+        && state.node !== null && !state.circular) {
+            parents.push(state);
+            
+            updateState();
+            
+            forEach(state.keys, function (key, i) {
+                path.push(key);
+                
+                if (modifiers.pre) modifiers.pre.call(state, state.node[key], key);
+                
+                var child = walker(state.node[key]);
+                if (immutable && hasOwnProperty.call(state.node, key)) {
+                    state.node[key] = child.node;
+                }
+                
+                child.isLast = i == state.keys.length - 1;
+                child.isFirst = i == 0;
+                
+                if (modifiers.post) modifiers.post.call(state, child);
+                
+                path.pop();
+            });
+            parents.pop();
+        }
+        
+        if (modifiers.after) modifiers.after.call(state, state.node);
+        
+        return state;
+    })(root).node;
+}
+
+function copy (src) {
+    if (typeof src === 'object' && src !== null) {
+        var dst;
+        
+        if (isArray(src)) {
+            dst = [];
+        }
+        else if (isDate(src)) {
+            dst = new Date(src.getTime ? src.getTime() : src);
+        }
+        else if (isRegExp(src)) {
+            dst = new RegExp(src);
+        }
+        else if (isError(src)) {
+            dst = { message: src.message };
+        }
+        else if (isBoolean(src)) {
+            dst = new Boolean(src);
+        }
+        else if (isNumber(src)) {
+            dst = new Number(src);
+        }
+        else if (isString(src)) {
+            dst = new String(src);
+        }
+        else if (Object.create && Object.getPrototypeOf) {
+            dst = Object.create(Object.getPrototypeOf(src));
+        }
+        else if (src.constructor === Object) {
+            dst = {};
+        }
+        else {
+            var proto =
+                (src.constructor && src.constructor.prototype)
+                || src.__proto__
+                || {}
+            ;
+            var T = function () {};
+            T.prototype = proto;
+            dst = new T;
+        }
+        
+        forEach(objectKeys(src), function (key) {
+            dst[key] = src[key];
+        });
+        return dst;
+    }
+    else return src;
+}
+
+var objectKeys = Object.keys || function keys (obj) {
+    var res = [];
+    for (var key in obj) res.push(key)
+    return res;
+};
+
+function toS (obj) { return Object.prototype.toString.call(obj) }
+function isDate (obj) { return toS(obj) === '[object Date]' }
+function isRegExp (obj) { return toS(obj) === '[object RegExp]' }
+function isError (obj) { return toS(obj) === '[object Error]' }
+function isBoolean (obj) { return toS(obj) === '[object Boolean]' }
+function isNumber (obj) { return toS(obj) === '[object Number]' }
+function isString (obj) { return toS(obj) === '[object String]' }
+
+var isArray = Array.isArray || function isArray (xs) {
+    return Object.prototype.toString.call(xs) === '[object Array]';
+};
+
+var forEach = function (xs, fn) {
+    if (xs.forEach) return xs.forEach(fn)
+    else for (var i = 0; i < xs.length; i++) {
+        fn(xs[i], i, xs);
+    }
+};
+
+forEach(objectKeys(Traverse.prototype), function (key) {
+    traverse[key] = function (obj) {
+        var args = [].slice.call(arguments, 1);
+        var t = new Traverse(obj);
+        return t[key].apply(t, args);
+    };
+});
+
+var hasOwnProperty = Object.hasOwnProperty || function (obj, key) {
+    return key in obj;
+};
+
+});
+
+require.modules["optimuslime-traverse"] = require.modules["optimuslime~traverse@master"];
+require.modules["optimuslime~traverse"] = require.modules["optimuslime~traverse@master"];
+require.modules["traverse"] = require.modules["optimuslime~traverse@master"];
+
+
+require.register("optimuslime~traverse@0.6.6-1", function (exports, module) {
+var traverse = module.exports = function (obj) {
+    return new Traverse(obj);
+};
+
+function Traverse (obj) {
+    this.value = obj;
+}
+
+Traverse.prototype.get = function (ps) {
+    var node = this.value;
+    for (var i = 0; i < ps.length; i ++) {
+        var key = ps[i];
+        if (!node || !hasOwnProperty.call(node, key)) {
+            node = undefined;
+            break;
+        }
+        node = node[key];
+    }
+    return node;
+};
+
+Traverse.prototype.has = function (ps) {
+    var node = this.value;
+    for (var i = 0; i < ps.length; i ++) {
+        var key = ps[i];
+        if (!node || !hasOwnProperty.call(node, key)) {
+            return false;
+        }
+        node = node[key];
+    }
+    return true;
+};
+
+Traverse.prototype.set = function (ps, value) {
+    var node = this.value;
+    for (var i = 0; i < ps.length - 1; i ++) {
+        var key = ps[i];
+        if (!hasOwnProperty.call(node, key)) node[key] = {};
+        node = node[key];
+    }
+    node[ps[i]] = value;
+    return value;
+};
+
+Traverse.prototype.map = function (cb) {
+    return walk(this.value, cb, true);
+};
+
+Traverse.prototype.forEach = function (cb) {
+    this.value = walk(this.value, cb, false);
+    return this.value;
+};
+
+Traverse.prototype.reduce = function (cb, init) {
+    var skip = arguments.length === 1;
+    var acc = skip ? this.value : init;
+    this.forEach(function (x) {
+        if (!this.isRoot || !skip) {
+            acc = cb.call(this, acc, x);
+        }
+    });
+    return acc;
+};
+
+Traverse.prototype.paths = function () {
+    var acc = [];
+    this.forEach(function (x) {
+        acc.push(this.path); 
+    });
+    return acc;
+};
+
+Traverse.prototype.nodes = function () {
+    var acc = [];
+    this.forEach(function (x) {
+        acc.push(this.node);
+    });
+    return acc;
+};
+
+Traverse.prototype.clone = function () {
+    var parents = [], nodes = [];
+    
+    return (function clone (src) {
+        for (var i = 0; i < parents.length; i++) {
+            if (parents[i] === src) {
+                return nodes[i];
+            }
+        }
+        
+        if (typeof src === 'object' && src !== null) {
+            var dst = copy(src);
+            
+            parents.push(src);
+            nodes.push(dst);
+            
+            forEach(objectKeys(src), function (key) {
+                dst[key] = clone(src[key]);
+            });
+            
+            parents.pop();
+            nodes.pop();
+            return dst;
+        }
+        else {
+            return src;
+        }
+    })(this.value);
+};
+
+function walk (root, cb, immutable) {
+    var path = [];
+    var parents = [];
+    var alive = true;
+    
+    return (function walker (node_) {
+        var node = immutable ? copy(node_) : node_;
+        var modifiers = {};
+        
+        var keepGoing = true;
+        
+        var state = {
+            node : node,
+            node_ : node_,
+            path : [].concat(path),
+            parent : parents[parents.length - 1],
+            parents : parents,
+            key : path.slice(-1)[0],
+            isRoot : path.length === 0,
+            level : path.length,
+            circular : null,
+            update : function (x, stopHere) {
+                if (!state.isRoot) {
+                    state.parent.node[state.key] = x;
+                }
+                state.node = x;
+                if (stopHere) keepGoing = false;
+            },
+            'delete' : function (stopHere) {
+                delete state.parent.node[state.key];
+                if (stopHere) keepGoing = false;
+            },
+            remove : function (stopHere) {
+                if (isArray(state.parent.node)) {
+                    state.parent.node.splice(state.key, 1);
+                }
+                else {
+                    delete state.parent.node[state.key];
+                }
+                if (stopHere) keepGoing = false;
+            },
+            keys : null,
+            before : function (f) { modifiers.before = f },
+            after : function (f) { modifiers.after = f },
+            pre : function (f) { modifiers.pre = f },
+            post : function (f) { modifiers.post = f },
+            stop : function () { alive = false },
+            block : function () { keepGoing = false }
+        };
+        
+        if (!alive) return state;
+        
+        function updateState() {
+            if (typeof state.node === 'object' && state.node !== null) {
+                if (!state.keys || state.node_ !== state.node) {
+                    state.keys = objectKeys(state.node)
+                }
+                
+                state.isLeaf = state.keys.length == 0;
+                
+                for (var i = 0; i < parents.length; i++) {
+                    if (parents[i].node_ === node_) {
+                        state.circular = parents[i];
+                        break;
+                    }
+                }
+            }
+            else {
+                state.isLeaf = true;
+                state.keys = null;
+            }
+            
+            state.notLeaf = !state.isLeaf;
+            state.notRoot = !state.isRoot;
+        }
+        
+        updateState();
+        
+        // use return values to update if defined
+        var ret = cb.call(state, state.node);
+        if (ret !== undefined && state.update) state.update(ret);
+        
+        if (modifiers.before) modifiers.before.call(state, state.node);
+        
+        if (!keepGoing) return state;
+        
+        if (typeof state.node == 'object'
+        && state.node !== null && !state.circular) {
+            parents.push(state);
+            
+            updateState();
+            
+            forEach(state.keys, function (key, i) {
+                path.push(key);
+                
+                if (modifiers.pre) modifiers.pre.call(state, state.node[key], key);
+                
+                var child = walker(state.node[key]);
+                if (immutable && hasOwnProperty.call(state.node, key)) {
+                    state.node[key] = child.node;
+                }
+                
+                child.isLast = i == state.keys.length - 1;
+                child.isFirst = i == 0;
+                
+                if (modifiers.post) modifiers.post.call(state, child);
+                
+                path.pop();
+            });
+            parents.pop();
+        }
+        
+        if (modifiers.after) modifiers.after.call(state, state.node);
+        
+        return state;
+    })(root).node;
+}
+
+function copy (src) {
+    if (typeof src === 'object' && src !== null) {
+        var dst;
+        
+        if (isArray(src)) {
+            dst = [];
+        }
+        else if (isDate(src)) {
+            dst = new Date(src.getTime ? src.getTime() : src);
+        }
+        else if (isRegExp(src)) {
+            dst = new RegExp(src);
+        }
+        else if (isError(src)) {
+            dst = { message: src.message };
+        }
+        else if (isBoolean(src)) {
+            dst = new Boolean(src);
+        }
+        else if (isNumber(src)) {
+            dst = new Number(src);
+        }
+        else if (isString(src)) {
+            dst = new String(src);
+        }
+        else if (Object.create && Object.getPrototypeOf) {
+            dst = Object.create(Object.getPrototypeOf(src));
+        }
+        else if (src.constructor === Object) {
+            dst = {};
+        }
+        else {
+            var proto =
+                (src.constructor && src.constructor.prototype)
+                || src.__proto__
+                || {}
+            ;
+            var T = function () {};
+            T.prototype = proto;
+            dst = new T;
+        }
+        
+        forEach(objectKeys(src), function (key) {
+            dst[key] = src[key];
+        });
+        return dst;
+    }
+    else return src;
+}
+
+var objectKeys = Object.keys || function keys (obj) {
+    var res = [];
+    for (var key in obj) res.push(key)
+    return res;
+};
+
+function toS (obj) { return Object.prototype.toString.call(obj) }
+function isDate (obj) { return toS(obj) === '[object Date]' }
+function isRegExp (obj) { return toS(obj) === '[object RegExp]' }
+function isError (obj) { return toS(obj) === '[object Error]' }
+function isBoolean (obj) { return toS(obj) === '[object Boolean]' }
+function isNumber (obj) { return toS(obj) === '[object Number]' }
+function isString (obj) { return toS(obj) === '[object String]' }
+
+var isArray = Array.isArray || function isArray (xs) {
+    return Object.prototype.toString.call(xs) === '[object Array]';
+};
+
+var forEach = function (xs, fn) {
+    if (xs.forEach) return xs.forEach(fn)
+    else for (var i = 0; i < xs.length; i++) {
+        fn(xs[i], i, xs);
+    }
+};
+
+forEach(objectKeys(Traverse.prototype), function (key) {
+    traverse[key] = function (obj) {
+        var args = [].slice.call(arguments, 1);
+        var t = new Traverse(obj);
+        return t[key].apply(t, args);
+    };
+});
+
+var hasOwnProperty = Object.hasOwnProperty || function (obj, key) {
+    return key in obj;
+};
+
+});
+
+require.modules["optimuslime-traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
+require.modules["optimuslime~traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
+require.modules["traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
+
+
+require.register("component~emitter@master", function (exports, module) {
+
+/**
+ * Expose `Emitter`.
+ */
+
+module.exports = Emitter;
+
+/**
+ * Initialize a new `Emitter`.
+ *
+ * @api public
+ */
+
+function Emitter(obj) {
+  if (obj) return mixin(obj);
+};
+
+/**
+ * Mixin the emitter properties.
+ *
+ * @param {Object} obj
+ * @return {Object}
+ * @api private
+ */
+
+function mixin(obj) {
+  for (var key in Emitter.prototype) {
+    obj[key] = Emitter.prototype[key];
+  }
+  return obj;
+}
+
+/**
+ * Listen on the given `event` with `fn`.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.on =
+Emitter.prototype.addEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+  (this._callbacks[event] = this._callbacks[event] || [])
+    .push(fn);
+  return this;
+};
+
+/**
+ * Adds an `event` listener that will be invoked a single
+ * time then automatically removed.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.once = function(event, fn){
+  var self = this;
+  this._callbacks = this._callbacks || {};
+
+  function on() {
+    self.off(event, on);
+    fn.apply(this, arguments);
+  }
+
+  on.fn = fn;
+  this.on(event, on);
+  return this;
+};
+
+/**
+ * Remove the given callback for `event` or all
+ * registered callbacks.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.off =
+Emitter.prototype.removeListener =
+Emitter.prototype.removeAllListeners =
+Emitter.prototype.removeEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+
+  // all
+  if (0 == arguments.length) {
+    this._callbacks = {};
+    return this;
+  }
+
+  // specific event
+  var callbacks = this._callbacks[event];
+  if (!callbacks) return this;
+
+  // remove all handlers
+  if (1 == arguments.length) {
+    delete this._callbacks[event];
+    return this;
+  }
+
+  // remove specific handler
+  var cb;
+  for (var i = 0; i < callbacks.length; i++) {
+    cb = callbacks[i];
+    if (cb === fn || cb.fn === fn) {
+      callbacks.splice(i, 1);
+      break;
+    }
+  }
+  return this;
+};
+
+/**
+ * Emit `event` with the given args.
+ *
+ * @param {String} event
+ * @param {Mixed} ...
+ * @return {Emitter}
+ */
+
+Emitter.prototype.emit = function(event){
+  this._callbacks = this._callbacks || {};
+  var args = [].slice.call(arguments, 1)
+    , callbacks = this._callbacks[event];
+
+  if (callbacks) {
+    callbacks = callbacks.slice(0);
+    for (var i = 0, len = callbacks.length; i < len; ++i) {
+      callbacks[i].apply(this, args);
+    }
+  }
+
+  return this;
+};
+
+/**
+ * Return array of callbacks for `event`.
+ *
+ * @param {String} event
+ * @return {Array}
+ * @api public
+ */
+
+Emitter.prototype.listeners = function(event){
+  this._callbacks = this._callbacks || {};
+  return this._callbacks[event] || [];
+};
+
+/**
+ * Check if this emitter has `event` handlers.
+ *
+ * @param {String} event
+ * @return {Boolean}
+ * @api public
+ */
+
+Emitter.prototype.hasListeners = function(event){
+  return !! this.listeners(event).length;
+};
+
+});
+
+require.modules["component-emitter"] = require.modules["component~emitter@master"];
+require.modules["component~emitter"] = require.modules["component~emitter@master"];
+require.modules["emitter"] = require.modules["component~emitter@master"];
+
+
+require.register("component~worker@master", function (exports, module) {
+
+/**
+ * Module dependencies.
+ */
+
+var Emitter = require("component~emitter@master");
+var WebWorker = window.Worker;
+
+/**
+ * Expose `Worker`.
+ */
+
+module.exports = Worker;
+
+/**
+ * Initialize a new `Worker` with `script`.
+ *
+ * @param {String} script
+ * @api public
+ */
+
+function Worker(script) {
+  var self = this;
+  this.ids = 0;
+  this.script = script;
+  this.worker = new WebWorker(script);
+  this.worker.addEventListener('message', this.onmessage.bind(this));
+  this.worker.addEventListener('error', this.onerror.bind(this));
+}
+
+/**
+ * Mixin emitter.
+ */
+
+Emitter(Worker.prototype);
+
+/**
+ * Handle messages.
+ */
+
+Worker.prototype.onmessage = function(e){
+  this.emit('message', e.data, e);
+};
+
+/**
+ * Handle errors.
+ */
+
+Worker.prototype.onerror = function(e){
+  var err = new Error(e.message);
+  err.event = e;
+  this.emit('error', err);
+};
+
+/**
+ * Terminate the worker.
+ */
+
+Worker.prototype.close = function(){
+  this.worker.terminate();
+};
+
+/**
+ * Send a `msg` with optional callback `fn`.
+ *
+ * TODO: allow passing of transferrables
+ *
+ * @param {Mixed} msg
+ * @param {Function} [fn]
+ * @api public
+ */
+
+Worker.prototype.send = function(msg, fn){
+  if (fn) this.request(msg, fn);
+  this.worker.postMessage(msg);
+};
+
+/**
+ * Send a `msg` as a request with `fn`.
+ *
+ * @param {Mixed} msg
+ * @param {Function} fn
+ * @param {Array} [transferables]
+ * @api public
+ */
+
+Worker.prototype.request = function(msg, fn, transferables){
+  var self = this;
+  var id = ++this.ids;
+
+  // req
+  msg.id = id;
+  this.worker.postMessage(msg, transferables);
+
+  // rep
+  this.on('message', onmessage);
+
+  function onmessage(msg) {
+    if (id != msg.id) return;
+    self.off('message', onmessage);
+    delete msg.id;
+    fn(msg);
+  }
+};
+
+});
+
+require.modules["component-worker"] = require.modules["component~worker@master"];
+require.modules["component~worker"] = require.modules["component~worker@master"];
+require.modules["worker"] = require.modules["component~worker@master"];
 
 
 require.register("optimuslime~el.js@master", function (exports, module) {
@@ -20021,6 +20021,122 @@ require.modules["component~pillbox"] = require.modules["component~pillbox@master
 require.modules["pillbox"] = require.modules["component~pillbox@master"];
 
 
+require.register("component~domify@master", function (exports, module) {
+
+/**
+ * Expose `parse`.
+ */
+
+module.exports = parse;
+
+/**
+ * Tests for browser support.
+ */
+
+var div = document.createElement('div');
+// Setup
+div.innerHTML = '  <link/><table></table><a href="/a">a</a><input type="checkbox"/>';
+// Make sure that link elements get serialized correctly by innerHTML
+// This requires a wrapper element in IE
+var innerHTMLBug = !div.getElementsByTagName('link').length;
+div = undefined;
+
+/**
+ * Wrap map from jquery.
+ */
+
+var map = {
+  legend: [1, '<fieldset>', '</fieldset>'],
+  tr: [2, '<table><tbody>', '</tbody></table>'],
+  col: [2, '<table><tbody></tbody><colgroup>', '</colgroup></table>'],
+  // for script/link/style tags to work in IE6-8, you have to wrap
+  // in a div with a non-whitespace character in front, ha!
+  _default: innerHTMLBug ? [1, 'X<div>', '</div>'] : [0, '', '']
+};
+
+map.td =
+map.th = [3, '<table><tbody><tr>', '</tr></tbody></table>'];
+
+map.option =
+map.optgroup = [1, '<select multiple="multiple">', '</select>'];
+
+map.thead =
+map.tbody =
+map.colgroup =
+map.caption =
+map.tfoot = [1, '<table>', '</table>'];
+
+map.text =
+map.circle =
+map.ellipse =
+map.line =
+map.path =
+map.polygon =
+map.polyline =
+map.rect = [1, '<svg xmlns="http://www.w3.org/2000/svg" version="1.1">','</svg>'];
+
+/**
+ * Parse `html` and return a DOM Node instance, which could be a TextNode,
+ * HTML DOM Node of some kind (<div> for example), or a DocumentFragment
+ * instance, depending on the contents of the `html` string.
+ *
+ * @param {String} html - HTML string to "domify"
+ * @param {Document} doc - The `document` instance to create the Node for
+ * @return {DOMNode} the TextNode, DOM Node, or DocumentFragment instance
+ * @api private
+ */
+
+function parse(html, doc) {
+  if ('string' != typeof html) throw new TypeError('String expected');
+
+  // default to the global `document` object
+  if (!doc) doc = document;
+
+  // tag name
+  var m = /<([\w:]+)/.exec(html);
+  if (!m) return doc.createTextNode(html);
+
+  html = html.replace(/^\s+|\s+$/g, ''); // Remove leading/trailing whitespace
+
+  var tag = m[1];
+
+  // body support
+  if (tag == 'body') {
+    var el = doc.createElement('html');
+    el.innerHTML = html;
+    return el.removeChild(el.lastChild);
+  }
+
+  // wrap map
+  var wrap = map[tag] || map._default;
+  var depth = wrap[0];
+  var prefix = wrap[1];
+  var suffix = wrap[2];
+  var el = doc.createElement('div');
+  el.innerHTML = prefix + html + suffix;
+  while (depth--) el = el.lastChild;
+
+  // one element
+  if (el.firstChild == el.lastChild) {
+    return el.removeChild(el.firstChild);
+  }
+
+  // several elements
+  var fragment = doc.createDocumentFragment();
+  while (el.firstChild) {
+    fragment.appendChild(el.removeChild(el.firstChild));
+  }
+
+  return fragment;
+}
+
+});
+
+require.modules["component-domify"] = require.modules["component~domify@master"];
+require.modules["component~domify"] = require.modules["component~domify@master"];
+require.modules["domify"] = require.modules["component~domify@master"];
+
+
 require.register("timoxley~next-tick@0.0.2", function (exports, module) {
 "use strict"
 
@@ -20061,56 +20177,6 @@ else if (typeof window == 'undefined' || window.ActiveXObject || !window.postMes
 require.modules["timoxley-next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
 require.modules["timoxley~next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
 require.modules["next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
-
-
-require.register("component~once@0.0.1", function (exports, module) {
-
-/**
- * Identifier.
- */
-
-var n = 0;
-
-/**
- * Global.
- */
-
-var global = (function(){ return this })();
-
-/**
- * Make `fn` callable only once.
- *
- * @param {Function} fn
- * @return {Function}
- * @api public
- */
-
-module.exports = function(fn) {
-  var id = n++;
-
-  function once(){
-    // no receiver
-    if (this == global) {
-      if (once.called) return;
-      once.called = true;
-      return fn.apply(this, arguments);
-    }
-
-    // receiver
-    var key = '__called_' + id + '__';
-    if (this[key]) return;
-    this[key] = true;
-    return fn.apply(this, arguments);
-  }
-
-  return once;
-};
-
-});
-
-require.modules["component-once"] = require.modules["component~once@0.0.1"];
-require.modules["component~once"] = require.modules["component~once@0.0.1"];
-require.modules["once"] = require.modules["component~once@0.0.1"];
 
 
 require.register("yields~has-transitions@0.0.1", function (exports, module) {
@@ -20252,6 +20318,56 @@ CssEmitter.prototype.once = function(fn){
 require.modules["ecarter-css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
 require.modules["ecarter~css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
 require.modules["css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
+
+
+require.register("component~once@0.0.1", function (exports, module) {
+
+/**
+ * Identifier.
+ */
+
+var n = 0;
+
+/**
+ * Global.
+ */
+
+var global = (function(){ return this })();
+
+/**
+ * Make `fn` callable only once.
+ *
+ * @param {Function} fn
+ * @return {Function}
+ * @api public
+ */
+
+module.exports = function(fn) {
+  var id = n++;
+
+  function once(){
+    // no receiver
+    if (this == global) {
+      if (once.called) return;
+      once.called = true;
+      return fn.apply(this, arguments);
+    }
+
+    // receiver
+    var key = '__called_' + id + '__';
+    if (this[key]) return;
+    this[key] = true;
+    return fn.apply(this, arguments);
+  }
+
+  return once;
+};
+
+});
+
+require.modules["component-once"] = require.modules["component~once@0.0.1"];
+require.modules["component~once"] = require.modules["component~once@0.0.1"];
+require.modules["once"] = require.modules["component~once@0.0.1"];
 
 
 require.register("yields~after-transition@0.0.1", function (exports, module) {
@@ -20693,122 +20809,6 @@ require.modules["ianstormtaylor~classes"] = require.modules["ianstormtaylor~clas
 require.modules["classes"] = require.modules["ianstormtaylor~classes@0.1.0"];
 
 
-require.register("component~domify@master", function (exports, module) {
-
-/**
- * Expose `parse`.
- */
-
-module.exports = parse;
-
-/**
- * Tests for browser support.
- */
-
-var div = document.createElement('div');
-// Setup
-div.innerHTML = '  <link/><table></table><a href="/a">a</a><input type="checkbox"/>';
-// Make sure that link elements get serialized correctly by innerHTML
-// This requires a wrapper element in IE
-var innerHTMLBug = !div.getElementsByTagName('link').length;
-div = undefined;
-
-/**
- * Wrap map from jquery.
- */
-
-var map = {
-  legend: [1, '<fieldset>', '</fieldset>'],
-  tr: [2, '<table><tbody>', '</tbody></table>'],
-  col: [2, '<table><tbody></tbody><colgroup>', '</colgroup></table>'],
-  // for script/link/style tags to work in IE6-8, you have to wrap
-  // in a div with a non-whitespace character in front, ha!
-  _default: innerHTMLBug ? [1, 'X<div>', '</div>'] : [0, '', '']
-};
-
-map.td =
-map.th = [3, '<table><tbody><tr>', '</tr></tbody></table>'];
-
-map.option =
-map.optgroup = [1, '<select multiple="multiple">', '</select>'];
-
-map.thead =
-map.tbody =
-map.colgroup =
-map.caption =
-map.tfoot = [1, '<table>', '</table>'];
-
-map.text =
-map.circle =
-map.ellipse =
-map.line =
-map.path =
-map.polygon =
-map.polyline =
-map.rect = [1, '<svg xmlns="http://www.w3.org/2000/svg" version="1.1">','</svg>'];
-
-/**
- * Parse `html` and return a DOM Node instance, which could be a TextNode,
- * HTML DOM Node of some kind (<div> for example), or a DocumentFragment
- * instance, depending on the contents of the `html` string.
- *
- * @param {String} html - HTML string to "domify"
- * @param {Document} doc - The `document` instance to create the Node for
- * @return {DOMNode} the TextNode, DOM Node, or DocumentFragment instance
- * @api private
- */
-
-function parse(html, doc) {
-  if ('string' != typeof html) throw new TypeError('String expected');
-
-  // default to the global `document` object
-  if (!doc) doc = document;
-
-  // tag name
-  var m = /<([\w:]+)/.exec(html);
-  if (!m) return doc.createTextNode(html);
-
-  html = html.replace(/^\s+|\s+$/g, ''); // Remove leading/trailing whitespace
-
-  var tag = m[1];
-
-  // body support
-  if (tag == 'body') {
-    var el = doc.createElement('html');
-    el.innerHTML = html;
-    return el.removeChild(el.lastChild);
-  }
-
-  // wrap map
-  var wrap = map[tag] || map._default;
-  var depth = wrap[0];
-  var prefix = wrap[1];
-  var suffix = wrap[2];
-  var el = doc.createElement('div');
-  el.innerHTML = prefix + html + suffix;
-  while (depth--) el = el.lastChild;
-
-  // one element
-  if (el.firstChild == el.lastChild) {
-    return el.removeChild(el.firstChild);
-  }
-
-  // several elements
-  var fragment = doc.createDocumentFragment();
-  while (el.firstChild) {
-    fragment.appendChild(el.removeChild(el.firstChild));
-  }
-
-  return fragment;
-}
-
-});
-
-require.modules["component-domify"] = require.modules["component~domify@master"];
-require.modules["component~domify"] = require.modules["component~domify@master"];
-require.modules["domify"] = require.modules["component~domify@master"];
-
-
 require.register("optimuslime~overlay@master", function (exports, module) {
 var template = require("optimuslime~overlay@master/lib/index.html");
 var domify = require("component~domify@master");
@@ -21012,162 +21012,6 @@ require.modules["optimuslime~modal"] = require.modules["optimuslime~modal@master
 require.modules["modal"] = require.modules["optimuslime~modal@master"];
 
 
-require.register("./libs/webworker-queue", function (exports, module) {
-
-var WebWorkerClass = require("component~worker@master");
-
-module.exports = webworkerqueue;
-
-function webworkerqueue(scriptName, workerCount)
-{ 
-    var self = this;
-
-    self.nextWorker = 0;
-    
-    //queue to pull from 
-    self.taskQueue = [];
-    self.taskCallbacks = {};
-
-    //store the web workers
-    self.workers = [];
-
-    //how many workers available
-    self.availableWorkers = workerCount;
-
-    //note who is in use
-    self.inUseWorkers = {};
-    
-    //and the full count of workers
-    self.totalWorkers = workerCount;
-
-    for(var i=0; i < workerCount; i++){
-
-        var webworker = new WebWorkerClass(scriptName);
-
-        //create a new worker id (simply the index will do)
-        var workerID = i;
-
-        //label our workers
-        webworker.workerID = workerID;
-
-        //create a webworker message callback unique for this worker
-        //webworker in this case is not a raw webworker, but an emitter object -- so we attach to the message object
-        webworker.on('message', uniqueWorkerCallback(workerID));
-
-        //store the worker inside here
-        self.workers.push(webworker);
-    }
-
-
-    function uniqueWorkerCallback(workerID)
-    {
-        return function(data){
-            //simply pass on the message with the tagged worker
-            workerMessage(workerID, data);
-        }
-    }
-
-    function getNextAvailableWorker()
-    {
-        //none available, return null
-        if(self.availableWorkers == 0)
-            return;
-
-        //otherwise, we know someone is available
-        setNextAvailableIx();
-
-        //grab the next worker available
-        var worker = self.workers[self.nextWorker];
-
-        //note that it's now in use
-        self.inUseWorkers[self.nextWorker] = true;
-
-        //less workers available
-        self.availableWorkers--;
-
-        //send back the worker
-        return worker;
-    }
-
-    function setNextAvailableIx()
-    {
-        for(var i=0; i < self.totalWorkers; i++)
-        {
-            //check if it's in use
-            if(!self.inUseWorkers[i])
-            {
-                self.nextWorker = i;
-                break;
-            }
-        }
-    }
-
-    //this function takes a workerID and a data object -- called from the worker
-    function workerMessage(workerID, data)
-    {
-        //we got our message, we pass it for callback
-
-        //we know what workerID, so pull the associated callback
-        var cb = self.taskCallbacks[workerID];
-
-        //now remove all things associated with the task
-        delete self.taskCallbacks[workerID];
-
-        //free the worker
-        delete self.inUseWorkers[workerID];
-
-        //now on the market :)
-        self.availableWorkers++;
-
-        //prepare the callback -- if it exists
-        if(cb)
-        {
-            //send the data back, pure and simple
-            cb(data);
-        }
-
-        //now, do we have any queue events waiting?
-        if(self.taskQueue.length > 0)
-        {
-            //now we need to process the task
-            var taskObject = self.taskQueue.shift();
-
-            //okay, queue it up! -- this should work immediately becuase we just freed a worker
-            self.queueJob(taskObject.data, taskObject.callback);
-        }
-    }
-
-
-    self.queueJob = function(data, callback)
-    {
-
-        //if we have any available workers, just assign it directly, with a callback stored
-        var worker = getNextAvailableWorker();
-
-        if(worker)
-        {
-            //we have a worker to issue commands to now
-            //this is the callback we engage once the message comes back
-            self.taskCallbacks[worker.workerID] = callback;
-
-            //send the data now, thanks -- we'll handle callback in workerMessage function
-            worker.send(data);
-        }
-        else
-        {   
-            //otherwise, we need to add the item to the queue
-            self.taskQueue.push({data: data, callback: callback});
-            //the queue is cleared when the other workers return from their functions
-        }
-    }
-
-}
-
-});
-
-require.modules["webworker-queue"] = require.modules["./libs/webworker-queue"];
-
-
 require.register("./libs/win-home-ui", function (exports, module) {
 
 var emitter = require("component~emitter@master");
@@ -21231,6 +21075,7 @@ function winhome(backbone, globalConfig, localConfig)
 		var tEl = element('div', {style: "font-size: 2em;"}, th2);
 		
 		var phyloTitle = options.phylogenyLocation;
+		var startFromScratch = options.startFromScratchLocation;
 
 		//if specified, link out to a new site!
 		if(phyloTitle){
@@ -21239,6 +21084,15 @@ function winhome(backbone, globalConfig, localConfig)
 			phyloLink.appendChild(link)
 
 			tEl.appendChild(phyloLink);
+		}
+
+		if(startFromScratch)
+		{
+			var scratchLink = document.createElement('h3');
+			var link = element('a', {href: startFromScratch, class: "phyloLink"}, 'Start From Scratch');
+			scratchLink.appendChild(link)
+
+			tEl.appendChild(scratchLink);
 		}
 
 		var loading = element('div', "(images loading...)");
@@ -21991,6 +21845,255 @@ base64.encode = function(s) {
 require.modules["geno-to-picture"] = require.modules["./libs/geno-to-picture"];
 
 
+require.register("./libs/webworker-queue", function (exports, module) {
+
+var WebWorkerClass = require("component~worker@master");
+
+module.exports = webworkerqueue;
+
+function webworkerqueue(scriptName, workerCount)
+{ 
+    var self = this;
+
+    self.nextWorker = 0;
+    
+    //queue to pull from 
+    self.taskQueue = [];
+    self.taskCallbacks = {};
+
+    //store the web workers
+    self.workers = [];
+
+    //how many workers available
+    self.availableWorkers = workerCount;
+
+    //note who is in use
+    self.inUseWorkers = {};
+    
+    //and the full count of workers
+    self.totalWorkers = workerCount;
+
+    for(var i=0; i < workerCount; i++){
+
+        var webworker = new WebWorkerClass(scriptName);
+
+        //create a new worker id (simply the index will do)
+        var workerID = i;
+
+        //label our workers
+        webworker.workerID = workerID;
+
+        //create a webworker message callback unique for this worker
+        //webworker in this case is not a raw webworker, but an emitter object -- so we attach to the message object
+        webworker.on('message', uniqueWorkerCallback(workerID));
+
+        //store the worker inside here
+        self.workers.push(webworker);
+    }
+
+
+    function uniqueWorkerCallback(workerID)
+    {
+        return function(data){
+            //simply pass on the message with the tagged worker
+            workerMessage(workerID, data);
+        }
+    }
+
+    function getNextAvailableWorker()
+    {
+        //none available, return null
+        if(self.availableWorkers == 0)
+            return;
+
+        //otherwise, we know someone is available
+        setNextAvailableIx();
+
+        //grab the next worker available
+        var worker = self.workers[self.nextWorker];
+
+        //note that it's now in use
+        self.inUseWorkers[self.nextWorker] = true;
+
+        //less workers available
+        self.availableWorkers--;
+
+        //send back the worker
+        return worker;
+    }
+
+    function setNextAvailableIx()
+    {
+        for(var i=0; i < self.totalWorkers; i++)
+        {
+            //check if it's in use
+            if(!self.inUseWorkers[i])
+            {
+                self.nextWorker = i;
+                break;
+            }
+        }
+    }
+
+    //this function takes a workerID and a data object -- called from the worker
+    function workerMessage(workerID, data)
+    {
+        //we got our message, we pass it for callback
+
+        //we know what workerID, so pull the associated callback
+        var cb = self.taskCallbacks[workerID];
+
+        //now remove all things associated with the task
+        delete self.taskCallbacks[workerID];
+
+        //free the worker
+        delete self.inUseWorkers[workerID];
+
+        //now on the market :)
+        self.availableWorkers++;
+
+        //prepare the callback -- if it exists
+        if(cb)
+        {
+            //send the data back, pure and simple
+            cb(data);
+        }
+
+        //now, do we have any queue events waiting?
+        if(self.taskQueue.length > 0)
+        {
+            //now we need to process the task
+            var taskObject = self.taskQueue.shift();
+
+            //okay, queue it up! -- this should work immediately becuase we just freed a worker
+            self.queueJob(taskObject.data, taskObject.callback);
+        }
+    }
+
+
+    self.queueJob = function(data, callback)
+    {
+
+        //if we have any available workers, just assign it directly, with a callback stored
+        var worker = getNextAvailableWorker();
+
+        if(worker)
+        {
+            //we have a worker to issue commands to now
+            //this is the callback we engage once the message comes back
+            self.taskCallbacks[worker.workerID] = callback;
+
+            //send the data now, thanks -- we'll handle callback in workerMessage function
+            worker.send(data);
+        }
+        else
+        {   
+            //otherwise, we need to add the item to the queue
+            self.taskQueue.push({data: data, callback: callback});
+            //the queue is cleared when the other workers return from their functions
+        }
+    }
+
+}
+
+});
+
+require.modules["webworker-queue"] = require.modules["./libs/webworker-queue"];
+
+
+require.register("./libs/win-setup", function (exports, module) {
+//here we test the insert functions
+//making sure the database is filled with objects of the schema type
+// var wMath = require('win-utils').math;
+
+module.exports = winsetup;
+
+function winsetup(requiredEvents, moduleJSON, moduleConfigs, finished)
+{ 
+    var winback = require("optimuslime~win-backbone@0.0.4-5");
+
+    var Q = require("techjacker~q@master");
+
+    var backbone, generator, backEmit, backLog;
+
+    var emptyModule = 
+    {
+        winFunction : "experiment",
+        eventCallbacks : function(){ return {}; },
+        requiredEvents : function() {
+            return requiredEvents;
+        }
+    };
+
+    //add our own empty module onto this object
+    moduleJSON["setupExperiment"] = emptyModule;
+    
+    var qBackboneResponse = function()
+    {
+        var defer = Q.defer();
+        // self.log('qBBRes: Original: ', arguments);
+
+        //first add our own function type
+        var augmentArgs = arguments;
+        // [].splice.call(augmentArgs, 0, 0, self.winFunction);
+        //make some assumptions about the returning call
+        var callback = function(err)
+        {
+            if(err)
+            {
+              backLog("QCall fail: ", err);
+                defer.reject(err);
+            }
+            else
+            {
+                //remove the error object, send the info onwards
+                [].shift.call(arguments);
+                if(arguments.length > 1)
+                    defer.resolve(arguments);
+                else
+                    defer.resolve.apply(defer, arguments);
+            }
+        };
+
+        //then we add our callback to the end of our function -- which will get resolved here with whatever arguments are passed back
+        [].push.call(augmentArgs, callback);
+
+        // self.log('qBBRes: Augmented: ', augmentArgs);
+        //make the call, we'll catch it inside the callback!
+        backEmit.apply(backEmit, augmentArgs);
+
+        return defer.promise;
+    }
+
+    //do this up front yo
+    backbone = new winback();
+
+    backbone.logLevel = backbone.testing;
+
+    backEmit = backbone.getEmitter(emptyModule);
+    backLog = backbone.getLogger({winFunction:"experiment"});
+    backLog.logLevel = backbone.testing;
+
+    //loading modules is synchronous
+    backbone.loadModules(moduleJSON, moduleConfigs);
+
+    var registeredEvents = backbone.registeredEvents();
+    var requiredEvents = backbone.moduleRequirements();
+      
+    backLog('Backbone Events registered: ', registeredEvents);
+    backLog('Required: ', requiredEvents);
+
+    backbone.initializeModules(function(err)
+    {
+      backLog("Finished Module Init");
+      finished(err, {logger: backLog, emitter: backEmit, backbone: backbone, qCall: qBackboneResponse});
+    });
+}
+});
+
+require.modules["win-setup"] = require.modules["./libs/win-setup"];
+
+
 require.register("./libs/cppn-additions", function (exports, module) {
 //here we test the insert functions
 //making sure the database is filled with objects of the schema type
@@ -22107,99 +22210,6 @@ function cppnAdditions()
 });
 
 require.modules["cppn-additions"] = require.modules["./libs/cppn-additions"];
-
-
-require.register("./libs/win-setup", function (exports, module) {
-//here we test the insert functions
-//making sure the database is filled with objects of the schema type
-// var wMath = require('win-utils').math;
-
-module.exports = winsetup;
-
-function winsetup(requiredEvents, moduleJSON, moduleConfigs, finished)
-{ 
-    var winback = require("optimuslime~win-backbone@0.0.4-5");
-
-    var Q = require("techjacker~q@master");
-
-    var backbone, generator, backEmit, backLog;
-
-    var emptyModule = 
-    {
-        winFunction : "experiment",
-        eventCallbacks : function(){ return {}; },
-        requiredEvents : function() {
-            return requiredEvents;
-        }
-    };
-
-    //add our own empty module onto this object
-    moduleJSON["setupExperiment"] = emptyModule;
-    
-    var qBackboneResponse = function()
-    {
-        var defer = Q.defer();
-        // self.log('qBBRes: Original: ', arguments);
-
-        //first add our own function type
-        var augmentArgs = arguments;
-        // [].splice.call(augmentArgs, 0, 0, self.winFunction);
-        //make some assumptions about the returning call
-        var callback = function(err)
-        {
-            if(err)
-            {
-              backLog("QCall fail: ", err);
-                defer.reject(err);
-            }
-            else
-            {
-                //remove the error object, send the info onwards
-                [].shift.call(arguments);
-                if(arguments.length > 1)
-                    defer.resolve(arguments);
-                else
-                    defer.resolve.apply(defer, arguments);
-            }
-        };
-
-        //then we add our callback to the end of our function -- which will get resolved here with whatever arguments are passed back
-        [].push.call(augmentArgs, callback);
-
-        // self.log('qBBRes: Augmented: ', augmentArgs);
-        //make the call, we'll catch it inside the callback!
-        backEmit.apply(backEmit, augmentArgs);
-
-        return defer.promise;
-    }
-
-    //do this up front yo
-    backbone = new winback();
-
-    backbone.logLevel = backbone.testing;
-
-    backEmit = backbone.getEmitter(emptyModule);
-    backLog = backbone.getLogger({winFunction:"experiment"});
-    backLog.logLevel = backbone.testing;
-
-    //loading modules is synchronous
-    backbone.loadModules(moduleJSON, moduleConfigs);
-
-    var registeredEvents = backbone.registeredEvents();
-    var requiredEvents = backbone.moduleRequirements();
-      
-    backLog('Backbone Events registered: ', registeredEvents);
-    backLog('Required: ', requiredEvents);
-
-    backbone.initializeModules(function(err)
-    {
-      backLog("Finished Module Init");
-      finished(err, {logger: backLog, emitter: backEmit, backbone: backbone, qCall: qBackboneResponse});
-    });
-}
-});
-
-require.modules["win-setup"] = require.modules["./libs/win-setup"];
 
 
 require.register("./libs/pbEncoding", function (exports, module) {

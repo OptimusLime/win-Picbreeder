@@ -166,6 +166,17 @@ program
       buildProject(defaultConfigLocation, {install: true});
   });
 
+  program
+  .command('launch')
+  .description('run construct command to install and build full module')
+  .action(function(configFile, options){
+
+    //should only need to launch both of these to start the service in theory
+    var liveServer = require("./server/server.js");
+    var wintestServer = require("./test/winTestServe.js")
+
+  });
+
 
 // program
 //   .command('exec <cmd>')

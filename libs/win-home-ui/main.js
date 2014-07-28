@@ -60,6 +60,7 @@ function winhome(backbone, globalConfig, localConfig)
 		var tEl = element('div', {style: "font-size: 2em;"}, th2);
 		
 		var phyloTitle = options.phylogenyLocation;
+		var startFromScratch = options.startFromScratchLocation;
 
 		//if specified, link out to a new site!
 		if(phyloTitle){
@@ -68,6 +69,15 @@ function winhome(backbone, globalConfig, localConfig)
 			phyloLink.appendChild(link)
 
 			tEl.appendChild(phyloLink);
+		}
+
+		if(startFromScratch)
+		{
+			var scratchLink = document.createElement('h3');
+			var link = element('a', {href: startFromScratch, class: "phyloLink"}, 'Start From Scratch');
+			scratchLink.appendChild(link)
+
+			tEl.appendChild(scratchLink);
 		}
 
 		var loading = element('div', "(images loading...)");
