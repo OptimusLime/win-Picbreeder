@@ -86,7 +86,6 @@ function buildProject(configFile, options)
       // only copy `images` to the build folder
       build.files(tree)
         .use('images', build.plugins.symlink())
-        .use('images', build.plugins.symlink())
         .end(function(err, string)
         {
           // console.log(build.plugins);

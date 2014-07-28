@@ -3,7 +3,7 @@
 <head>
 	<meta charset=utf-8 />
 	<title></title>
-	<script type="text/javascript" src="/apps/win-Picbreeder/build/build.js"></script>
+	<script type="text/javascript" src="./build/build.js"></script>
     
     <!-- // <script type="text/javascript" src="http://cdnjs.cloudflare.com/ajax/libs/d3/2.10.0/d3.v2.min.js"></script> -->
    
@@ -15,7 +15,7 @@
     <!-- // <script type="text/javascript" src="d3/d3.layout.js"></script> -->
 
 	<script src="http://cdnjs.cloudflare.com/ajax/libs/prettify/188.0.0/prettify.js"></script>
-	<script src="/apps/win-Picbreeder/js/vkbeautify.beta.js"></script>
+	<script src="./js/vkbeautify.beta.js"></script>
 
     <!-- <link type="text/css" rel="stylesheet" href="http://mbostock.github.io/d3/talk/20110921/style.css"/> -->
     <style>
@@ -84,8 +84,8 @@
 	</svg>
 
 	<script src="http://d3js.org/d3.v3.min.js"></script>
-	<script src="/apps/win-Picbreeder/js/dagre-d3.min.js"></script>
-	<script src="/apps/win-Picbreeder/js/graphlib-dot.min.js"></script>
+	<script src="./js/dagre-d3.min.js"></script>
+	<script src="./js/graphlib-dot.min.js"></script>
 	<!-- // <script type="text/javascript" src="http://cpettitt.github.io/project/dagre-d3/latest/dagre-d3.min.js"></script> -->
 
 	<!-- Now we start messing with the flex object -->
@@ -322,9 +322,12 @@
 
 			var testingLogLevel = 10;
 
+			var pbConfig = require('win-picbreeder/pbConfig.json');
+
 			var globalConfig = {
 				// staticServer:  "http://localhost:8000",
-				server : "http://winark.org/apps/win-Picbreeder"
+				server : pbConfig.serverRoot + (pbConfig.serverPort ? pbConfig.serverPort : "") + pbConfig.apiRoot 
+				// server : "http://winark.org/apps/win-Picbreeder"
 				// ,
 				// port: 3000
 			};
