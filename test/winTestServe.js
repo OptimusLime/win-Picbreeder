@@ -40,8 +40,9 @@ pbServer(function(err, pbInnerApp)
 app.get(apiRoot + "*", function(req,res, next)
 {
         //strip the app part of the req url 
-
-        req.url = req.url.replace(apiRoot, "");
+         
+	if(apiRoot != "")
+         req.url = req.url.replace(apiRoot, "/");
 
         console.log("New URL: ", req.url);
 
@@ -51,8 +52,8 @@ app.get(apiRoot + "*", function(req,res, next)
 app.post(apiRoot + "*", function(req,res, next)
 {
         //strip the app part of the req url 
-
-        req.url = req.url.replace(apiRoot, "");
+        if(apiRoot != "")
+         req.url = req.url.replace(apiRoot, "/");
 
         console.log("New POST URL: ", req.url);
 
