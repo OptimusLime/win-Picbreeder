@@ -984,133 +984,6 @@ require.modules["optimuslime~traverse"] = require.modules["optimuslime~traverse@
 require.modules["traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
 
 
-require.register("optimuslime~el.js@master", function (exports, module) {
-/**
-* el.js v0.3 - A JavaScript Node Creation Tool
-*
-* https://github.com/markgandolfo/el.js
-*
-* Copyright 2013 Mark Gandolfo and other contributors
-* Released under the MIT license.
-* http://en.wikipedia.org/wiki/MIT_License
-*/
-
-module.exports = el;
-
-function el(tagName, attrs, child) {
-  // Pattern to match id & class names
-  var pattern = /([a-z]+|#[\w-\d]+|\.[\w\d-]+)/g
-
-  if(arguments.length === 2) {
-    if(attrs instanceof Array
-    || typeof attrs === 'function'
-    || typeof attrs === 'string'
-    || attrs.constructor !== Object
-    ) {
-      child = attrs;
-      attrs = undefined;
-    }
-
-  }
-  // does the user pass attributes in, if not set an empty object up
-  attrs = typeof attrs !== 'undefined' ? attrs : {};
-  child = typeof child !== 'undefined' ? child : [];
-  child = child instanceof Array ? child : [child];
-
-  // run the pattern over the tagname an attempt to pull out class & id attributes
-  // shift the first record out as it's the element name
-  matched = tagName.match(pattern);
-  tagName = matched[0];
-  matched.shift();
-
-  // Iterate over the matches and concat the attrs to either class or id keys in attrs json object
-  for (var m in matched) {
-    if(matched[m][0] == '.') {
-      if(attrs['class'] == undefined) {
-        attrs['class'] = matched[m].substring(1, matched[m].length);
-      } else {
-        attrs['class'] = attrs['class'] + ' ' + matched[m].substring(1, matched[m].length);
-      }
-    } else if(matched[m][0] == '#') {
-      if(attrs['id'] == undefined) {
-        attrs['id'] = matched[m].substring(1, matched[m].length)
-      } else {
-        // Feels dirty having multiple id's, but it's allowed: http://www.w3.org/TR/selectors/#id-selectors
-        attrs['id'] = attrs['id'] + ' ' + matched[m].substring(1, matched[m].length);
-      }
-    }
-  }
-
-  // create the element
-  var element = document.createElement(tagName);
-  for(var i = 0; i < child.length; i += 1) {
-    (function(child){
-      switch(typeof child) {
-        case 'object':
-          element.appendChild(child);
-          break;
-        case 'function':
-          var discardDoneCallbackResult = false;
-          var doneCallback = function doneCallback(content) {
-            if (!discardDoneCallbackResult) {
-              element.appendChild(content);
-            }
-          }
-          var result = child.apply(null, [doneCallback])
-          if(typeof result != 'undefined') {
-            discardDoneCallbackResult = true;
-            element.appendChild(result);
-          }
-          break;
-        case 'string':
-          element.appendChild(document.createTextNode(child));
-        default:
-          //???
-      }
-    }(child[i]));
-
-  }
-
-  for (var key in attrs) {
-    if (attrs.hasOwnProperty(key)) {
-      element.setAttribute(key, attrs[key]);
-    }
-  }
-
-  return element;
-};
-
-// alias
-el.create = el.c = el;
-
-// vanity methods
-el.img = function(attrs) {
-  return el.create('img', attrs);
-};
-
-el.a = function(attrs, child) {
-  return el.create('a', attrs, child);
-};
-
-el.div = function(attrs, child) {
-  return el.create('div', attrs, child);
-};
-
-el.p = function(attrs, child) {
-  return el.create('p', attrs, child);
-};
-
-el.input = function(attrs, child) {
-  return el.create('input', attrs);
-};
-
-});
-
-require.modules["optimuslime-el.js"] = require.modules["optimuslime~el.js@master"];
-require.modules["optimuslime~el.js"] = require.modules["optimuslime~el.js@master"];
-require.modules["el.js"] = require.modules["optimuslime~el.js@master"];
-
-
 require.register("optimuslime~win-utils@master", function (exports, module) {
 
 var winutils = {};
@@ -2491,6 +2364,133 @@ function winiec(backbone, globalConfig, localConfig)
 require.modules["optimuslime-win-iec"] = require.modules["optimuslime~win-iec@0.0.2-6"];
 require.modules["optimuslime~win-iec"] = require.modules["optimuslime~win-iec@0.0.2-6"];
 require.modules["win-iec"] = require.modules["optimuslime~win-iec@0.0.2-6"];
+
+
+require.register("optimuslime~el.js@master", function (exports, module) {
+/**
+* el.js v0.3 - A JavaScript Node Creation Tool
+*
+* https://github.com/markgandolfo/el.js
+*
+* Copyright 2013 Mark Gandolfo and other contributors
+* Released under the MIT license.
+* http://en.wikipedia.org/wiki/MIT_License
+*/
+
+module.exports = el;
+
+function el(tagName, attrs, child) {
+  // Pattern to match id & class names
+  var pattern = /([a-z]+|#[\w-\d]+|\.[\w\d-]+)/g
+
+  if(arguments.length === 2) {
+    if(attrs instanceof Array
+    || typeof attrs === 'function'
+    || typeof attrs === 'string'
+    || attrs.constructor !== Object
+    ) {
+      child = attrs;
+      attrs = undefined;
+    }
+
+  }
+  // does the user pass attributes in, if not set an empty object up
+  attrs = typeof attrs !== 'undefined' ? attrs : {};
+  child = typeof child !== 'undefined' ? child : [];
+  child = child instanceof Array ? child : [child];
+
+  // run the pattern over the tagname an attempt to pull out class & id attributes
+  // shift the first record out as it's the element name
+  matched = tagName.match(pattern);
+  tagName = matched[0];
+  matched.shift();
+
+  // Iterate over the matches and concat the attrs to either class or id keys in attrs json object
+  for (var m in matched) {
+    if(matched[m][0] == '.') {
+      if(attrs['class'] == undefined) {
+        attrs['class'] = matched[m].substring(1, matched[m].length);
+      } else {
+        attrs['class'] = attrs['class'] + ' ' + matched[m].substring(1, matched[m].length);
+      }
+    } else if(matched[m][0] == '#') {
+      if(attrs['id'] == undefined) {
+        attrs['id'] = matched[m].substring(1, matched[m].length)
+      } else {
+        // Feels dirty having multiple id's, but it's allowed: http://www.w3.org/TR/selectors/#id-selectors
+        attrs['id'] = attrs['id'] + ' ' + matched[m].substring(1, matched[m].length);
+      }
+    }
+  }
+
+  // create the element
+  var element = document.createElement(tagName);
+  for(var i = 0; i < child.length; i += 1) {
+    (function(child){
+      switch(typeof child) {
+        case 'object':
+          element.appendChild(child);
+          break;
+        case 'function':
+          var discardDoneCallbackResult = false;
+          var doneCallback = function doneCallback(content) {
+            if (!discardDoneCallbackResult) {
+              element.appendChild(content);
+            }
+          }
+          var result = child.apply(null, [doneCallback])
+          if(typeof result != 'undefined') {
+            discardDoneCallbackResult = true;
+            element.appendChild(result);
+          }
+          break;
+        case 'string':
+          element.appendChild(document.createTextNode(child));
+        default:
+          //???
+      }
+    }(child[i]));
+
+  }
+
+  for (var key in attrs) {
+    if (attrs.hasOwnProperty(key)) {
+      element.setAttribute(key, attrs[key]);
+    }
+  }
+
+  return element;
+};
+
+// alias
+el.create = el.c = el;
+
+// vanity methods
+el.img = function(attrs) {
+  return el.create('img', attrs);
+};
+
+el.a = function(attrs, child) {
+  return el.create('a', attrs, child);
+};
+
+el.div = function(attrs, child) {
+  return el.create('div', attrs, child);
+};
+
+el.p = function(attrs, child) {
+  return el.create('p', attrs, child);
+};
+
+el.input = function(attrs, child) {
+  return el.create('input', attrs);
+};
+
+});
+
+require.modules["optimuslime-el.js"] = require.modules["optimuslime~el.js@master"];
+require.modules["optimuslime~el.js"] = require.modules["optimuslime~el.js@master"];
+require.modules["el.js"] = require.modules["optimuslime~el.js@master"];
 
 
 require.register("component~reduce@1.0.1", function (exports, module) {
@@ -19149,47 +19149,6 @@ require.modules["component~keyname"] = require.modules["component~keyname@0.0.1"
 require.modules["keyname"] = require.modules["component~keyname@0.0.1"];
 
 
-require.register("component~type@1.0.0", function (exports, module) {
-
-/**
- * toString ref.
- */
-
-var toString = Object.prototype.toString;
-
-/**
- * Return the type of `val`.
- *
- * @param {Mixed} val
- * @return {String}
- * @api public
- */
-
-module.exports = function(val){
-  switch (toString.call(val)) {
-    case '[object Function]': return 'function';
-    case '[object Date]': return 'date';
-    case '[object RegExp]': return 'regexp';
-    case '[object Arguments]': return 'arguments';
-    case '[object Array]': return 'array';
-    case '[object String]': return 'string';
-  }
-
-  if (val === null) return 'null';
-  if (val === undefined) return 'undefined';
-  if (val && val.nodeType === 1) return 'element';
-  if (val === Object(val)) return 'object';
-
-  return typeof val;
-};
-
-});
-
-require.modules["component-type"] = require.modules["component~type@1.0.0"];
-require.modules["component~type"] = require.modules["component~type@1.0.0"];
-require.modules["type"] = require.modules["component~type@1.0.0"];
-
-
 require.register("component~props@1.1.2", function (exports, module) {
 /**
  * Global Names
@@ -19443,6 +19402,47 @@ function stripNested (prop, str, val) {
 require.modules["component-to-function"] = require.modules["component~to-function@2.0.5"];
 require.modules["component~to-function"] = require.modules["component~to-function@2.0.5"];
 require.modules["to-function"] = require.modules["component~to-function@2.0.5"];
+
+
+require.register("component~type@1.0.0", function (exports, module) {
+
+/**
+ * toString ref.
+ */
+
+var toString = Object.prototype.toString;
+
+/**
+ * Return the type of `val`.
+ *
+ * @param {Mixed} val
+ * @return {String}
+ * @api public
+ */
+
+module.exports = function(val){
+  switch (toString.call(val)) {
+    case '[object Function]': return 'function';
+    case '[object Date]': return 'date';
+    case '[object RegExp]': return 'regexp';
+    case '[object Arguments]': return 'arguments';
+    case '[object Array]': return 'array';
+    case '[object String]': return 'string';
+  }
+
+  if (val === null) return 'null';
+  if (val === undefined) return 'undefined';
+  if (val && val.nodeType === 1) return 'element';
+  if (val === Object(val)) return 'object';
+
+  return typeof val;
+};
+
+});
+
+require.modules["component-type"] = require.modules["component~type@1.0.0"];
+require.modules["component~type"] = require.modules["component~type@1.0.0"];
+require.modules["type"] = require.modules["component~type@1.0.0"];
 
 
 require.register("component~each@0.2.5", function (exports, module) {
@@ -20021,187 +20021,6 @@ require.modules["component~pillbox"] = require.modules["component~pillbox@master
 require.modules["pillbox"] = require.modules["component~pillbox@master"];
 
 
-require.register("component~domify@1.3.1", function (exports, module) {
-
-/**
- * Expose `parse`.
- */
-
-module.exports = parse;
-
-/**
- * Tests for browser support.
- */
-
-var div = document.createElement('div');
-// Setup
-div.innerHTML = '  <link/><table></table><a href="/a">a</a><input type="checkbox"/>';
-// Make sure that link elements get serialized correctly by innerHTML
-// This requires a wrapper element in IE
-var innerHTMLBug = !div.getElementsByTagName('link').length;
-div = undefined;
-
-/**
- * Wrap map from jquery.
- */
-
-var map = {
-  legend: [1, '<fieldset>', '</fieldset>'],
-  tr: [2, '<table><tbody>', '</tbody></table>'],
-  col: [2, '<table><tbody></tbody><colgroup>', '</colgroup></table>'],
-  // for script/link/style tags to work in IE6-8, you have to wrap
-  // in a div with a non-whitespace character in front, ha!
-  _default: innerHTMLBug ? [1, 'X<div>', '</div>'] : [0, '', '']
-};
-
-map.td =
-map.th = [3, '<table><tbody><tr>', '</tr></tbody></table>'];
-
-map.option =
-map.optgroup = [1, '<select multiple="multiple">', '</select>'];
-
-map.thead =
-map.tbody =
-map.colgroup =
-map.caption =
-map.tfoot = [1, '<table>', '</table>'];
-
-map.text =
-map.circle =
-map.ellipse =
-map.line =
-map.path =
-map.polygon =
-map.polyline =
-map.rect = [1, '<svg xmlns="http://www.w3.org/2000/svg" version="1.1">','</svg>'];
-
-/**
- * Parse `html` and return a DOM Node instance, which could be a TextNode,
- * HTML DOM Node of some kind (<div> for example), or a DocumentFragment
- * instance, depending on the contents of the `html` string.
- *
- * @param {String} html - HTML string to "domify"
- * @param {Document} doc - The `document` instance to create the Node for
- * @return {DOMNode} the TextNode, DOM Node, or DocumentFragment instance
- * @api private
- */
-
-function parse(html, doc) {
-  if ('string' != typeof html) throw new TypeError('String expected');
-
-  // default to the global `document` object
-  if (!doc) doc = document;
-
-  // tag name
-  var m = /<([\w:]+)/.exec(html);
-  if (!m) return doc.createTextNode(html);
-
-  html = html.replace(/^\s+|\s+$/g, ''); // Remove leading/trailing whitespace
-
-  var tag = m[1];
-
-  // body support
-  if (tag == 'body') {
-    var el = doc.createElement('html');
-    el.innerHTML = html;
-    return el.removeChild(el.lastChild);
-  }
-
-  // wrap map
-  var wrap = map[tag] || map._default;
-  var depth = wrap[0];
-  var prefix = wrap[1];
-  var suffix = wrap[2];
-  var el = doc.createElement('div');
-  el.innerHTML = prefix + html + suffix;
-  while (depth--) el = el.lastChild;
-
-  // one element
-  if (el.firstChild == el.lastChild) {
-    return el.removeChild(el.firstChild);
-  }
-
-  // several elements
-  var fragment = doc.createDocumentFragment();
-  while (el.firstChild) {
-    fragment.appendChild(el.removeChild(el.firstChild));
-  }
-
-  return fragment;
-}
-
-});
-
-require.modules["component-domify"] = require.modules["component~domify@1.3.1"];
-require.modules["component~domify"] = require.modules["component~domify@1.3.1"];
-require.modules["domify"] = require.modules["component~domify@1.3.1"];
-
-
-require.register("segmentio~on-escape@0.0.3", function (exports, module) {
-
-var bind = require("component~event@0.1.4").bind
-  , indexOf = require("component~indexof@0.0.1");
-
-
-/**
- * Expose `onEscape`.
- */
-
-module.exports = exports = onEscape;
-
-
-/**
- * Handlers.
- */
-
-var fns = [];
-
-
-/**
- * Escape binder.
- *
- * @param {Function} fn
- */
-
-function onEscape (fn) {
-  fns.push(fn);
-}
-
-
-/**
- * Bind a handler, for symmetry.
- */
-
-exports.bind = onEscape;
-
-
-/**
- * Unbind a handler.
- *
- * @param {Function} fn
- */
-
-exports.unbind = function (fn) {
-  var index = indexOf(fns, fn);
-  if (index !== -1) fns.splice(index, 1);
-};
-
-
-/**
- * Bind to `document` once.
- */
-
-bind(document, 'keydown', function (e) {
-  if (27 !== e.keyCode) return;
-  for (var i = 0, fn; fn = fns[i]; i++) fn(e);
-});
-});
-
-require.modules["segmentio-on-escape"] = require.modules["segmentio~on-escape@0.0.3"];
-require.modules["segmentio~on-escape"] = require.modules["segmentio~on-escape@0.0.3"];
-require.modules["on-escape"] = require.modules["segmentio~on-escape@0.0.3"];
-
-
 require.register("timoxley~next-tick@0.0.2", function (exports, module) {
 "use strict"
 
@@ -20242,6 +20061,56 @@ else if (typeof window == 'undefined' || window.ActiveXObject || !window.postMes
 require.modules["timoxley-next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
 require.modules["timoxley~next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
 require.modules["next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
+
+
+require.register("component~once@0.0.1", function (exports, module) {
+
+/**
+ * Identifier.
+ */
+
+var n = 0;
+
+/**
+ * Global.
+ */
+
+var global = (function(){ return this })();
+
+/**
+ * Make `fn` callable only once.
+ *
+ * @param {Function} fn
+ * @return {Function}
+ * @api public
+ */
+
+module.exports = function(fn) {
+  var id = n++;
+
+  function once(){
+    // no receiver
+    if (this == global) {
+      if (once.called) return;
+      once.called = true;
+      return fn.apply(this, arguments);
+    }
+
+    // receiver
+    var key = '__called_' + id + '__';
+    if (this[key]) return;
+    this[key] = true;
+    return fn.apply(this, arguments);
+  }
+
+  return once;
+};
+
+});
+
+require.modules["component-once"] = require.modules["component~once@0.0.1"];
+require.modules["component~once"] = require.modules["component~once@0.0.1"];
+require.modules["once"] = require.modules["component~once@0.0.1"];
 
 
 require.register("yields~has-transitions@0.0.1", function (exports, module) {
@@ -20385,56 +20254,6 @@ require.modules["ecarter~css-emitter"] = require.modules["ecarter~css-emitter@0.
 require.modules["css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
 
 
-require.register("component~once@0.0.1", function (exports, module) {
-
-/**
- * Identifier.
- */
-
-var n = 0;
-
-/**
- * Global.
- */
-
-var global = (function(){ return this })();
-
-/**
- * Make `fn` callable only once.
- *
- * @param {Function} fn
- * @return {Function}
- * @api public
- */
-
-module.exports = function(fn) {
-  var id = n++;
-
-  function once(){
-    // no receiver
-    if (this == global) {
-      if (once.called) return;
-      once.called = true;
-      return fn.apply(this, arguments);
-    }
-
-    // receiver
-    var key = '__called_' + id + '__';
-    if (this[key]) return;
-    this[key] = true;
-    return fn.apply(this, arguments);
-  }
-
-  return once;
-};
-
-});
-
-require.modules["component-once"] = require.modules["component~once@0.0.1"];
-require.modules["component~once"] = require.modules["component~once@0.0.1"];
-require.modules["once"] = require.modules["component~once@0.0.1"];
-
-
 require.register("yields~after-transition@0.0.1", function (exports, module) {
 
 /**
@@ -20499,6 +20318,71 @@ after.once = function(el, fn){
 require.modules["yields-after-transition"] = require.modules["yields~after-transition@0.0.1"];
 require.modules["yields~after-transition"] = require.modules["yields~after-transition@0.0.1"];
 require.modules["after-transition"] = require.modules["yields~after-transition@0.0.1"];
+
+
+require.register("segmentio~on-escape@master", function (exports, module) {
+
+var bind = require("component~event@0.1.4").bind
+  , indexOf = require("component~indexof@0.0.1");
+
+
+/**
+ * Expose `onEscape`.
+ */
+
+module.exports = exports = onEscape;
+
+
+/**
+ * Handlers.
+ */
+
+var fns = [];
+
+
+/**
+ * Escape binder.
+ *
+ * @param {Function} fn
+ */
+
+function onEscape (fn) {
+  fns.push(fn);
+}
+
+
+/**
+ * Bind a handler, for symmetry.
+ */
+
+exports.bind = onEscape;
+
+
+/**
+ * Unbind a handler.
+ *
+ * @param {Function} fn
+ */
+
+exports.unbind = function (fn) {
+  var index = indexOf(fns, fn);
+  if (index !== -1) fns.splice(index, 1);
+};
+
+
+/**
+ * Bind to `document` once.
+ */
+
+bind(document, 'keydown', function (e) {
+  if (27 !== e.keyCode) return;
+  for (var i = 0, fn; fn = fns[i]; i++) fn(e);
+});
+});
+
+require.modules["segmentio-on-escape"] = require.modules["segmentio~on-escape@master"];
+require.modules["segmentio~on-escape"] = require.modules["segmentio~on-escape@master"];
+require.modules["on-escape"] = require.modules["segmentio~on-escape@master"];
 
 
 require.register("segmentio~showable@0.1.1", function (exports, module) {
@@ -20809,9 +20693,125 @@ require.modules["ianstormtaylor~classes"] = require.modules["ianstormtaylor~clas
 require.modules["classes"] = require.modules["ianstormtaylor~classes@0.1.0"];
 
 
-require.register("segmentio~overlay@0.2.2", function (exports, module) {
-var template = require("segmentio~overlay@0.2.2/lib/index.html");
-var domify = require("component~domify@1.3.1");
+require.register("component~domify@master", function (exports, module) {
+
+/**
+ * Expose `parse`.
+ */
+
+module.exports = parse;
+
+/**
+ * Tests for browser support.
+ */
+
+var div = document.createElement('div');
+// Setup
+div.innerHTML = '  <link/><table></table><a href="/a">a</a><input type="checkbox"/>';
+// Make sure that link elements get serialized correctly by innerHTML
+// This requires a wrapper element in IE
+var innerHTMLBug = !div.getElementsByTagName('link').length;
+div = undefined;
+
+/**
+ * Wrap map from jquery.
+ */
+
+var map = {
+  legend: [1, '<fieldset>', '</fieldset>'],
+  tr: [2, '<table><tbody>', '</tbody></table>'],
+  col: [2, '<table><tbody></tbody><colgroup>', '</colgroup></table>'],
+  // for script/link/style tags to work in IE6-8, you have to wrap
+  // in a div with a non-whitespace character in front, ha!
+  _default: innerHTMLBug ? [1, 'X<div>', '</div>'] : [0, '', '']
+};
+
+map.td =
+map.th = [3, '<table><tbody><tr>', '</tr></tbody></table>'];
+
+map.option =
+map.optgroup = [1, '<select multiple="multiple">', '</select>'];
+
+map.thead =
+map.tbody =
+map.colgroup =
+map.caption =
+map.tfoot = [1, '<table>', '</table>'];
+
+map.text =
+map.circle =
+map.ellipse =
+map.line =
+map.path =
+map.polygon =
+map.polyline =
+map.rect = [1, '<svg xmlns="http://www.w3.org/2000/svg" version="1.1">','</svg>'];
+
+/**
+ * Parse `html` and return a DOM Node instance, which could be a TextNode,
+ * HTML DOM Node of some kind (<div> for example), or a DocumentFragment
+ * instance, depending on the contents of the `html` string.
+ *
+ * @param {String} html - HTML string to "domify"
+ * @param {Document} doc - The `document` instance to create the Node for
+ * @return {DOMNode} the TextNode, DOM Node, or DocumentFragment instance
+ * @api private
+ */
+
+function parse(html, doc) {
+  if ('string' != typeof html) throw new TypeError('String expected');
+
+  // default to the global `document` object
+  if (!doc) doc = document;
+
+  // tag name
+  var m = /<([\w:]+)/.exec(html);
+  if (!m) return doc.createTextNode(html);
+
+  html = html.replace(/^\s+|\s+$/g, ''); // Remove leading/trailing whitespace
+
+  var tag = m[1];
+
+  // body support
+  if (tag == 'body') {
+    var el = doc.createElement('html');
+    el.innerHTML = html;
+    return el.removeChild(el.lastChild);
+  }
+
+  // wrap map
+  var wrap = map[tag] || map._default;
+  var depth = wrap[0];
+  var prefix = wrap[1];
+  var suffix = wrap[2];
+  var el = doc.createElement('div');
+  el.innerHTML = prefix + html + suffix;
+  while (depth--) el = el.lastChild;
+
+  // one element
+  if (el.firstChild == el.lastChild) {
+    return el.removeChild(el.firstChild);
+  }
+
+  // several elements
+  var fragment = doc.createDocumentFragment();
+  while (el.firstChild) {
+    fragment.appendChild(el.removeChild(el.firstChild));
+  }
+
+  return fragment;
+}
+
+});
+
+require.modules["component-domify"] = require.modules["component~domify@master"];
+require.modules["component~domify"] = require.modules["component~domify@master"];
+require.modules["domify"] = require.modules["component~domify@master"];
+
+
+require.register("optimuslime~overlay@master", function (exports, module) {
+var template = require("optimuslime~overlay@master/lib/index.html");
+var domify = require("component~domify@master");
 var emitter = require("component~emitter@master");
 var showable = require("segmentio~showable@0.1.1");
 var classes = require("ianstormtaylor~classes@0.1.0");
@@ -20869,19 +20869,19 @@ showable(Overlay.prototype);
 classes(Overlay.prototype);
 });
 
-require.define("segmentio~overlay@0.2.2/lib/index.html", "<div class=\"Overlay hidden\"></div>");
+require.define("optimuslime~overlay@master/lib/index.html", "<div class=\"Overlay hidden\"></div>");
 
-require.modules["segmentio-overlay"] = require.modules["segmentio~overlay@0.2.2"];
-require.modules["segmentio~overlay"] = require.modules["segmentio~overlay@0.2.2"];
-require.modules["overlay"] = require.modules["segmentio~overlay@0.2.2"];
+require.modules["optimuslime-overlay"] = require.modules["optimuslime~overlay@master"];
+require.modules["optimuslime~overlay"] = require.modules["optimuslime~overlay@master"];
+require.modules["overlay"] = require.modules["optimuslime~overlay@master"];
 
 
-require.register("segmentio~modal@master", function (exports, module) {
-var domify = require("component~domify@1.3.1");
+require.register("optimuslime~modal@master", function (exports, module) {
+var domify = require("component~domify@master");
 var Emitter = require("component~emitter@master");
-var overlay = require("segmentio~overlay@0.2.2");
-var onEscape = require("segmentio~on-escape@0.0.3");
-var template = require("segmentio~modal@master/lib/index.html");
+var overlay = require("optimuslime~overlay@master");
+var onEscape = require("segmentio~on-escape@master");
+var template = require("optimuslime~modal@master/lib/index.html");
 var Showable = require("segmentio~showable@0.1.1");
 var Classes = require("ianstormtaylor~classes@0.1.0");
 
@@ -20897,12 +20897,30 @@ module.exports = Modal;
  *
  * @param {Element} el The element to put into a modal
  */
+function replaceOverlayHide(fn){
+  var self = this;
+
+  if(this.hidden == null) {
+    this.hidden = this.el.classList.contains('hidden');
+  }
+
+  this.emit('hiding');
+  self.el.classList.add('hidden');
+  this.hidden = null;
+  self.animating = false;
+  self.emit('hide');
+  if(fn) fn();
+ 
+  return this;
+}
 
 function Modal (el) {
   if (!(this instanceof Modal)) return new Modal(el);
   this.el = domify(template);
   this.el.appendChild(el);
   this._overlay = overlay();
+  this._overlay.hide = replaceOverlayHide;
+  console.log(this._overlay);
 
   var el = this.el;
 
@@ -20914,6 +20932,9 @@ function Modal (el) {
     document.body.removeChild(el);
   });
 }
+
+
+
 
 
 /**
@@ -20953,6 +20974,10 @@ Modal.prototype.overlay = function(){
     self._overlay.show();
   });
   this.on('hiding', function(){
+    // self._overlay.hidden = self._overlay.el.classList.contains('hidden');
+    // self._overlay.animating = false;
+    // self._overlay.el.classList.add('hidden');
+    // self._overlay.emit.call(self._overlay, 'hide');
     self._overlay.hide();
   });
   return this;
@@ -20977,13 +21002,170 @@ Modal.prototype.closable = function () {
   onEscape(hide);
   return this;
 };
+
 });
 
-require.define("segmentio~modal@master/lib/index.html", "<div class=\"Modal hidden\" effect=\"toggle\"></div>");
+require.define("optimuslime~modal@master/lib/index.html", "<div class=\"Modal hidden\" effect=\"toggle\"></div>");
 
-require.modules["segmentio-modal"] = require.modules["segmentio~modal@master"];
-require.modules["segmentio~modal"] = require.modules["segmentio~modal@master"];
-require.modules["modal"] = require.modules["segmentio~modal@master"];
+require.modules["optimuslime-modal"] = require.modules["optimuslime~modal@master"];
+require.modules["optimuslime~modal"] = require.modules["optimuslime~modal@master"];
+require.modules["modal"] = require.modules["optimuslime~modal@master"];
+
+
+require.register("./libs/webworker-queue", function (exports, module) {
+
+var WebWorkerClass = require("component~worker@master");
+
+module.exports = webworkerqueue;
+
+function webworkerqueue(scriptName, workerCount)
+{ 
+    var self = this;
+
+    self.nextWorker = 0;
+    
+    //queue to pull from 
+    self.taskQueue = [];
+    self.taskCallbacks = {};
+
+    //store the web workers
+    self.workers = [];
+
+    //how many workers available
+    self.availableWorkers = workerCount;
+
+    //note who is in use
+    self.inUseWorkers = {};
+    
+    //and the full count of workers
+    self.totalWorkers = workerCount;
+
+    for(var i=0; i < workerCount; i++){
+
+        var webworker = new WebWorkerClass(scriptName);
+
+        //create a new worker id (simply the index will do)
+        var workerID = i;
+
+        //label our workers
+        webworker.workerID = workerID;
+
+        //create a webworker message callback unique for this worker
+        //webworker in this case is not a raw webworker, but an emitter object -- so we attach to the message object
+        webworker.on('message', uniqueWorkerCallback(workerID));
+
+        //store the worker inside here
+        self.workers.push(webworker);
+    }
+
+
+    function uniqueWorkerCallback(workerID)
+    {
+        return function(data){
+            //simply pass on the message with the tagged worker
+            workerMessage(workerID, data);
+        }
+    }
+
+    function getNextAvailableWorker()
+    {
+        //none available, return null
+        if(self.availableWorkers == 0)
+            return;
+
+        //otherwise, we know someone is available
+        setNextAvailableIx();
+
+        //grab the next worker available
+        var worker = self.workers[self.nextWorker];
+
+        //note that it's now in use
+        self.inUseWorkers[self.nextWorker] = true;
+
+        //less workers available
+        self.availableWorkers--;
+
+        //send back the worker
+        return worker;
+    }
+
+    function setNextAvailableIx()
+    {
+        for(var i=0; i < self.totalWorkers; i++)
+        {
+            //check if it's in use
+            if(!self.inUseWorkers[i])
+            {
+                self.nextWorker = i;
+                break;
+            }
+        }
+    }
+
+    //this function takes a workerID and a data object -- called from the worker
+    function workerMessage(workerID, data)
+    {
+        //we got our message, we pass it for callback
+
+        //we know what workerID, so pull the associated callback
+        var cb = self.taskCallbacks[workerID];
+
+        //now remove all things associated with the task
+        delete self.taskCallbacks[workerID];
+
+        //free the worker
+        delete self.inUseWorkers[workerID];
+
+        //now on the market :)
+        self.availableWorkers++;
+
+        //prepare the callback -- if it exists
+        if(cb)
+        {
+            //send the data back, pure and simple
+            cb(data);
+        }
+
+        //now, do we have any queue events waiting?
+        if(self.taskQueue.length > 0)
+        {
+            //now we need to process the task
+            var taskObject = self.taskQueue.shift();
+
+            //okay, queue it up! -- this should work immediately becuase we just freed a worker
+            self.queueJob(taskObject.data, taskObject.callback);
+        }
+    }
+
+
+    self.queueJob = function(data, callback)
+    {
+
+        //if we have any available workers, just assign it directly, with a callback stored
+        var worker = getNextAvailableWorker();
+
+        if(worker)
+        {
+            //we have a worker to issue commands to now
+            //this is the callback we engage once the message comes back
+            self.taskCallbacks[worker.workerID] = callback;
+
+            //send the data now, thanks -- we'll handle callback in workerMessage function
+            worker.send(data);
+        }
+        else
+        {   
+            //otherwise, we need to add the item to the queue
+            self.taskQueue.push({data: data, callback: callback});
+            //the queue is cleared when the other workers return from their functions
+        }
+    }
+
+}
+
+});
+
+require.modules["webworker-queue"] = require.modules["./libs/webworker-queue"];
 
 
 require.register("./libs/win-home-ui", function (exports, module) {
@@ -21224,162 +21406,6 @@ function winhome(backbone, globalConfig, localConfig)
 });
 
 require.modules["win-home-ui"] = require.modules["./libs/win-home-ui"];
-
-
-require.register("./libs/webworker-queue", function (exports, module) {
-
-var WebWorkerClass = require("component~worker@master");
-
-module.exports = webworkerqueue;
-
-function webworkerqueue(scriptName, workerCount)
-{ 
-    var self = this;
-
-    self.nextWorker = 0;
-    
-    //queue to pull from 
-    self.taskQueue = [];
-    self.taskCallbacks = {};
-
-    //store the web workers
-    self.workers = [];
-
-    //how many workers available
-    self.availableWorkers = workerCount;
-
-    //note who is in use
-    self.inUseWorkers = {};
-    
-    //and the full count of workers
-    self.totalWorkers = workerCount;
-
-    for(var i=0; i < workerCount; i++){
-
-        var webworker = new WebWorkerClass(scriptName);
-
-        //create a new worker id (simply the index will do)
-        var workerID = i;
-
-        //label our workers
-        webworker.workerID = workerID;
-
-        //create a webworker message callback unique for this worker
-        //webworker in this case is not a raw webworker, but an emitter object -- so we attach to the message object
-        webworker.on('message', uniqueWorkerCallback(workerID));
-
-        //store the worker inside here
-        self.workers.push(webworker);
-    }
-
-
-    function uniqueWorkerCallback(workerID)
-    {
-        return function(data){
-            //simply pass on the message with the tagged worker
-            workerMessage(workerID, data);
-        }
-    }
-
-    function getNextAvailableWorker()
-    {
-        //none available, return null
-        if(self.availableWorkers == 0)
-            return;
-
-        //otherwise, we know someone is available
-        setNextAvailableIx();
-
-        //grab the next worker available
-        var worker = self.workers[self.nextWorker];
-
-        //note that it's now in use
-        self.inUseWorkers[self.nextWorker] = true;
-
-        //less workers available
-        self.availableWorkers--;
-
-        //send back the worker
-        return worker;
-    }
-
-    function setNextAvailableIx()
-    {
-        for(var i=0; i < self.totalWorkers; i++)
-        {
-            //check if it's in use
-            if(!self.inUseWorkers[i])
-            {
-                self.nextWorker = i;
-                break;
-            }
-        }
-    }
-
-    //this function takes a workerID and a data object -- called from the worker
-    function workerMessage(workerID, data)
-    {
-        //we got our message, we pass it for callback
-
-        //we know what workerID, so pull the associated callback
-        var cb = self.taskCallbacks[workerID];
-
-        //now remove all things associated with the task
-        delete self.taskCallbacks[workerID];
-
-        //free the worker
-        delete self.inUseWorkers[workerID];
-
-        //now on the market :)
-        self.availableWorkers++;
-
-        //prepare the callback -- if it exists
-        if(cb)
-        {
-            //send the data back, pure and simple
-            cb(data);
-        }
-
-        //now, do we have any queue events waiting?
-        if(self.taskQueue.length > 0)
-        {
-            //now we need to process the task
-            var taskObject = self.taskQueue.shift();
-
-            //okay, queue it up! -- this should work immediately becuase we just freed a worker
-            self.queueJob(taskObject.data, taskObject.callback);
-        }
-    }
-
-
-    self.queueJob = function(data, callback)
-    {
-
-        //if we have any available workers, just assign it directly, with a callback stored
-        var worker = getNextAvailableWorker();
-
-        if(worker)
-        {
-            //we have a worker to issue commands to now
-            //this is the callback we engage once the message comes back
-            self.taskCallbacks[worker.workerID] = callback;
-
-            //send the data now, thanks -- we'll handle callback in workerMessage function
-            worker.send(data);
-        }
-        else
-        {   
-            //otherwise, we need to add the item to the queue
-            self.taskQueue.push({data: data, callback: callback});
-            //the queue is cleared when the other workers return from their functions
-        }
-    }
-
-}
-
-});
-
-require.modules["webworker-queue"] = require.modules["./libs/webworker-queue"];
 
 
 require.register("./libs/geno-to-picture", function (exports, module) {
@@ -22802,7 +22828,7 @@ require.modules["flexparents"] = require.modules["./libs/flexparents"];
 
 require.register("./libs/publishui", function (exports, module) {
 
-var modal = require("segmentio~modal@master");
+var modal = require("optimuslime~modal@master");
 var emitter = require("component~emitter@master");
 var element = require("optimuslime~el.js@master");
 var pillbox = require("component~pillbox@master");
@@ -23588,7 +23614,7 @@ var flexStatic = require("./libs/flexstatic");
 console.log("Static a go!");
 });
 
-require.define("win-picbreeder/pbConfig.json", {"serverRoot":"http://winark.org","apiRoot":"/apps/win-Picbreeder","winHostPort":3001});
+require.define("win-picbreeder/pbConfig.json", {"serverRoot":"http://localhost:3000","apiRoot":"","winHostPort":3001});
 
 require.modules["win-picbreeder"] = require.modules["win-picbreeder"];
 

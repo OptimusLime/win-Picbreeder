@@ -17,6 +17,6 @@
     "optimuslime/el.js": "master",
     "component/classes": "master",
     "component/emitter": "master",
-    "segmentio/modal": "master"
+    "optimuslime/modal": "master"
   }
 }
