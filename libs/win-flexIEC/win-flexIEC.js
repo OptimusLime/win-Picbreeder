@@ -1,4 +1,4 @@
-var flexIEC = require('flexIEC');
+var flexIEC = require('flexiec');
 var winIEC = require('win-iec');
 
 var emitter = require('emitter');

@@ -3,9 +3,8 @@
 <head>
 	<meta charset=utf-8 />
 	<title></title>
-	<link rel="stylesheet" type="text/css" media="screen" href="/apps/win-Picbreeder/build/build.css" />
-	<script type="text/javascript" src="/apps/win-Picbreeder/build/build.js"></script>
-
+	<link rel="stylesheet" type="text/css" media="screen" href="./build/build.css" />
+	<script type="text/javascript" src="./build/build.js"></script>
 </head>
 <body class="flexcenter">
 	<div id="buttons" style="display: inline-block;">
@@ -73,10 +72,14 @@
 
 			var testingLogLevel = 10;
 
+			var pbConfig = require('win-picbreeder/pbConfig.json');
+
+
 			var configurations = 
 			{
 				"global" : {
-					server : "http://winark.org/apps/win-Picbreeder"
+					server : pbConfig.serverRoot + (pbConfig.serverPort ? pbConfig.serverPort : "") + pbConfig.apiRoot 
+					// server : "http://winark.org/apps/win-Picbreeder"
 					// ,
 					// port: 3000
 				},

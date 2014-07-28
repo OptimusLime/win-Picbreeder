@@ -427,7 +427,7 @@ input
 	border: 1px solid black;
 }
 .loading {
-    background-image: url('../images/loading.gif'); 
+    background-image: url("libs/flexiec/images/loading.gif"); 
     background-repeat: no-repeat; 
 	background-position:center; 
 }

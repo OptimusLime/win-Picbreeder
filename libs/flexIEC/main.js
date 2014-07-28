@@ -4,7 +4,7 @@ var resize = require('resize');
 var classes = require('classes');
 var events = require('events');
 
-var publish = require('publishUI');
+var publish = require('publishui');
 
 //
 var element = require('el.js');

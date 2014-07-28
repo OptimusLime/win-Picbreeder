@@ -37,7 +37,7 @@
     "win-flexIEC",
     "flexstatic",
     "flexparents",
-    "flexIEC"
+    "flexiec"
   ],
   "paths": [
     "libs"

@@ -1,5 +1,5 @@
 {
-  "name": "publishUI",
+  "name": "publishui",
   "version": "0.0.1",
   "scripts": [
     "modal.js"
@@ -13,10 +13,10 @@
   ],
   "main": "modal.js",
   "dependencies": {
-    "component/pillbox" : "*",
-    "optimuslime/el.js": "*",
-    "component/classes": "*",
-    "component/emitter": "*",
-    "segmentio/modal": "*"
+    "component/pillbox" : "master",
+    "optimuslime/el.js": "master",
+    "component/classes": "master",
+    "component/emitter": "master",
+    "segmentio/modal": "master"
   }
 }

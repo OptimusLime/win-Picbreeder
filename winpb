@@ -63,6 +63,7 @@ function buildProject(configFile, options)
         .use('scripts', build.plugins.js())
         .use('scripts', build.plugins.json())
         .use('json', build.plugins.json())
+        .use('templates', build.plugins.string())
         .end(function (err, string) {
           if (err) throw err;
 
@@ -73,6 +74,7 @@ function buildProject(configFile, options)
       // only include `.css` files from components' `.styles` field
       build.styles(tree)
         .use('styles', build.plugins.css())
+        .use('styles', build.plugins.urlRewriter())
         .end(function (err, string) {
           if (err) throw err;
 
@@ -84,7 +86,11 @@ function buildProject(configFile, options)
       // only copy `images` to the build folder
       build.files(tree)
         .use('images', build.plugins.symlink())
-        .end(); // callback optional
+        .use('images', build.plugins.symlink())
+        .end(function(err, string)
+        {
+          // console.log(build.plugins);
+        }); // callback optional
     });
 }
 

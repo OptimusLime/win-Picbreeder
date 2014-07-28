@@ -2,10 +2,10 @@
   "name": "win-flexIEC",
   "description": "Combine win-iec and flexIEC to be a UI comoponent with iec evolution callbacks",
   "version": "0.0.1",
-  "local" : ["flexIEC"],
+  "local" : ["flexiec"],
   "dependencies": {
-    "optimuslime/win-iec" : "*",
-    "component/emitter" : "*"
+    "optimuslime/win-iec" : "master",
+    "component/emitter" : "master"
   },
   "scripts": [
     "win-flexIEC.js"

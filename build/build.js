@@ -1515,6 +1515,495 @@ require.modules["optimuslime~win-utils"] = require.modules["optimuslime~win-util
 require.modules["win-utils"] = require.modules["optimuslime~win-utils@0.1.1"];
 
 
+require.register("optimuslime~win-iec@master", function (exports, module) {
+//generating session info
+var uuid = require("optimuslime~win-utils@master").cuid;
+
+module.exports = winiec;
+
+function winiec(backbone, globalConfig, localConfig)
+{
+	//pull in backbone info, we gotta set our logger/emitter up
+	var self = this;
+
+	self.winFunction = "evolution";
+
+	if(!localConfig.genomeType)
+		throw new Error("win-IEC needs a genome type specified."); 
+
+	//this is how we talk to win-backbone
+	self.backEmit = backbone.getEmitter(self);
+
+	//grab our logger
+	self.log = backbone.getLogger(self);
+
+	//only vital stuff goes out for normal logs
+	self.log.logLevel = localConfig.logLevel || self.log.normal;
+
+	//we have logger and emitter, set up some of our functions
+
+	function clearEvolution(genomeType)
+	{
+		//optionally, we can change types if we need to 
+		if(genomeType)
+			self.genomeType = genomeType;
+
+		self.log("clear evo to type: ", self.genomeType)
+		self.selectedParents = {};
+		//all the evo objects we ceated -- parents are a subset
+		self.evolutionObjects = {};
+
+		//count it up
+		self.parentCount = 0;
+
+		//session information -- new nodes and connections yo! that's all we care about after all-- new innovative stuff
+		//i rambled just then. For no reason. Still doing it. Sucks that you're reading this. trolololol
+		self.sessionObject = {};
+
+		//everything we publish is linked by this session information
+		self.evolutionSessionID = uuid();
+
+		//save our seeds!
+		self.seeds = {};
+
+		//map children to parents for all objects
+		self.childrenToParents = {};
+
+		self.seedParents = {};
+	}
+
+	//we setup all our basic 
+	clearEvolution(localConfig.genomeType);
+
+	//what events do we need?
+	self.requiredEvents = function()
+	{
+		return [
+		//need to be able to create artifacts
+			"generator:createArtifacts",
+			"schema:replaceParentReferences",
+			"schema:getReferencesAndParents",
+			"publish:publishArtifacts",
+			//in the future we will also need to save objects according to our save tendencies
+			//for now, we'll offload that to UI decisions
+		];
+	}
+
+	//what events do we respond to?
+	self.eventCallbacks = function()
+	{ 
+		return {
+			"evolution:selectParents" : self.selectParents,
+			"evolution:unselectParents" : self.unselectParents,
+			"evolution:publishArtifact" : self.publishArtifact,
+			//we fetch a list of objects based on IDs, if they don't exist we create them
+			"evolution:getOrCreateOffspring" : self.getOrCreateOffspring,
+			"evolution:loadSeeds" : self.loadSeeds,
+			"evolution:resetEvolution" : clearEvolution
+
+		};
+	}
+
+	
+
+	// self.findSeedOrigins = function(eID)
+	// {
+	// 	//let's look through parents until we find the seed you originated from -- then you are considered a decendant
+	// 	var alreadyChecked = {};
+
+	// 	var originObjects = {};
+	// 	var startingParents = self.childrenToParents[eID];
+
+	// 	while(startingParents.length)
+	// 	{
+	// 		var nextCheck = [];
+	// 		for(var i=0; i < startingParents.length; i++)
+	// 		{
+	// 			var parentWID = startingParents[i];
+
+	// 			if(!alreadyChecked[parentWID])
+	// 			{
+	// 				//mark it as checked
+	// 				alreadyChecked[parentWID] = true;
+
+	// 				if(self.seeds[parentWID])
+	// 				{
+	// 					//this is a seed!
+	// 					originObjects[parentWID] = self.seeds[parentWID];
+	// 				}
+
+	// 				//otherwise, it's not of interested, but perhaps it's parents are!
+
+	// 				//let's look at the parents parents
+	// 				var grandparents = self.childrenToParents[parentWID];
+
+	// 				if(grandparents)
+	// 				{
+	// 					nextCheck = nextCheck.concat(grandparents);
+	// 				}
+	// 			}
+	// 		}
+
+	// 		//continue the process - don't worry about loops, we're checking!
+	// 		startingParents = nextCheck;
+	// 	}
+
+	// 	//send back all the seed objects
+	// 	return originObjects
+	// }
+
+	self.publishArtifact = function(id, meta, finished)
+	{
+		//don't always have to send meta info -- since we don't know what to do with it anyways
+		if(typeof meta == "function")
+		{
+			finished = meta;
+			meta = {};
+		}
+		//we fetch the object from the id
+
+		var evoObject = self.evolutionObjects[id];
+
+		if(!evoObject)
+		{
+			finished("Evolutionary artifactID to publish is invalid: " + id);
+			return;
+		}
+		//we also want to store some meta info -- don't do anything about that for now 
+
+		// var seedParents = self.findSeedOrigins(id);
+
+		//
+		var seedList = [];
+
+		//here is what needs to happen, the incoming evo object has the "wrong" parents
+		//the right parents are the published parents -- the other parents 
+
+		//this will need to be fixed in the future -- we need to know private vs public parents
+		//but for now, we simply send in the public parents -- good enough for picbreeder iec applications
+		//other types of applications might need more info.
+
+		var widObject = {};
+		widObject[evoObject.wid] = evoObject;
+		self.backEmit("schema:getReferencesAndParents", self.genomeType, widObject, function(err, refsAndParents){
+
+			//now we know our references
+			var refParents = refsAndParents[evoObject.wid];
+
+			//so we simply fetch our appropraite seed parents 
+			var evoSeedParents = self.noDuplicatSeedParents(refParents);
+
+			//now we have all the info we need to replace all our parent refs
+			self.backEmit("schema:replaceParentReferences", self.genomeType, evoObject, evoSeedParents, function(err, cloned)
+			{
+				//now we have a cloned version for publishing, where it has public seeds
+
+				 //just publish everything public for now!
+		        var session = {sessionID: self.evolutionSessionID, publish: true};
+
+		        //we can also save private info
+		        //this is where we would grab all the parents of the individual
+		        var privateObjects = [];
+
+				self.backEmit("publish:publishArtifacts", self.genomeType, session, [cloned], [], function(err)
+				{
+					if(err)
+					{
+						finished(err);
+					}
+					else //no error publishing, hooray!
+						finished(undefined, cloned);
+
+				})
+
+			})
+
+		});
+       
+	}
+
+	//no need for a callback here -- nuffin to do but load
+	self.loadSeeds = function(idAndSeeds, finished)
+	{
+		//we have all the seeds and their ids, we just absorb them immediately
+		for(var eID in idAndSeeds)
+		{
+			var seed = idAndSeeds[eID];
+			//grab the objects and save them
+			self.evolutionObjects[eID] = seed;
+
+			//save our seeds
+			self.seeds[seed.wid] = seed;
+		}
+
+		self.log("seed objects: ", self.seeds);
+
+		self.backEmit("schema:getReferencesAndParents", self.genomeType, self.seeds, function(err, refsAndParents)
+		{
+			if(err)
+			{
+				//pass on the error if it happened
+				if(finished)
+					finished(err);
+				else
+					throw err;
+				return;
+			}
+			//there are no parent refs for seeds, just the refs themselves which are important
+			for(var wid in self.seeds)
+			{
+				var refs = Object.keys(refsAndParents[wid]);
+				for(var i=0; i < refs.length; i++)
+				{
+					//who is the parent seed of a particular wid? why itself duh!
+					self.seedParents[refs[i]] = [refs[i]];
+				}
+			}
+
+			// self.log("Seed parents: ", self.seedParents);
+
+			//note, there is no default behavior with seeds -- as usual, you must still tell iec to select parents
+			//there is no subsitute for parent selection
+			if(finished)
+				finished();
+
+		});
+
+
+	}
+
+	//just grab from evo objects -- throw error if issue
+	self.selectParents = function(eIDList, finished)
+	{
+		if(typeof eIDList == "string")
+			eIDList = [eIDList];
+
+		var selectedObjects = {};
+
+		for(var i=0; i < eIDList.length; i++)
+		{	
+			var eID = eIDList[i];
+
+			//grab from evo
+			var evoObject = self.evolutionObjects[eID];
+
+			if(!evoObject){
+				//wrong id 
+				finished("Invalid parent selection: " + eID);
+				return;
+			}
+
+			selectedObjects[eID] = evoObject;
+
+			//save as a selected parent
+			self.selectedParents[eID] = evoObject;
+			self.parentCount++;
+		}
+	
+		//send back the evolutionary object that is linked to this parentID
+		finished(undefined, selectedObjects);
+	}
+
+	self.unselectParents = function(eIDList, finished)
+	{
+		if(typeof eIDList == "string")
+			eIDList = [eIDList];
+
+		for(var i=0; i < eIDList.length; i++)
+		{	
+			var eID = eIDList[i];
+
+			//remove this parent from the selected parents -- doesn't delete from all the individuals
+			if(self.selectedParents[eID])
+				self.parentCount--;
+
+			delete self.selectedParents[eID];
+		}
+
+		//callback optional really, here for backwards compat 
+		if(finished)
+			finished();
+
+	}
+
+	self.noDuplicatSeedParents = function(refsAndParents)
+	{
+		var allSeedNoDup = {};
+
+		//this is a map from the wid to the associated parent wids
+		for(var refWID in refsAndParents)
+		{
+			var parents = refsAndParents[refWID];
+
+			var mergeParents = [];
+
+			for(var i=0; i < parents.length; i++)
+			{
+				var seedsForEachParent = self.seedParents[parents[i]];
+
+				//now we just merge all these together
+				mergeParents = mergeParents.concat(seedsForEachParent);
+			}
+
+			//then we get rid of any duplicates
+			var nodups = {};
+			for(var i=0; i < mergeParents.length; i++)
+				nodups[mergeParents[i]] = true;
+
+			//by induction, each wid generated knows it's seed parents (where each seed reference wid references itself in array form)
+			//therefore, you just look at your reference's parents to see who they believe is their seed 
+			//and concat those results together -- pretty simple, just remove duplicates
+			allSeedNoDup[refWID] = Object.keys(nodups);
+		}	
+
+		return allSeedNoDup;	
+	}
+
+	self.callGenerator = function(allObjects, toCreate, finished)
+	{
+		var parents = self.getOffspringParents();
+
+		//we need to go fetch some stuff
+		self.backEmit("generator:createArtifacts", self.genomeType, toCreate.length, parents, self.sessionObject, function(err, artifacts)
+		{
+			if(err)
+			{
+				//pass on the error if it happened
+				finished(err);
+				return;
+			}
+
+			// self.log("iec generated " + toCreate.length + " individuals: ", artifacts);
+
+			//otherwise, let's do this thang! match artifacts to offspring -- arbitrary don't worry
+			var off = artifacts.offspring;
+
+			var widOffspring = {};
+
+			for(var i=0; i < off.length; i++)
+			{
+				var oObject = off[i];
+				var eID = toCreate[i];
+				//save our evolution object internally -- no more fetches required
+				self.evolutionObjects[eID] = oObject;
+
+				//store objects relateive to their requested ids for return
+				allObjects[eID] = (oObject);
+
+
+				//clone the parent objects for the child!
+				widOffspring[oObject.wid] = oObject;
+
+				// var util = require('util')
+				// self.log("off returned: ".magenta, util.inspect(oObject, false, 3));
+			}
+
+			self.backEmit("schema:getReferencesAndParents", self.genomeType, widOffspring, function(err, refsAndParents)
+			{
+				if(err)
+				{
+					finished(err);
+					return;
+				}
+
+				//check the refs for each object
+				for(var wid in widOffspring)
+				{
+					//here we are with refs and parents
+					var rAndP = refsAndParents[wid];
+
+					var widSeedParents = self.noDuplicatSeedParents(rAndP);
+
+					// self.log("\n\nwid seed parents: ".magenta, rAndP);
+
+
+					//for each key, we set our seed parents appropriately	
+					for(var key in widSeedParents)
+					{
+						self.seedParents[key] = widSeedParents[key];
+					}
+				}
+
+				// self.log("\n\nSeed parents: ".magenta, self.seedParents);
+
+				//mark the offspring as the list objects
+				finished(undefined, allObjects);
+
+			});
+
+
+
+		});
+	}
+
+	//generator yo face!
+	self.getOrCreateOffspring = function(eIDList, finished)
+	{
+		//don't bother doing anything if you havne't selected parents
+		if(self.parentCount ==0){
+			finished("Cannot generate offspring without parents");
+			return;
+		}
+
+		//we need to make a bunch, as many as requested
+		var toCreate = [];
+
+		var allObjects = {};
+
+		//first we check to see which ids we already know
+		for(var i=0; i < eIDList.length; i++)
+		{
+			var eID = eIDList[i];
+			var evoObject = self.evolutionObjects[eID];
+			if(!evoObject)
+			{
+				toCreate.push(eID);
+			}
+			else
+			{
+				//otherwise add to objects that will be sent back
+				allObjects[eID] = evoObject;
+			}
+		}
+
+		//now we have a list of objects that must be created
+		if(toCreate.length)
+		{
+			//this will handle the finished call for us -- after it gets artifacts from the generator
+			self.callGenerator(allObjects, toCreate, finished);	
+		}
+		else
+		{
+			//all ready to go -- send back our objects
+			finished(undefined, allObjects)
+		}
+
+	}
+
+	self.getOffspringParents = function()
+	{
+		var parents = [];
+
+		for(var key in self.selectedParents)
+			parents.push(self.selectedParents[key]);
+
+		return parents;
+	}
+
+	return self;
+}
+
+
+
+
+
+});
+
+require.modules["optimuslime-win-iec"] = require.modules["optimuslime~win-iec@master"];
+require.modules["optimuslime~win-iec"] = require.modules["optimuslime~win-iec@master"];
+require.modules["win-iec"] = require.modules["optimuslime~win-iec@master"];
+
+
 require.register("optimuslime~win-iec@0.0.2-6", function (exports, module) {
 //generating session info
 var uuid = require("optimuslime~win-utils@master").cuid;
@@ -18129,7 +18618,7 @@ require.modules["component~delegate"] = require.modules["component~delegate@0.2.
 require.modules["delegate"] = require.modules["component~delegate@0.2.2"];
 
 
-require.register("component~events@1.0.8", function (exports, module) {
+require.register("component~events@master", function (exports, module) {
 
 /**
  * Module dependencies.
@@ -18309,9 +18798,9 @@ function parse(event) {
 
 });
 
-require.modules["component-events"] = require.modules["component~events@1.0.8"];
-require.modules["component~events"] = require.modules["component~events@1.0.8"];
-require.modules["events"] = require.modules["component~events@1.0.8"];
+require.modules["component-events"] = require.modules["component~events@master"];
+require.modules["component~events"] = require.modules["component~events@master"];
+require.modules["events"] = require.modules["component~events@master"];
 
 
 require.register("component~indexof@0.0.1", function (exports, module) {
@@ -18551,6 +19040,64 @@ module.exports.unbind = function (element, cb) {
 require.modules["ramitos-resize"] = require.modules["ramitos~resize@master"];
 require.modules["ramitos~resize"] = require.modules["ramitos~resize@master"];
 require.modules["resize"] = require.modules["ramitos~resize@master"];
+
+
+require.register("component~bind@1.0.0", function (exports, module) {
+/**
+ * Slice reference.
+ */
+
+var slice = [].slice;
+
+/**
+ * Bind `obj` to `fn`.
+ *
+ * @param {Object} obj
+ * @param {Function|String} fn or string
+ * @return {Function}
+ * @api public
+ */
+
+module.exports = function(obj, fn){
+  if ('string' == typeof fn) fn = obj[fn];
+  if ('function' != typeof fn) throw new Error('bind() requires a function');
+  var args = slice.call(arguments, 2);
+  return function(){
+    return fn.apply(obj, args.concat(slice.call(arguments)));
+  }
+};
+
+});
+
+require.modules["component-bind"] = require.modules["component~bind@1.0.0"];
+require.modules["component~bind"] = require.modules["component~bind@1.0.0"];
+require.modules["bind"] = require.modules["component~bind@1.0.0"];
+
+
+require.register("component~trim@0.0.1", function (exports, module) {
+
+exports = module.exports = trim;
+
+function trim(str){
+  if (str.trim) return str.trim();
+  return str.replace(/^\s*|\s*$/g, '');
+}
+
+exports.left = function(str){
+  if (str.trimLeft) return str.trimLeft();
+  return str.replace(/^\s*/, '');
+};
+
+exports.right = function(str){
+  if (str.trimRight) return str.trimRight();
+  return str.replace(/\s*$/, '');
+};
+
+});
+
+require.modules["component-trim"] = require.modules["component~trim@0.0.1"];
+require.modules["component~trim"] = require.modules["component~trim@0.0.1"];
+require.modules["trim"] = require.modules["component~trim@0.0.1"];
 
 
 require.register("component~keyname@0.0.1", function (exports, module) {
@@ -19191,17 +19738,75 @@ require.modules["component~set"] = require.modules["component~set@1.0.0"];
 require.modules["set"] = require.modules["component~set@1.0.0"];
 
 
-require.register("component~pillbox@1.3.1", function (exports, module) {
+require.register("stephenmathieson~normalize@0.0.1", function (exports, module) {
 
+/**
+ * Normalize the events provided to `fn`
+ *
+ * @api public
+ * @param {Function|Event} fn
+ * @return {Function|Event}
+ */
+
+exports = module.exports = function (fn) {
+  // handle functions which are passed an event
+  if (typeof fn === 'function') {
+    return function (event) {
+      event = exports.normalize(event);
+      fn.call(this, event);
+    };
+  }
+
+  // just normalize the event
+  return exports.normalize(fn);
+};
+
+/**
+ * Normalize the given `event`
+ *
+ * @api private
+ * @param {Event} event
+ * @return {Event}
+ */
+
+exports.normalize = function (event) {
+  event = event || window.event;
+
+  event.target = event.target || event.srcElement;
+
+  event.which = event.which ||  event.keyCode || event.charCode;
+
+  event.preventDefault = event.preventDefault || function () {
+    this.returnValue = false;
+  };
+
+  event.stopPropagation = event.stopPropagation || function () {
+    this.cancelBubble = true;
+  };
+
+  return event;
+};
+
+});
+
+require.modules["stephenmathieson-normalize"] = require.modules["stephenmathieson~normalize@0.0.1"];
+require.modules["stephenmathieson~normalize"] = require.modules["stephenmathieson~normalize@0.0.1"];
+require.modules["normalize"] = require.modules["stephenmathieson~normalize@0.0.1"];
+
+
+require.register("component~pillbox@master", function (exports, module) {
 /**
  * Module dependencies.
  */
 
 var Emitter = require("component~emitter@master")
   , keyname = require("component~keyname@0.0.1")
-  , events = require("component~events@1.0.8")
+  , events = require("component~events@master")
   , each = require("component~each@0.2.5")
-  , Set = require("component~set@1.0.0");
+  , Set = require("component~set@1.0.0")
+  , bind = require("component~bind@1.0.0")
+  , trim = require("component~trim@0.0.1")
+  , normalize = require("stephenmathieson~normalize@0.0.1");
 
 /**
  * Expose `Pillbox`.
@@ -19220,13 +19825,16 @@ module.exports = Pillbox
 
 function Pillbox(input, options) {
   if (!(this instanceof Pillbox)) return new Pillbox(input, options);
-  var self = this
   this.options = options || {}
   this.input = input;
   this.tags = new Set;
   this.el = document.createElement('div');
   this.el.className = 'pillbox';
-  this.el.style = input.style;
+  try {
+    this.el.style = input.style;
+  } catch (e) {
+    // IE8 just can't handle this
+  }
   input.parentNode.insertBefore(this.el, input);
   input.parentNode.removeChild(input);
   this.el.appendChild(input);
@@ -19271,7 +19879,7 @@ Pillbox.prototype.unbind = function(){
  * @api private
  */
 
-Pillbox.prototype.onkeydown = function(e){
+Pillbox.prototype.onkeydown = normalize(function(e){
   switch (keyname(e.which)) {
     case 'enter':
       e.preventDefault();
@@ -19279,7 +19887,8 @@ Pillbox.prototype.onkeydown = function(e){
       e.target.value = '';
       break;
     case 'space':
-      if (!this.options.space) return;
+      if (this.options.space === false || this.options.allowSpace === true) 
+        return;
       e.preventDefault();
       this.add(e.target.value);
       e.target.value = '';
@@ -19290,7 +19899,7 @@ Pillbox.prototype.onkeydown = function(e){
       }
       break;
   }
-};
+});
 
 /**
  * Handle click.
@@ -19345,7 +19954,7 @@ Pillbox.prototype.last = function(){
 
 Pillbox.prototype.add = function(tag) {
   var self = this
-  tag = tag.trim();
+  tag = trim(tag);
 
   // blank
   if ('' == tag) return;
@@ -19372,7 +19981,7 @@ Pillbox.prototype.add = function(tag) {
   var del = document.createElement('a');
   del.appendChild(document.createTextNode('✕'));
   del.href = '#';
-  del.onclick = this.remove.bind(this, tag);
+  del.onclick = bind(this, this.remove, tag);
   span.appendChild(del);
 
   this.el.insertBefore(span, this.input);
@@ -19405,12 +20014,11 @@ Pillbox.prototype.remove = function(tag) {
   return this;
 }
 
-
 });
 
-require.modules["component-pillbox"] = require.modules["component~pillbox@1.3.1"];
-require.modules["component~pillbox"] = require.modules["component~pillbox@1.3.1"];
-require.modules["pillbox"] = require.modules["component~pillbox@1.3.1"];
+require.modules["component-pillbox"] = require.modules["component~pillbox@master"];
+require.modules["component~pillbox"] = require.modules["component~pillbox@master"];
+require.modules["pillbox"] = require.modules["component~pillbox@master"];
 
 
 require.register("component~domify@1.3.1", function (exports, module) {
@@ -20202,7 +20810,7 @@ require.modules["classes"] = require.modules["ianstormtaylor~classes@0.1.0"];
 
 
 require.register("segmentio~overlay@0.2.2", function (exports, module) {
-var template = require("./index.html");
+var template = require("segmentio~overlay@0.2.2/lib/index.html");
 var domify = require("component~domify@1.3.1");
 var emitter = require("component~emitter@master");
 var showable = require("segmentio~showable@0.1.1");
@@ -20261,17 +20869,19 @@ showable(Overlay.prototype);
 classes(Overlay.prototype);
 });
 
+require.define("segmentio~overlay@0.2.2/lib/index.html", "<div class=\"Overlay hidden\"></div>");
+
 require.modules["segmentio-overlay"] = require.modules["segmentio~overlay@0.2.2"];
 require.modules["segmentio~overlay"] = require.modules["segmentio~overlay@0.2.2"];
 require.modules["overlay"] = require.modules["segmentio~overlay@0.2.2"];
 
 
-require.register("segmentio~modal@0.3.3", function (exports, module) {
+require.register("segmentio~modal@master", function (exports, module) {
 var domify = require("component~domify@1.3.1");
 var Emitter = require("component~emitter@master");
 var overlay = require("segmentio~overlay@0.2.2");
 var onEscape = require("segmentio~on-escape@0.0.3");
-var template = require("./index.html");
+var template = require("segmentio~modal@master/lib/index.html");
 var Showable = require("segmentio~showable@0.1.1");
 var Classes = require("ianstormtaylor~classes@0.1.0");
 
@@ -20369,9 +20979,11 @@ Modal.prototype.closable = function () {
 };
 });
 
-require.modules["segmentio-modal"] = require.modules["segmentio~modal@0.3.3"];
-require.modules["segmentio~modal"] = require.modules["segmentio~modal@0.3.3"];
-require.modules["modal"] = require.modules["segmentio~modal@0.3.3"];
+require.define("segmentio~modal@master/lib/index.html", "<div class=\"Modal hidden\" effect=\"toggle\"></div>");
+
+require.modules["segmentio-modal"] = require.modules["segmentio~modal@master"];
+require.modules["segmentio~modal"] = require.modules["segmentio~modal@master"];
+require.modules["modal"] = require.modules["segmentio~modal@master"];
 
 
 require.register("./libs/win-home-ui", function (exports, module) {
@@ -22188,12 +22800,12 @@ function parentList(divValue, reqOptions)
 require.modules["flexparents"] = require.modules["./libs/flexparents"];
 
 
-require.register("./libs/publishUI", function (exports, module) {
+require.register("./libs/publishui", function (exports, module) {
 
-var modal = require("segmentio~modal@0.3.3");
+var modal = require("segmentio~modal@master");
 var emitter = require("component~emitter@master");
 var element = require("optimuslime~el.js@master");
-var pillbox = require("component~pillbox@1.3.1");
+var pillbox = require("component~pillbox@master");
 var classes = require("component~classes@master");
 
       
@@ -22355,17 +22967,17 @@ module.exports = function(options)
 
 });
 
-require.modules["publishUI"] = require.modules["./libs/publishUI"];
+require.modules["publishui"] = require.modules["./libs/publishui"];
 
 
-require.register("./libs/flexIEC", function (exports, module) {
+require.register("./libs/flexiec", function (exports, module) {
 
 var Emitter = require("component~emitter@master");
 var resize = require("ramitos~resize@master");
 var classes = require("component~classes@master");
-var events = require("component~events@1.0.8");
+var events = require("component~events@master");
 
-var publish = require("publishui");
+var publish = require("./libs/publishui");
 
 //
 var element = require("optimuslime~el.js@master");
@@ -22729,12 +23341,12 @@ function flexIEC(divValue, reqOptions)
 
 });
 
-require.modules["flexIEC"] = require.modules["./libs/flexIEC"];
+require.modules["flexiec"] = require.modules["./libs/flexiec"];
 
 
 require.register("./libs/win-flexIEC", function (exports, module) {
-var flexIEC = require("flexiec");
-var winIEC = require("optimuslime~win-iec@0.0.2-6");
+var flexIEC = require("./libs/flexiec");
+var winIEC = require("optimuslime~win-iec@master");
 
 var emitter = require("component~emitter@master");
 
@@ -22962,6 +23574,7 @@ function winflex(backbone, globalConfig, localConfig)
 
 	return self;
 }
+
 });
 
 require.modules["win-flexIEC"] = require.modules["./libs/win-flexIEC"];
