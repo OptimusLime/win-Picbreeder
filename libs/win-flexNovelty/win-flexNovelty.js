@@ -26,6 +26,8 @@ function winflex(backbone, globalConfig, localConfig)
 
 	//we have logger and emitter, set up some of our functions
 
+	self.finishCreateIndividualCallbacks = [];
+
 	self.htmlEvoObjects = {};
 
 	//what events do we need?
@@ -76,133 +78,160 @@ function winflex(backbone, globalConfig, localConfig)
 
 		if(seeds.length > 1)
 			self.log("Undefined behavior with more than one seed in this UI object. You were warned, sorry :/")
-		//not getting stuck with an undefined issue
-		flexOptions = flexOptions || {};
 
-		//if you only ever allow one div to take over 
-		single = true;
 
-		//seed related -- start generating ids AFTER the seed count -- this is important
-		//why? Because effectively there is a mapping between ids created in the ui and ids of objects created in evoltuion
-		//they stay in sync all the time, except for seeds, where more ids exist than there are visuals. 
-		//for that purpose, seeds occupy [0, startIx), 
-		var startIx = seeds.length;
-		flexOptions.startIx = Math.max(startIx, flexOptions.startIx || 0);
-
-		//part of the issue here is that flexIEC uses the ids as an indicator of order because they are assumed to be numbers
-		//therefor remove oldest uses that info -- but in reality, it just needs to time stamp the creation of evo objects, and this can all be avoided in the future
-		var seedMap = {};
-		for(var i=0; i < seeds.length; i++)
-			seedMap["" + i] = seeds[i];
-
-		//untested if you switch that!
-		var nf = new flexIEC(div, flexOptions);
-
-		//add some stuff to our thing for emitting
-		var uiEmitter = {};
-		emitter(uiEmitter);
-
-		//a parent was selected by flex
-		nf.on('parentSelected', function(eID, eDiv, finished)
-		{
-			//now a parent has been selected -- let's get that parent selection to evolution!
-			 self.backEmit("evolution:selectParents", [eID], function(err, parents)
-			 {
-			 	//index into parent object, grab our single object
-			 	var parent = parents[eID];
-
-			 	//now we use this info and pass it along for other ui business we don't care about
-			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
-			 	uiEmitter.emit('parentSelected', eID, eDiv, parent, finished);
-			 });
-		});
-
-		//parent is no longer rocking it. Sorry to say. 
-		nf.on('parentUnselected', function(eID)
-		{
-			//now a parent has been selected -- let's get that parent selection to evolution!
-			 self.backEmit("evolution:unselectParents", [eID], function(err)
-			 {
-			 	//now we use this info and pass it along for other ui business we don't care about
-			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
-			 	uiEmitter.emit('parentUnselected', eID);
-
-		 		self.log("act pars: ",nf.activeParents());
-			 	//are we empty? fall back to the chosen seed please!
-			 	if(nf.activeParents() == 0)
-			 	 	nf.createParent(self.chooseRandomSeed(seedMap));
-
-			 });
-		});
-
-		//individual created inside the UI system -- let's make a corresponding object in evolution
-		nf.on('createIndividual', function(eID, eDiv, finished)
-		{
-			//let it be known that we are looking for a sweet payday -- them kids derr
-			 self.backEmit("evolution:getOrCreateOffspring", [eID], function(err, allIndividuals)
-			 {
-			 	// console.error("shitidjfdijfdf");
-			 	//we got the juice!
-			 	var individual = allIndividuals[eID];
-
-			 	self.log("Create ind. create returned: ", allIndividuals);
-
-			 	//now we use this info and pass it along for other ui business we don't care about
-			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
-			 	uiEmitter.emit('individualCreated', eID, eDiv, individual, finished);
-			 });
-		});
-
-		nf.on('publishArtifact', function(eID, meta, finished)
-		{
-			//let it be known that we are looking for a sweet payday -- them kids derr
-			 self.backEmit("evolution:publishArtifact", eID, meta, function(err)
-			 {
-			 	if(err)
-			 	{
-			 		uiEmitter.emit('publishError', eID, err);
-			 	}
-			 	else
-			 	{
-			 		uiEmitter.emit('publishSuccess', eID);
-			 	}
-
-			 	//now we are done publishing
-			 	finished();
-
-			 });
-		});
-
-		//might be published-- we are looking at the modal window
-		nf.on('publishShown', function(eID, eDiv, finished)
-		{
-			//we simply send back the indentifier, and where to put your display in the html object
-		 	uiEmitter.emit('publishShown', eID, eDiv, finished);
-		});
-
-		//we hid the object -- maybe animation needs to stop or something, let it be known
-		nf.on('publishHidden', function(eID)
-		{
-			uiEmitter.emit('publishHidden', eID);
-		});
-
-		//this is a temporary measure for now
-		//send the seeds for loading into iec -- there will be a better way to do this in the future
-		self.backEmit("evolution:loadSeeds", seedMap, function(err)
-		{
-			if(err)
+		self.backEmit.qCall("evolution:getNoveltyEmitter")
+			.then(function(novelEmitter)
 			{
-				done(err);
-			}
-			else
+				self.noveltyEmitter = novelEmitter;
+
+				self.noveltyEmitter.on('novelIndividual', self.novelIndividualCreated);
+
+				//not getting stuck with an undefined issue
+				flexOptions = flexOptions || {};
+
+				//if you only ever allow one div to take over 
+				single = true;
+
+				//seed related -- start generating ids AFTER the seed count -- this is important
+				//why? Because effectively there is a mapping between ids created in the ui and ids of objects created in evoltuion
+				//they stay in sync all the time, except for seeds, where more ids exist than there are visuals. 
+				//for that purpose, seeds occupy [0, startIx), 
+				var startIx = seeds.length;
+				flexOptions.startIx = Math.max(startIx, flexOptions.startIx || 0);
+
+				//part of the issue here is that flexIEC uses the ids as an indicator of order because they are assumed to be numbers
+				//therefor remove oldest uses that info -- but in reality, it just needs to time stamp the creation of evo objects, and this can all be avoided in the future
+				var seedMap = {};
+				for(var i=0; i < seeds.length; i++)
+					seedMap["" + i] = seeds[i];
+
+				//untested if you switch that!
+				var nf = new flexIEC(div, flexOptions);
+
+				//add some stuff to our thing for emitting
+				var uiEmitter = {};
+				emitter(uiEmitter);
+
+				//a parent was selected by flex
+				nf.on('parentSelected', function(eID, eDiv, finished)
+				{
+					//now a parent has been selected -- let's get that parent selection to evolution!
+					 self.backEmit("evolution:selectParents", [eID], function(err, parents)
+					 {
+					 	//index into parent object, grab our single object
+					 	var parent = parents[eID];
+
+					 	//now we use this info and pass it along for other ui business we don't care about
+					 	//emit for further behavior -- must be satisfied or loading never ends hehehe
+					 	uiEmitter.emit('parentSelected', eID, eDiv, parent, finished);
+					 });
+				});
+
+				//parent is no longer rocking it. Sorry to say. 
+				nf.on('parentUnselected', function(eID)
+				{
+					//now a parent has been selected -- let's get that parent selection to evolution!
+					 self.backEmit("evolution:unselectParents", [eID], function(err)
+					 {
+					 	//now we use this info and pass it along for other ui business we don't care about
+					 	//emit for further behavior -- must be satisfied or loading never ends hehehe
+					 	uiEmitter.emit('parentUnselected', eID);
+
+				 		self.log("act pars: ",nf.activeParents());
+					 	//are we empty? fall back to the chosen seed please!
+					 	if(nf.activeParents() == 0)
+					 	 	nf.createParent(self.chooseRandomSeed(seedMap));
+
+					 });
+				});
+
+				//individual created inside the UI system -- let's make a corresponding object in evolution
+				nf.on('createIndividual', function(eID, eDiv, finished)
+				{
+					self.requestNovelIndividual(eid, eDiv, uiEmitter, finished);					
+				});
+
+				nf.on('publishArtifact', function(eID, meta, finished)
+				{
+					//let it be known that we are looking for a sweet payday -- them kids derr
+					 self.backEmit("evolution:publishArtifact", eID, meta, function(err)
+					 {
+					 	if(err)
+					 	{
+					 		uiEmitter.emit('publishError', eID, err);
+					 	}
+					 	else
+					 	{
+					 		uiEmitter.emit('publishSuccess', eID);
+					 	}
+
+					 	//now we are done publishing
+					 	finished();
+
+					 });
+				});
+
+				//might be published-- we are looking at the modal window
+				nf.on('publishShown', function(eID, eDiv, finished)
+				{
+					//we simply send back the indentifier, and where to put your display in the html object
+				 	uiEmitter.emit('publishShown', eID, eDiv, finished);
+				});
+
+				//we hid the object -- maybe animation needs to stop or something, let it be known
+				nf.on('publishHidden', function(eID)
+				{
+					uiEmitter.emit('publishHidden', eID);
+				});
+
+				//this is a temporary measure for now
+				//send the seeds for loading into iec -- there will be a better way to do this in the future
+				return self.backEmit.qCall("evolution:loadSeeds", seedMap);
+			})
+			.then(function(uiObjects)
 			{
 				var uID = uiCount++;
 				var uiObj = {uID: uID, ui: nf, emitter: uiEmitter, seeds: seedMap};
 				uiObjects[uID] = uiObj;
 				//send back the ui object
 				done(undefined, uiObj);
-			}
-		});
+			}, 
+			function(err)
+			{
+				done(err);
+			});
+	}
+
+	self.novelIndividualCreated = function(individual)
+	{
+		//pull the finish function, send the individual
+		if(self.finishCreateIndividualCallbacks.length)
+		{
+			var singleCall = self.finishCreateIndividualCallbacks.shift();
+			singleCall(individual);
+		}
+	}
+
+	self.requestNovelIndividual = function(eID, eDiv, uiEmitter, finished)
+	{
+		//basically, we want to register that we need a novel object
+		//and when we get one, we satisfy the callback to this object uiEmitter
+		self.finishCreateIndividualCallbacks.push(function(individual)
+		{
+			//we got the juice!
+		 	self.log("Create ind. create returned: ", individual);
+
+		 	//now we use this info and pass it along for other ui business we don't care about
+		 	//emit for further behavior -- must be satisfied or loading never ends hehehe
+		 	uiEmitter.emit('individualCreated', eID, eDiv, individual, finished);
+		})
+
+		//let it be known that we are looking for a sweet payday -- them kids derr
+		 self.backEmit.qCall("evolution:runNoveltySearch", [eID])
+		 .done(function()
+		 {	
+		 }, function(err){throw err;});
 	}
 
 	self.ready = function(uID, done)

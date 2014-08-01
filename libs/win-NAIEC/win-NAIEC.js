@@ -123,8 +123,8 @@ function winnaiec(backbone, globalConfig, localConfig)
 			"evolution:selectParents" : self.selectParents,
 			"evolution:unselectParents" : self.unselectParents,
 			"evolution:getNoveltyEmitter" : self.getNoveltyEmitter,
-			"evolution:runNoveltySearch" : self.runNoveltySearch,
-			"evolution:paushNoveltySearch" : self.pauseNoveltySearch
+			"evolution:runNoveltySearch" : self.requestNovelIndividuals,
+			"evolution:pauseNoveltySearch" : self.pauseNoveltySearch
 		};
 	}
 
