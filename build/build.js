@@ -52,6 +52,1065 @@ require.define = function (name, exports) {
     exports: exports
   };
 };
+require.register("component~emitter@master", function (exports, module) {
+
+/**
+ * Expose `Emitter`.
+ */
+
+module.exports = Emitter;
+
+/**
+ * Initialize a new `Emitter`.
+ *
+ * @api public
+ */
+
+function Emitter(obj) {
+  if (obj) return mixin(obj);
+};
+
+/**
+ * Mixin the emitter properties.
+ *
+ * @param {Object} obj
+ * @return {Object}
+ * @api private
+ */
+
+function mixin(obj) {
+  for (var key in Emitter.prototype) {
+    obj[key] = Emitter.prototype[key];
+  }
+  return obj;
+}
+
+/**
+ * Listen on the given `event` with `fn`.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.on =
+Emitter.prototype.addEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+  (this._callbacks[event] = this._callbacks[event] || [])
+    .push(fn);
+  return this;
+};
+
+/**
+ * Adds an `event` listener that will be invoked a single
+ * time then automatically removed.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.once = function(event, fn){
+  var self = this;
+  this._callbacks = this._callbacks || {};
+
+  function on() {
+    self.off(event, on);
+    fn.apply(this, arguments);
+  }
+
+  on.fn = fn;
+  this.on(event, on);
+  return this;
+};
+
+/**
+ * Remove the given callback for `event` or all
+ * registered callbacks.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.off =
+Emitter.prototype.removeListener =
+Emitter.prototype.removeAllListeners =
+Emitter.prototype.removeEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+
+  // all
+  if (0 == arguments.length) {
+    this._callbacks = {};
+    return this;
+  }
+
+  // specific event
+  var callbacks = this._callbacks[event];
+  if (!callbacks) return this;
+
+  // remove all handlers
+  if (1 == arguments.length) {
+    delete this._callbacks[event];
+    return this;
+  }
+
+  // remove specific handler
+  var cb;
+  for (var i = 0; i < callbacks.length; i++) {
+    cb = callbacks[i];
+    if (cb === fn || cb.fn === fn) {
+      callbacks.splice(i, 1);
+      break;
+    }
+  }
+  return this;
+};
+
+/**
+ * Emit `event` with the given args.
+ *
+ * @param {String} event
+ * @param {Mixed} ...
+ * @return {Emitter}
+ */
+
+Emitter.prototype.emit = function(event){
+  this._callbacks = this._callbacks || {};
+  var args = [].slice.call(arguments, 1)
+    , callbacks = this._callbacks[event];
+
+  if (callbacks) {
+    callbacks = callbacks.slice(0);
+    for (var i = 0, len = callbacks.length; i < len; ++i) {
+      callbacks[i].apply(this, args);
+    }
+  }
+
+  return this;
+};
+
+/**
+ * Return array of callbacks for `event`.
+ *
+ * @param {String} event
+ * @return {Array}
+ * @api public
+ */
+
+Emitter.prototype.listeners = function(event){
+  this._callbacks = this._callbacks || {};
+  return this._callbacks[event] || [];
+};
+
+/**
+ * Check if this emitter has `event` handlers.
+ *
+ * @param {String} event
+ * @return {Boolean}
+ * @api public
+ */
+
+Emitter.prototype.hasListeners = function(event){
+  return !! this.listeners(event).length;
+};
+
+});
+
+require.modules["component-emitter"] = require.modules["component~emitter@master"];
+require.modules["component~emitter"] = require.modules["component~emitter@master"];
+require.modules["emitter"] = require.modules["component~emitter@master"];
+
+
+require.register("component~worker@master", function (exports, module) {
+
+/**
+ * Module dependencies.
+ */
+
+var Emitter = require("component~emitter@master");
+var WebWorker = window.Worker;
+
+/**
+ * Expose `Worker`.
+ */
+
+module.exports = Worker;
+
+/**
+ * Initialize a new `Worker` with `script`.
+ *
+ * @param {String} script
+ * @api public
+ */
+
+function Worker(script) {
+  var self = this;
+  this.ids = 0;
+  this.script = script;
+  this.worker = new WebWorker(script);
+  this.worker.addEventListener('message', this.onmessage.bind(this));
+  this.worker.addEventListener('error', this.onerror.bind(this));
+}
+
+/**
+ * Mixin emitter.
+ */
+
+Emitter(Worker.prototype);
+
+/**
+ * Handle messages.
+ */
+
+Worker.prototype.onmessage = function(e){
+  this.emit('message', e.data, e);
+};
+
+/**
+ * Handle errors.
+ */
+
+Worker.prototype.onerror = function(e){
+  var err = new Error(e.message);
+  err.event = e;
+  this.emit('error', err);
+};
+
+/**
+ * Terminate the worker.
+ */
+
+Worker.prototype.close = function(){
+  this.worker.terminate();
+};
+
+/**
+ * Send a `msg` with optional callback `fn`.
+ *
+ * TODO: allow passing of transferrables
+ *
+ * @param {Mixed} msg
+ * @param {Function} [fn]
+ * @api public
+ */
+
+Worker.prototype.send = function(msg, fn){
+  if (fn) this.request(msg, fn);
+  this.worker.postMessage(msg);
+};
+
+/**
+ * Send a `msg` as a request with `fn`.
+ *
+ * @param {Mixed} msg
+ * @param {Function} fn
+ * @param {Array} [transferables]
+ * @api public
+ */
+
+Worker.prototype.request = function(msg, fn, transferables){
+  var self = this;
+  var id = ++this.ids;
+
+  // req
+  msg.id = id;
+  this.worker.postMessage(msg, transferables);
+
+  // rep
+  this.on('message', onmessage);
+
+  function onmessage(msg) {
+    if (id != msg.id) return;
+    self.off('message', onmessage);
+    delete msg.id;
+    fn(msg);
+  }
+};
+
+});
+
+require.modules["component-worker"] = require.modules["component~worker@master"];
+require.modules["component~worker"] = require.modules["component~worker@master"];
+require.modules["worker"] = require.modules["component~worker@master"];
+
+
+require.register("optimuslime~traverse@master", function (exports, module) {
+var traverse = module.exports = function (obj) {
+    return new Traverse(obj);
+};
+
+function Traverse (obj) {
+    this.value = obj;
+}
+
+Traverse.prototype.get = function (ps) {
+    var node = this.value;
+    for (var i = 0; i < ps.length; i ++) {
+        var key = ps[i];
+        if (!node || !hasOwnProperty.call(node, key)) {
+            node = undefined;
+            break;
+        }
+        node = node[key];
+    }
+    return node;
+};
+
+Traverse.prototype.has = function (ps) {
+    var node = this.value;
+    for (var i = 0; i < ps.length; i ++) {
+        var key = ps[i];
+        if (!node || !hasOwnProperty.call(node, key)) {
+            return false;
+        }
+        node = node[key];
+    }
+    return true;
+};
+
+Traverse.prototype.set = function (ps, value) {
+    var node = this.value;
+    for (var i = 0; i < ps.length - 1; i ++) {
+        var key = ps[i];
+        if (!hasOwnProperty.call(node, key)) node[key] = {};
+        node = node[key];
+    }
+    node[ps[i]] = value;
+    return value;
+};
+
+Traverse.prototype.map = function (cb) {
+    return walk(this.value, cb, true);
+};
+
+Traverse.prototype.forEach = function (cb) {
+    this.value = walk(this.value, cb, false);
+    return this.value;
+};
+
+Traverse.prototype.reduce = function (cb, init) {
+    var skip = arguments.length === 1;
+    var acc = skip ? this.value : init;
+    this.forEach(function (x) {
+        if (!this.isRoot || !skip) {
+            acc = cb.call(this, acc, x);
+        }
+    });
+    return acc;
+};
+
+Traverse.prototype.paths = function () {
+    var acc = [];
+    this.forEach(function (x) {
+        acc.push(this.path); 
+    });
+    return acc;
+};
+
+Traverse.prototype.nodes = function () {
+    var acc = [];
+    this.forEach(function (x) {
+        acc.push(this.node);
+    });
+    return acc;
+};
+
+Traverse.prototype.clone = function () {
+    var parents = [], nodes = [];
+    
+    return (function clone (src) {
+        for (var i = 0; i < parents.length; i++) {
+            if (parents[i] === src) {
+                return nodes[i];
+            }
+        }
+        
+        if (typeof src === 'object' && src !== null) {
+            var dst = copy(src);
+            
+            parents.push(src);
+            nodes.push(dst);
+            
+            forEach(objectKeys(src), function (key) {
+                dst[key] = clone(src[key]);
+            });
+            
+            parents.pop();
+            nodes.pop();
+            return dst;
+        }
+        else {
+            return src;
+        }
+    })(this.value);
+};
+
+function walk (root, cb, immutable) {
+    var path = [];
+    var parents = [];
+    var alive = true;
+    
+    return (function walker (node_) {
+        var node = immutable ? copy(node_) : node_;
+        var modifiers = {};
+        
+        var keepGoing = true;
+        
+        var state = {
+            node : node,
+            node_ : node_,
+            path : [].concat(path),
+            parent : parents[parents.length - 1],
+            parents : parents,
+            key : path.slice(-1)[0],
+            isRoot : path.length === 0,
+            level : path.length,
+            circular : null,
+            update : function (x, stopHere) {
+                if (!state.isRoot) {
+                    state.parent.node[state.key] = x;
+                }
+                state.node = x;
+                if (stopHere) keepGoing = false;
+            },
+            'delete' : function (stopHere) {
+                delete state.parent.node[state.key];
+                if (stopHere) keepGoing = false;
+            },
+            remove : function (stopHere) {
+                if (isArray(state.parent.node)) {
+                    state.parent.node.splice(state.key, 1);
+                }
+                else {
+                    delete state.parent.node[state.key];
+                }
+                if (stopHere) keepGoing = false;
+            },
+            keys : null,
+            before : function (f) { modifiers.before = f },
+            after : function (f) { modifiers.after = f },
+            pre : function (f) { modifiers.pre = f },
+            post : function (f) { modifiers.post = f },
+            stop : function () { alive = false },
+            block : function () { keepGoing = false }
+        };
+        
+        if (!alive) return state;
+        
+        function updateState() {
+            if (typeof state.node === 'object' && state.node !== null) {
+                if (!state.keys || state.node_ !== state.node) {
+                    state.keys = objectKeys(state.node)
+                }
+                
+                state.isLeaf = state.keys.length == 0;
+                
+                for (var i = 0; i < parents.length; i++) {
+                    if (parents[i].node_ === node_) {
+                        state.circular = parents[i];
+                        break;
+                    }
+                }
+            }
+            else {
+                state.isLeaf = true;
+                state.keys = null;
+            }
+            
+            state.notLeaf = !state.isLeaf;
+            state.notRoot = !state.isRoot;
+        }
+        
+        updateState();
+        
+        // use return values to update if defined
+        var ret = cb.call(state, state.node);
+        if (ret !== undefined && state.update) state.update(ret);
+        
+        if (modifiers.before) modifiers.before.call(state, state.node);
+        
+        if (!keepGoing) return state;
+        
+        if (typeof state.node == 'object'
+        && state.node !== null && !state.circular) {
+            parents.push(state);
+            
+            updateState();
+            
+            forEach(state.keys, function (key, i) {
+                path.push(key);
+                
+                if (modifiers.pre) modifiers.pre.call(state, state.node[key], key);
+                
+                var child = walker(state.node[key]);
+                if (immutable && hasOwnProperty.call(state.node, key)) {
+                    state.node[key] = child.node;
+                }
+                
+                child.isLast = i == state.keys.length - 1;
+                child.isFirst = i == 0;
+                
+                if (modifiers.post) modifiers.post.call(state, child);
+                
+                path.pop();
+            });
+            parents.pop();
+        }
+        
+        if (modifiers.after) modifiers.after.call(state, state.node);
+        
+        return state;
+    })(root).node;
+}
+
+function copy (src) {
+    if (typeof src === 'object' && src !== null) {
+        var dst;
+        
+        if (isArray(src)) {
+            dst = [];
+        }
+        else if (isDate(src)) {
+            dst = new Date(src.getTime ? src.getTime() : src);
+        }
+        else if (isRegExp(src)) {
+            dst = new RegExp(src);
+        }
+        else if (isError(src)) {
+            dst = { message: src.message };
+        }
+        else if (isBoolean(src)) {
+            dst = new Boolean(src);
+        }
+        else if (isNumber(src)) {
+            dst = new Number(src);
+        }
+        else if (isString(src)) {
+            dst = new String(src);
+        }
+        else if (Object.create && Object.getPrototypeOf) {
+            dst = Object.create(Object.getPrototypeOf(src));
+        }
+        else if (src.constructor === Object) {
+            dst = {};
+        }
+        else {
+            var proto =
+                (src.constructor && src.constructor.prototype)
+                || src.__proto__
+                || {}
+            ;
+            var T = function () {};
+            T.prototype = proto;
+            dst = new T;
+        }
+        
+        forEach(objectKeys(src), function (key) {
+            dst[key] = src[key];
+        });
+        return dst;
+    }
+    else return src;
+}
+
+var objectKeys = Object.keys || function keys (obj) {
+    var res = [];
+    for (var key in obj) res.push(key)
+    return res;
+};
+
+function toS (obj) { return Object.prototype.toString.call(obj) }
+function isDate (obj) { return toS(obj) === '[object Date]' }
+function isRegExp (obj) { return toS(obj) === '[object RegExp]' }
+function isError (obj) { return toS(obj) === '[object Error]' }
+function isBoolean (obj) { return toS(obj) === '[object Boolean]' }
+function isNumber (obj) { return toS(obj) === '[object Number]' }
+function isString (obj) { return toS(obj) === '[object String]' }
+
+var isArray = Array.isArray || function isArray (xs) {
+    return Object.prototype.toString.call(xs) === '[object Array]';
+};
+
+var forEach = function (xs, fn) {
+    if (xs.forEach) return xs.forEach(fn)
+    else for (var i = 0; i < xs.length; i++) {
+        fn(xs[i], i, xs);
+    }
+};
+
+forEach(objectKeys(Traverse.prototype), function (key) {
+    traverse[key] = function (obj) {
+        var args = [].slice.call(arguments, 1);
+        var t = new Traverse(obj);
+        return t[key].apply(t, args);
+    };
+});
+
+var hasOwnProperty = Object.hasOwnProperty || function (obj, key) {
+    return key in obj;
+};
+
+});
+
+require.modules["optimuslime-traverse"] = require.modules["optimuslime~traverse@master"];
+require.modules["optimuslime~traverse"] = require.modules["optimuslime~traverse@master"];
+require.modules["traverse"] = require.modules["optimuslime~traverse@master"];
+
+
+require.register("optimuslime~traverse@0.6.6-1", function (exports, module) {
+var traverse = module.exports = function (obj) {
+    return new Traverse(obj);
+};
+
+function Traverse (obj) {
+    this.value = obj;
+}
+
+Traverse.prototype.get = function (ps) {
+    var node = this.value;
+    for (var i = 0; i < ps.length; i ++) {
+        var key = ps[i];
+        if (!node || !hasOwnProperty.call(node, key)) {
+            node = undefined;
+            break;
+        }
+        node = node[key];
+    }
+    return node;
+};
+
+Traverse.prototype.has = function (ps) {
+    var node = this.value;
+    for (var i = 0; i < ps.length; i ++) {
+        var key = ps[i];
+        if (!node || !hasOwnProperty.call(node, key)) {
+            return false;
+        }
+        node = node[key];
+    }
+    return true;
+};
+
+Traverse.prototype.set = function (ps, value) {
+    var node = this.value;
+    for (var i = 0; i < ps.length - 1; i ++) {
+        var key = ps[i];
+        if (!hasOwnProperty.call(node, key)) node[key] = {};
+        node = node[key];
+    }
+    node[ps[i]] = value;
+    return value;
+};
+
+Traverse.prototype.map = function (cb) {
+    return walk(this.value, cb, true);
+};
+
+Traverse.prototype.forEach = function (cb) {
+    this.value = walk(this.value, cb, false);
+    return this.value;
+};
+
+Traverse.prototype.reduce = function (cb, init) {
+    var skip = arguments.length === 1;
+    var acc = skip ? this.value : init;
+    this.forEach(function (x) {
+        if (!this.isRoot || !skip) {
+            acc = cb.call(this, acc, x);
+        }
+    });
+    return acc;
+};
+
+Traverse.prototype.paths = function () {
+    var acc = [];
+    this.forEach(function (x) {
+        acc.push(this.path); 
+    });
+    return acc;
+};
+
+Traverse.prototype.nodes = function () {
+    var acc = [];
+    this.forEach(function (x) {
+        acc.push(this.node);
+    });
+    return acc;
+};
+
+Traverse.prototype.clone = function () {
+    var parents = [], nodes = [];
+    
+    return (function clone (src) {
+        for (var i = 0; i < parents.length; i++) {
+            if (parents[i] === src) {
+                return nodes[i];
+            }
+        }
+        
+        if (typeof src === 'object' && src !== null) {
+            var dst = copy(src);
+            
+            parents.push(src);
+            nodes.push(dst);
+            
+            forEach(objectKeys(src), function (key) {
+                dst[key] = clone(src[key]);
+            });
+            
+            parents.pop();
+            nodes.pop();
+            return dst;
+        }
+        else {
+            return src;
+        }
+    })(this.value);
+};
+
+function walk (root, cb, immutable) {
+    var path = [];
+    var parents = [];
+    var alive = true;
+    
+    return (function walker (node_) {
+        var node = immutable ? copy(node_) : node_;
+        var modifiers = {};
+        
+        var keepGoing = true;
+        
+        var state = {
+            node : node,
+            node_ : node_,
+            path : [].concat(path),
+            parent : parents[parents.length - 1],
+            parents : parents,
+            key : path.slice(-1)[0],
+            isRoot : path.length === 0,
+            level : path.length,
+            circular : null,
+            update : function (x, stopHere) {
+                if (!state.isRoot) {
+                    state.parent.node[state.key] = x;
+                }
+                state.node = x;
+                if (stopHere) keepGoing = false;
+            },
+            'delete' : function (stopHere) {
+                delete state.parent.node[state.key];
+                if (stopHere) keepGoing = false;
+            },
+            remove : function (stopHere) {
+                if (isArray(state.parent.node)) {
+                    state.parent.node.splice(state.key, 1);
+                }
+                else {
+                    delete state.parent.node[state.key];
+                }
+                if (stopHere) keepGoing = false;
+            },
+            keys : null,
+            before : function (f) { modifiers.before = f },
+            after : function (f) { modifiers.after = f },
+            pre : function (f) { modifiers.pre = f },
+            post : function (f) { modifiers.post = f },
+            stop : function () { alive = false },
+            block : function () { keepGoing = false }
+        };
+        
+        if (!alive) return state;
+        
+        function updateState() {
+            if (typeof state.node === 'object' && state.node !== null) {
+                if (!state.keys || state.node_ !== state.node) {
+                    state.keys = objectKeys(state.node)
+                }
+                
+                state.isLeaf = state.keys.length == 0;
+                
+                for (var i = 0; i < parents.length; i++) {
+                    if (parents[i].node_ === node_) {
+                        state.circular = parents[i];
+                        break;
+                    }
+                }
+            }
+            else {
+                state.isLeaf = true;
+                state.keys = null;
+            }
+            
+            state.notLeaf = !state.isLeaf;
+            state.notRoot = !state.isRoot;
+        }
+        
+        updateState();
+        
+        // use return values to update if defined
+        var ret = cb.call(state, state.node);
+        if (ret !== undefined && state.update) state.update(ret);
+        
+        if (modifiers.before) modifiers.before.call(state, state.node);
+        
+        if (!keepGoing) return state;
+        
+        if (typeof state.node == 'object'
+        && state.node !== null && !state.circular) {
+            parents.push(state);
+            
+            updateState();
+            
+            forEach(state.keys, function (key, i) {
+                path.push(key);
+                
+                if (modifiers.pre) modifiers.pre.call(state, state.node[key], key);
+                
+                var child = walker(state.node[key]);
+                if (immutable && hasOwnProperty.call(state.node, key)) {
+                    state.node[key] = child.node;
+                }
+                
+                child.isLast = i == state.keys.length - 1;
+                child.isFirst = i == 0;
+                
+                if (modifiers.post) modifiers.post.call(state, child);
+                
+                path.pop();
+            });
+            parents.pop();
+        }
+        
+        if (modifiers.after) modifiers.after.call(state, state.node);
+        
+        return state;
+    })(root).node;
+}
+
+function copy (src) {
+    if (typeof src === 'object' && src !== null) {
+        var dst;
+        
+        if (isArray(src)) {
+            dst = [];
+        }
+        else if (isDate(src)) {
+            dst = new Date(src.getTime ? src.getTime() : src);
+        }
+        else if (isRegExp(src)) {
+            dst = new RegExp(src);
+        }
+        else if (isError(src)) {
+            dst = { message: src.message };
+        }
+        else if (isBoolean(src)) {
+            dst = new Boolean(src);
+        }
+        else if (isNumber(src)) {
+            dst = new Number(src);
+        }
+        else if (isString(src)) {
+            dst = new String(src);
+        }
+        else if (Object.create && Object.getPrototypeOf) {
+            dst = Object.create(Object.getPrototypeOf(src));
+        }
+        else if (src.constructor === Object) {
+            dst = {};
+        }
+        else {
+            var proto =
+                (src.constructor && src.constructor.prototype)
+                || src.__proto__
+                || {}
+            ;
+            var T = function () {};
+            T.prototype = proto;
+            dst = new T;
+        }
+        
+        forEach(objectKeys(src), function (key) {
+            dst[key] = src[key];
+        });
+        return dst;
+    }
+    else return src;
+}
+
+var objectKeys = Object.keys || function keys (obj) {
+    var res = [];
+    for (var key in obj) res.push(key)
+    return res;
+};
+
+function toS (obj) { return Object.prototype.toString.call(obj) }
+function isDate (obj) { return toS(obj) === '[object Date]' }
+function isRegExp (obj) { return toS(obj) === '[object RegExp]' }
+function isError (obj) { return toS(obj) === '[object Error]' }
+function isBoolean (obj) { return toS(obj) === '[object Boolean]' }
+function isNumber (obj) { return toS(obj) === '[object Number]' }
+function isString (obj) { return toS(obj) === '[object String]' }
+
+var isArray = Array.isArray || function isArray (xs) {
+    return Object.prototype.toString.call(xs) === '[object Array]';
+};
+
+var forEach = function (xs, fn) {
+    if (xs.forEach) return xs.forEach(fn)
+    else for (var i = 0; i < xs.length; i++) {
+        fn(xs[i], i, xs);
+    }
+};
+
+forEach(objectKeys(Traverse.prototype), function (key) {
+    traverse[key] = function (obj) {
+        var args = [].slice.call(arguments, 1);
+        var t = new Traverse(obj);
+        return t[key].apply(t, args);
+    };
+});
+
+var hasOwnProperty = Object.hasOwnProperty || function (obj, key) {
+    return key in obj;
+};
+
+});
+
+require.modules["optimuslime-traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
+require.modules["optimuslime~traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
+require.modules["traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
+
+
+require.register("optimuslime~el.js@master", function (exports, module) {
+/**
+* el.js v0.3 - A JavaScript Node Creation Tool
+*
+* https://github.com/markgandolfo/el.js
+*
+* Copyright 2013 Mark Gandolfo and other contributors
+* Released under the MIT license.
+* http://en.wikipedia.org/wiki/MIT_License
+*/
+
+module.exports = el;
+
+function el(tagName, attrs, child) {
+  // Pattern to match id & class names
+  var pattern = /([a-z]+|#[\w-\d]+|\.[\w\d-]+)/g
+
+  if(arguments.length === 2) {
+    if(attrs instanceof Array
+    || typeof attrs === 'function'
+    || typeof attrs === 'string'
+    || attrs.constructor !== Object
+    ) {
+      child = attrs;
+      attrs = undefined;
+    }
+
+  }
+  // does the user pass attributes in, if not set an empty object up
+  attrs = typeof attrs !== 'undefined' ? attrs : {};
+  child = typeof child !== 'undefined' ? child : [];
+  child = child instanceof Array ? child : [child];
+
+  // run the pattern over the tagname an attempt to pull out class & id attributes
+  // shift the first record out as it's the element name
+  matched = tagName.match(pattern);
+  tagName = matched[0];
+  matched.shift();
+
+  // Iterate over the matches and concat the attrs to either class or id keys in attrs json object
+  for (var m in matched) {
+    if(matched[m][0] == '.') {
+      if(attrs['class'] == undefined) {
+        attrs['class'] = matched[m].substring(1, matched[m].length);
+      } else {
+        attrs['class'] = attrs['class'] + ' ' + matched[m].substring(1, matched[m].length);
+      }
+    } else if(matched[m][0] == '#') {
+      if(attrs['id'] == undefined) {
+        attrs['id'] = matched[m].substring(1, matched[m].length)
+      } else {
+        // Feels dirty having multiple id's, but it's allowed: http://www.w3.org/TR/selectors/#id-selectors
+        attrs['id'] = attrs['id'] + ' ' + matched[m].substring(1, matched[m].length);
+      }
+    }
+  }
+
+  // create the element
+  var element = document.createElement(tagName);
+  for(var i = 0; i < child.length; i += 1) {
+    (function(child){
+      switch(typeof child) {
+        case 'object':
+          element.appendChild(child);
+          break;
+        case 'function':
+          var discardDoneCallbackResult = false;
+          var doneCallback = function doneCallback(content) {
+            if (!discardDoneCallbackResult) {
+              element.appendChild(content);
+            }
+          }
+          var result = child.apply(null, [doneCallback])
+          if(typeof result != 'undefined') {
+            discardDoneCallbackResult = true;
+            element.appendChild(result);
+          }
+          break;
+        case 'string':
+          element.appendChild(document.createTextNode(child));
+        default:
+          //???
+      }
+    }(child[i]));
+
+  }
+
+  for (var key in attrs) {
+    if (attrs.hasOwnProperty(key)) {
+      element.setAttribute(key, attrs[key]);
+    }
+  }
+
+  return element;
+};
+
+// alias
+el.create = el.c = el;
+
+// vanity methods
+el.img = function(attrs) {
+  return el.create('img', attrs);
+};
+
+el.a = function(attrs, child) {
+  return el.create('a', attrs, child);
+};
+
+el.div = function(attrs, child) {
+  return el.create('div', attrs, child);
+};
+
+el.p = function(attrs, child) {
+  return el.create('p', attrs, child);
+};
+
+el.input = function(attrs, child) {
+  return el.create('input', attrs);
+};
+
+});
+
+require.modules["optimuslime-el.js"] = require.modules["optimuslime~el.js@master"];
+require.modules["optimuslime~el.js"] = require.modules["optimuslime~el.js@master"];
+require.modules["el.js"] = require.modules["optimuslime~el.js@master"];
+
+
 require.register("optimuslime~win-utils@master", function (exports, module) {
 
 var winutils = {};
@@ -1434,1063 +2493,365 @@ require.modules["optimuslime~win-iec"] = require.modules["optimuslime~win-iec@0.
 require.modules["win-iec"] = require.modules["optimuslime~win-iec@0.0.2-6"];
 
 
-require.register("optimuslime~traverse@master", function (exports, module) {
-var traverse = module.exports = function (obj) {
-    return new Traverse(obj);
-};
+require.register("optimuslime~win-novelty@master", function (exports, module) {
+//here we test the insert functions
+//making sure the database is filled with objects of the schema type
 
-function Traverse (obj) {
-    this.value = obj;
-}
+var wMath = require("optimuslime~win-utils@0.1.1").math;
 
-Traverse.prototype.get = function (ps) {
-    var node = this.value;
-    for (var i = 0; i < ps.length; i ++) {
-        var key = ps[i];
-        if (!node || !hasOwnProperty.call(node, key)) {
-            node = undefined;
-            break;
-        }
-        node = node[key];
+//nov archive funcion handling done here
+var noveltyArchive = require("optimuslime~win-novelty@master/lib/novelty-archive.js");
+
+module.exports = winnovelty;
+
+function winnovelty(backbone, globalConfig, localConfig)
+{
+	var self = this;
+
+	//boom, let's get right into the business of novelty
+	self.winFunction = "novelty";
+
+	self.log = backbone.getLogger(self);
+	//only vital stuff goes out for normal logs
+	self.log.logLevel = localConfig.logLevel || self.log.normal;
+
+    //not default! -- normally we add pending after calling measure novelty
+    self.manualAddPending = localConfig.manualAddPending || false;
+
+    //need to pull local config
+    self.noveltyArchive = new noveltyArchive(self.log, localConfig);
+
+
+	self.eventCallbacks = function()
+	{ 
+		return {
+			//easy to handle neat geno full offspring
+            "novelty:measureNovelty" : self.measureNovelty,
+            "novelty:addPending" : self.addPending,
+            "novelty:clearArchive" : self.clearArchive,
+			"novelty:getArchive" : self.retrieveArchive
+		};
+	};
+	//need to be able to add our schema
+	self.requiredEvents = function() {
+		return [
+		];
+	};
+
+    self.addPending = function(finished)
+    {
+        self.noveltyArchive.addPending();
+        if(finished)
+            finished();
     }
-    return node;
-};
 
-Traverse.prototype.has = function (ps) {
-    var node = this.value;
-    for (var i = 0; i < ps.length; i ++) {
-        var key = ps[i];
-        if (!node || !hasOwnProperty.call(node, key)) {
-            return false;
-        }
-        node = node[key];
+   self.clearArchive = function(finished)
+    {
+        self.noveltyArchive = new noveltyArchive(self.log, localConfig);
+
+        //all done
+        if(finished)
+            finished();
     }
-    return true;
-};
-
-Traverse.prototype.set = function (ps, value) {
-    var node = this.value;
-    for (var i = 0; i < ps.length - 1; i ++) {
-        var key = ps[i];
-        if (!hasOwnProperty.call(node, key)) node[key] = {};
-        node = node[key];
+    self.retrieveArchive = function(finished)
+    {
+        if(finished)
+            finished(undefined, self.noveltyArchive.archive);
+        else
+            return self.noveltyArchive.archive;
     }
-    node[ps[i]] = value;
-    return value;
-};
+    //measure novelty of a population
+	self.measureNovelty = function(popEvaluations, finished)
+    {
 
-Traverse.prototype.map = function (cb) {
-    return walk(this.value, cb, true);
-};
+        //taking measurements
+        var noveltyMeasures = {};
 
-Traverse.prototype.forEach = function (cb) {
-    this.value = walk(this.value, cb, false);
-    return this.value;
-};
+        //we'll count pop size
+        var count = 0;
 
-Traverse.prototype.reduce = function (cb, init) {
-    var skip = arguments.length === 1;
-    var acc = skip ? this.value : init;
-    this.forEach(function (x) {
-        if (!this.isRoot || !skip) {
-            acc = cb.call(this, acc, x);
-        }
-    });
-    return acc;
-};
+        //reset locality and competition for each genome
+        for(var wid in popEvaluations)
+        {
+            //one up, yo
+            count++;
 
-Traverse.prototype.paths = function () {
-    var acc = [];
-    this.forEach(function (x) {
-        acc.push(this.path); 
-    });
-    return acc;
-};
+            //pull the evaluation
+            var eval = popEvaluations[wid]; 
 
-Traverse.prototype.nodes = function () {
-    var acc = [];
-    this.forEach(function (x) {
-        acc.push(this.node);
-    });
-    return acc;
-};
+            //relevant part: behaviors
+            if(!eval.behaviors)
+                throw new Error("Population evaluation lacks a novelty behavior metric: "+ wid + " full eval: " + JSON.stringify(eval));
 
-Traverse.prototype.clone = function () {
-    var parents = [], nodes = [];
-    
-    return (function clone (src) {
-        for (var i = 0; i < parents.length; i++) {
-            if (parents[i] === src) {
-                return nodes[i];
-            }
-        }
-        
-        if (typeof src === 'object' && src !== null) {
-            var dst = copy(src);
-            
-            parents.push(src);
-            nodes.push(dst);
-            
-            forEach(objectKeys(src), function (key) {
-                dst[key] = clone(src[key]);
-            });
-            
-            parents.pop();
-            nodes.pop();
-            return dst;
-        }
-        else {
-            return src;
-        }
-    })(this.value);
-};
+            //let's create the novelty measures
+            var nm = {locality : 0, competition : 0, behaviors: eval.behaviors, nearestNeighbors: null, novelty: 0};
 
-function walk (root, cb, immutable) {
-    var path = [];
-    var parents = [];
-    var alive = true;
-    
-    return (function walker (node_) {
-        var node = immutable ? copy(node_) : node_;
-        var modifiers = {};
-        
-        var keepGoing = true;
-        
-        var state = {
-            node : node,
-            node_ : node_,
-            path : [].concat(path),
-            parent : parents[parents.length - 1],
-            parents : parents,
-            key : path.slice(-1)[0],
-            isRoot : path.length === 0,
-            level : path.length,
-            circular : null,
-            update : function (x, stopHere) {
-                if (!state.isRoot) {
-                    state.parent.node[state.key] = x;
-                }
-                state.node = x;
-                if (stopHere) keepGoing = false;
-            },
-            'delete' : function (stopHere) {
-                delete state.parent.node[state.key];
-                if (stopHere) keepGoing = false;
-            },
-            remove : function (stopHere) {
-                if (isArray(state.parent.node)) {
-                    state.parent.node.splice(state.key, 1);
-                }
-                else {
-                    delete state.parent.node[state.key];
-                }
-                if (stopHere) keepGoing = false;
-            },
-            keys : null,
-            before : function (f) { modifiers.before = f },
-            after : function (f) { modifiers.after = f },
-            pre : function (f) { modifiers.pre = f },
-            post : function (f) { modifiers.post = f },
-            stop : function () { alive = false },
-            block : function () { keepGoing = false }
-        };
-        
-        if (!alive) return state;
-        
-        function updateState() {
-            if (typeof state.node === 'object' && state.node !== null) {
-                if (!state.keys || state.node_ !== state.node) {
-                    state.keys = objectKeys(state.node)
-                }
-                
-                state.isLeaf = state.keys.length == 0;
-                
-                for (var i = 0; i < parents.length; i++) {
-                    if (parents[i].node_ === node_) {
-                        state.circular = parents[i];
-                        break;
-                    }
-                }
-            }
-            else {
-                state.isLeaf = true;
-                state.keys = null;
-            }
-            
-            state.notLeaf = !state.isLeaf;
-            state.notRoot = !state.isRoot;
+            //we will store all results in these measures -- then send back appropriate information
+            noveltyMeasures[wid] = nm;
         }
-        
-        updateState();
-        
-        // use return values to update if defined
-        var ret = cb.call(state, state.node);
-        if (ret !== undefined && state.update) state.update(ret);
-        
-        if (modifiers.before) modifiers.before.call(state, state.node);
-        
-        if (!keepGoing) return state;
-        
-        if (typeof state.node == 'object'
-        && state.node !== null && !state.circular) {
-            parents.push(state);
-            
-            updateState();
-            
-            forEach(state.keys, function (key, i) {
-                path.push(key);
-                
-                if (modifiers.pre) modifiers.pre.call(state, state.node[key], key);
-                
-                var child = walker(state.node[key]);
-                if (immutable && hasOwnProperty.call(state.node, key)) {
-                    state.node[key] = child.node;
-                }
-                
-                child.isLast = i == state.keys.length - 1;
-                child.isFirst = i == 0;
-                
-                if (modifiers.post) modifiers.post.call(state, child);
-                
-                path.pop();
-            });
-            parents.pop();
-        }
-        
-        if (modifiers.after) modifiers.after.call(state, state.node);
-        
-        return state;
-    })(root).node;
-}
 
-function copy (src) {
-    if (typeof src === 'object' && src !== null) {
-        var dst;
-        
-        if (isArray(src)) {
-            dst = [];
-        }
-        else if (isDate(src)) {
-            dst = new Date(src.getTime ? src.getTime() : src);
-        }
-        else if (isRegExp(src)) {
-            dst = new RegExp(src);
-        }
-        else if (isError(src)) {
-            dst = { message: src.message };
-        }
-        else if (isBoolean(src)) {
-            dst = new Boolean(src);
-        }
-        else if (isNumber(src)) {
-            dst = new Number(src);
-        }
-        else if (isString(src)) {
-            dst = new String(src);
-        }
-        else if (Object.create && Object.getPrototypeOf) {
-            dst = Object.create(Object.getPrototypeOf(src));
-        }
-        else if (src.constructor === Object) {
-            dst = {};
-        }
-        else {
-            var proto =
-                (src.constructor && src.constructor.prototype)
-                || src.__proto__
-                || {}
-            ;
-            var T = function () {};
-            T.prototype = proto;
-            dst = new T;
-        }
-        
-        forEach(objectKeys(src), function (key) {
-            dst[key] = src[key];
-        });
-        return dst;
-    }
-    else return src;
-}
+        //now we have each object, and what we'll be measuring against for novelty purposes
+        self.noveltyArchive.setMeasureAgainst(popEvaluations);
 
-var objectKeys = Object.keys || function keys (obj) {
-    var res = [];
-    for (var key in obj) res.push(key)
-    return res;
-};
+        var artEval;
+        var max = 0.0, min = 100000000000.0;
 
-function toS (obj) { return Object.prototype.toString.call(obj) }
-function isDate (obj) { return toS(obj) === '[object Date]' }
-function isRegExp (obj) { return toS(obj) === '[object RegExp]' }
-function isError (obj) { return toS(obj) === '[object Error]' }
-function isBoolean (obj) { return toS(obj) === '[object Boolean]' }
-function isNumber (obj) { return toS(obj) === '[object Number]' }
-function isString (obj) { return toS(obj) === '[object String]' }
+        var nMeasurements = {};
 
-var isArray = Array.isArray || function isArray (xs) {
-    return Object.prototype.toString.call(xs) === '[object Array]';
-};
+        for(var wid in popEvaluations)
+        {
+            artEval = popEvaluations[wid]
+            var measured = self.noveltyArchive.measureNovelty(wid, artEval);
 
-var forEach = function (xs, fn) {
-    if (xs.forEach) return xs.forEach(fn)
-    else for (var i = 0; i < xs.length; i++) {
-        fn(xs[i], i, xs);
-    }
-};
+            max = Math.max(measured.novelty, max);
+            min = Math.min(measured.novelty, min);
 
-forEach(objectKeys(Traverse.prototype), function (key) {
-    traverse[key] = function (obj) {
-        var args = [].slice.call(arguments, 1);
-        var t = new Traverse(obj);
-        return t[key].apply(t, args);
+            nMeasurements[wid] = measured;
+        }
+
+        //print normal stuff about min/max novelty -- filtered out by different logging levels
+        self.log("nov min: "+ min + " max:" + max);
+
+        //after a good novelty measuring, we should add our pending objects to the archive --
+        //unless specified to call this manually
+        if(!self.manualAddPending)
+            self.noveltyArchive.addPending();
+
+        //return information about all the artifacts
+        var results = {minimum: min, maximum: max, novelty: nMeasurements};
+
+        if(finished)
+            finished(undefined, results);
+        else
+            return results;
     };
-});
 
-var hasOwnProperty = Object.hasOwnProperty || function (obj, key) {
-    return key in obj;
-};
-
-});
-
-require.modules["optimuslime-traverse"] = require.modules["optimuslime~traverse@master"];
-require.modules["optimuslime~traverse"] = require.modules["optimuslime~traverse@master"];
-require.modules["traverse"] = require.modules["optimuslime~traverse@master"];
-
-
-require.register("optimuslime~traverse@0.6.6-1", function (exports, module) {
-var traverse = module.exports = function (obj) {
-    return new Traverse(obj);
-};
-
-function Traverse (obj) {
-    this.value = obj;
+	return self;
 }
 
-Traverse.prototype.get = function (ps) {
-    var node = this.value;
-    for (var i = 0; i < ps.length; i ++) {
-        var key = ps[i];
-        if (!node || !hasOwnProperty.call(node, key)) {
-            node = undefined;
-            break;
-        }
-        node = node[key];
-    }
-    return node;
-};
-
-Traverse.prototype.has = function (ps) {
-    var node = this.value;
-    for (var i = 0; i < ps.length; i ++) {
-        var key = ps[i];
-        if (!node || !hasOwnProperty.call(node, key)) {
-            return false;
-        }
-        node = node[key];
-    }
-    return true;
-};
-
-Traverse.prototype.set = function (ps, value) {
-    var node = this.value;
-    for (var i = 0; i < ps.length - 1; i ++) {
-        var key = ps[i];
-        if (!hasOwnProperty.call(node, key)) node[key] = {};
-        node = node[key];
-    }
-    node[ps[i]] = value;
-    return value;
-};
-
-Traverse.prototype.map = function (cb) {
-    return walk(this.value, cb, true);
-};
-
-Traverse.prototype.forEach = function (cb) {
-    this.value = walk(this.value, cb, false);
-    return this.value;
-};
-
-Traverse.prototype.reduce = function (cb, init) {
-    var skip = arguments.length === 1;
-    var acc = skip ? this.value : init;
-    this.forEach(function (x) {
-        if (!this.isRoot || !skip) {
-            acc = cb.call(this, acc, x);
-        }
-    });
-    return acc;
-};
-
-Traverse.prototype.paths = function () {
-    var acc = [];
-    this.forEach(function (x) {
-        acc.push(this.path); 
-    });
-    return acc;
-};
-
-Traverse.prototype.nodes = function () {
-    var acc = [];
-    this.forEach(function (x) {
-        acc.push(this.node);
-    });
-    return acc;
-};
-
-Traverse.prototype.clone = function () {
-    var parents = [], nodes = [];
-    
-    return (function clone (src) {
-        for (var i = 0; i < parents.length; i++) {
-            if (parents[i] === src) {
-                return nodes[i];
-            }
-        }
-        
-        if (typeof src === 'object' && src !== null) {
-            var dst = copy(src);
-            
-            parents.push(src);
-            nodes.push(dst);
-            
-            forEach(objectKeys(src), function (key) {
-                dst[key] = clone(src[key]);
-            });
-            
-            parents.pop();
-            nodes.pop();
-            return dst;
-        }
-        else {
-            return src;
-        }
-    })(this.value);
-};
-
-function walk (root, cb, immutable) {
-    var path = [];
-    var parents = [];
-    var alive = true;
-    
-    return (function walker (node_) {
-        var node = immutable ? copy(node_) : node_;
-        var modifiers = {};
-        
-        var keepGoing = true;
-        
-        var state = {
-            node : node,
-            node_ : node_,
-            path : [].concat(path),
-            parent : parents[parents.length - 1],
-            parents : parents,
-            key : path.slice(-1)[0],
-            isRoot : path.length === 0,
-            level : path.length,
-            circular : null,
-            update : function (x, stopHere) {
-                if (!state.isRoot) {
-                    state.parent.node[state.key] = x;
-                }
-                state.node = x;
-                if (stopHere) keepGoing = false;
-            },
-            'delete' : function (stopHere) {
-                delete state.parent.node[state.key];
-                if (stopHere) keepGoing = false;
-            },
-            remove : function (stopHere) {
-                if (isArray(state.parent.node)) {
-                    state.parent.node.splice(state.key, 1);
-                }
-                else {
-                    delete state.parent.node[state.key];
-                }
-                if (stopHere) keepGoing = false;
-            },
-            keys : null,
-            before : function (f) { modifiers.before = f },
-            after : function (f) { modifiers.after = f },
-            pre : function (f) { modifiers.pre = f },
-            post : function (f) { modifiers.post = f },
-            stop : function () { alive = false },
-            block : function () { keepGoing = false }
-        };
-        
-        if (!alive) return state;
-        
-        function updateState() {
-            if (typeof state.node === 'object' && state.node !== null) {
-                if (!state.keys || state.node_ !== state.node) {
-                    state.keys = objectKeys(state.node)
-                }
-                
-                state.isLeaf = state.keys.length == 0;
-                
-                for (var i = 0; i < parents.length; i++) {
-                    if (parents[i].node_ === node_) {
-                        state.circular = parents[i];
-                        break;
-                    }
-                }
-            }
-            else {
-                state.isLeaf = true;
-                state.keys = null;
-            }
-            
-            state.notLeaf = !state.isLeaf;
-            state.notRoot = !state.isRoot;
-        }
-        
-        updateState();
-        
-        // use return values to update if defined
-        var ret = cb.call(state, state.node);
-        if (ret !== undefined && state.update) state.update(ret);
-        
-        if (modifiers.before) modifiers.before.call(state, state.node);
-        
-        if (!keepGoing) return state;
-        
-        if (typeof state.node == 'object'
-        && state.node !== null && !state.circular) {
-            parents.push(state);
-            
-            updateState();
-            
-            forEach(state.keys, function (key, i) {
-                path.push(key);
-                
-                if (modifiers.pre) modifiers.pre.call(state, state.node[key], key);
-                
-                var child = walker(state.node[key]);
-                if (immutable && hasOwnProperty.call(state.node, key)) {
-                    state.node[key] = child.node;
-                }
-                
-                child.isLast = i == state.keys.length - 1;
-                child.isFirst = i == 0;
-                
-                if (modifiers.post) modifiers.post.call(state, child);
-                
-                path.pop();
-            });
-            parents.pop();
-        }
-        
-        if (modifiers.after) modifiers.after.call(state, state.node);
-        
-        return state;
-    })(root).node;
-}
-
-function copy (src) {
-    if (typeof src === 'object' && src !== null) {
-        var dst;
-        
-        if (isArray(src)) {
-            dst = [];
-        }
-        else if (isDate(src)) {
-            dst = new Date(src.getTime ? src.getTime() : src);
-        }
-        else if (isRegExp(src)) {
-            dst = new RegExp(src);
-        }
-        else if (isError(src)) {
-            dst = { message: src.message };
-        }
-        else if (isBoolean(src)) {
-            dst = new Boolean(src);
-        }
-        else if (isNumber(src)) {
-            dst = new Number(src);
-        }
-        else if (isString(src)) {
-            dst = new String(src);
-        }
-        else if (Object.create && Object.getPrototypeOf) {
-            dst = Object.create(Object.getPrototypeOf(src));
-        }
-        else if (src.constructor === Object) {
-            dst = {};
-        }
-        else {
-            var proto =
-                (src.constructor && src.constructor.prototype)
-                || src.__proto__
-                || {}
-            ;
-            var T = function () {};
-            T.prototype = proto;
-            dst = new T;
-        }
-        
-        forEach(objectKeys(src), function (key) {
-            dst[key] = src[key];
-        });
-        return dst;
-    }
-    else return src;
-}
-
-var objectKeys = Object.keys || function keys (obj) {
-    var res = [];
-    for (var key in obj) res.push(key)
-    return res;
-};
-
-function toS (obj) { return Object.prototype.toString.call(obj) }
-function isDate (obj) { return toS(obj) === '[object Date]' }
-function isRegExp (obj) { return toS(obj) === '[object RegExp]' }
-function isError (obj) { return toS(obj) === '[object Error]' }
-function isBoolean (obj) { return toS(obj) === '[object Boolean]' }
-function isNumber (obj) { return toS(obj) === '[object Number]' }
-function isString (obj) { return toS(obj) === '[object String]' }
-
-var isArray = Array.isArray || function isArray (xs) {
-    return Object.prototype.toString.call(xs) === '[object Array]';
-};
-
-var forEach = function (xs, fn) {
-    if (xs.forEach) return xs.forEach(fn)
-    else for (var i = 0; i < xs.length; i++) {
-        fn(xs[i], i, xs);
-    }
-};
-
-forEach(objectKeys(Traverse.prototype), function (key) {
-    traverse[key] = function (obj) {
-        var args = [].slice.call(arguments, 1);
-        var t = new Traverse(obj);
-        return t[key].apply(t, args);
-    };
 });
 
-var hasOwnProperty = Object.hasOwnProperty || function (obj, key) {
-    return key in obj;
-};
-
-});
-
-require.modules["optimuslime-traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
-require.modules["optimuslime~traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
-require.modules["traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
-
-
-require.register("component~emitter@master", function (exports, module) {
-
-/**
- * Expose `Emitter`.
- */
-
-module.exports = Emitter;
-
-/**
- * Initialize a new `Emitter`.
- *
- * @api public
- */
-
-function Emitter(obj) {
-  if (obj) return mixin(obj);
-};
-
-/**
- * Mixin the emitter properties.
- *
- * @param {Object} obj
- * @return {Object}
- * @api private
- */
-
-function mixin(obj) {
-  for (var key in Emitter.prototype) {
-    obj[key] = Emitter.prototype[key];
-  }
-  return obj;
-}
-
-/**
- * Listen on the given `event` with `fn`.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.on =
-Emitter.prototype.addEventListener = function(event, fn){
-  this._callbacks = this._callbacks || {};
-  (this._callbacks[event] = this._callbacks[event] || [])
-    .push(fn);
-  return this;
-};
-
-/**
- * Adds an `event` listener that will be invoked a single
- * time then automatically removed.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.once = function(event, fn){
-  var self = this;
-  this._callbacks = this._callbacks || {};
-
-  function on() {
-    self.off(event, on);
-    fn.apply(this, arguments);
-  }
-
-  on.fn = fn;
-  this.on(event, on);
-  return this;
-};
-
-/**
- * Remove the given callback for `event` or all
- * registered callbacks.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.off =
-Emitter.prototype.removeListener =
-Emitter.prototype.removeAllListeners =
-Emitter.prototype.removeEventListener = function(event, fn){
-  this._callbacks = this._callbacks || {};
-
-  // all
-  if (0 == arguments.length) {
-    this._callbacks = {};
-    return this;
-  }
-
-  // specific event
-  var callbacks = this._callbacks[event];
-  if (!callbacks) return this;
-
-  // remove all handlers
-  if (1 == arguments.length) {
-    delete this._callbacks[event];
-    return this;
-  }
-
-  // remove specific handler
-  var cb;
-  for (var i = 0; i < callbacks.length; i++) {
-    cb = callbacks[i];
-    if (cb === fn || cb.fn === fn) {
-      callbacks.splice(i, 1);
-      break;
-    }
-  }
-  return this;
-};
-
-/**
- * Emit `event` with the given args.
- *
- * @param {String} event
- * @param {Mixed} ...
- * @return {Emitter}
- */
-
-Emitter.prototype.emit = function(event){
-  this._callbacks = this._callbacks || {};
-  var args = [].slice.call(arguments, 1)
-    , callbacks = this._callbacks[event];
-
-  if (callbacks) {
-    callbacks = callbacks.slice(0);
-    for (var i = 0, len = callbacks.length; i < len; ++i) {
-      callbacks[i].apply(this, args);
-    }
-  }
-
-  return this;
-};
-
-/**
- * Return array of callbacks for `event`.
- *
- * @param {String} event
- * @return {Array}
- * @api public
- */
-
-Emitter.prototype.listeners = function(event){
-  this._callbacks = this._callbacks || {};
-  return this._callbacks[event] || [];
-};
-
-/**
- * Check if this emitter has `event` handlers.
- *
- * @param {String} event
- * @return {Boolean}
- * @api public
- */
-
-Emitter.prototype.hasListeners = function(event){
-  return !! this.listeners(event).length;
-};
-
-});
-
-require.modules["component-emitter"] = require.modules["component~emitter@master"];
-require.modules["component~emitter"] = require.modules["component~emitter@master"];
-require.modules["emitter"] = require.modules["component~emitter@master"];
-
-
-require.register("component~worker@master", function (exports, module) {
-
+require.register("optimuslime~win-novelty@master/lib/novelty-archive.js", function (exports, module) {
 /**
  * Module dependencies.
  */
 
-var Emitter = require("component~emitter@master");
-var WebWorker = window.Worker;
-
 /**
- * Expose `Worker`.
+ * Expose `Novelty`.
  */
 
-module.exports = Worker;
-
-/**
- * Initialize a new `Worker` with `script`.
- *
- * @param {String} script
- * @api public
- */
-
-function Worker(script) {
-  var self = this;
-  this.ids = 0;
-  this.script = script;
-  this.worker = new WebWorker(script);
-  this.worker.addEventListener('message', this.onmessage.bind(this));
-  this.worker.addEventListener('error', this.onerror.bind(this));
-}
-
-/**
- * Mixin emitter.
- */
-
-Emitter(Worker.prototype);
-
-/**
- * Handle messages.
- */
-
-Worker.prototype.onmessage = function(e){
-  this.emit('message', e.data, e);
-};
-
-/**
- * Handle errors.
- */
-
-Worker.prototype.onerror = function(e){
-  var err = new Error(e.message);
-  err.event = e;
-  this.emit('error', err);
-};
-
-/**
- * Terminate the worker.
- */
-
-Worker.prototype.close = function(){
-  this.worker.terminate();
-};
-
-/**
- * Send a `msg` with optional callback `fn`.
- *
- * TODO: allow passing of transferrables
- *
- * @param {Mixed} msg
- * @param {Function} [fn]
- * @api public
- */
-
-Worker.prototype.send = function(msg, fn){
-  if (fn) this.request(msg, fn);
-  this.worker.postMessage(msg);
-};
-
-/**
- * Send a `msg` as a request with `fn`.
- *
- * @param {Mixed} msg
- * @param {Function} fn
- * @param {Array} [transferables]
- * @api public
- */
-
-Worker.prototype.request = function(msg, fn, transferables){
-  var self = this;
-  var id = ++this.ids;
-
-  // req
-  msg.id = id;
-  this.worker.postMessage(msg, transferables);
-
-  // rep
-  this.on('message', onmessage);
-
-  function onmessage(msg) {
-    if (id != msg.id) return;
-    self.off('message', onmessage);
-    delete msg.id;
-    fn(msg);
-  }
-};
-
-});
-
-require.modules["component-worker"] = require.modules["component~worker@master"];
-require.modules["component~worker"] = require.modules["component~worker@master"];
-require.modules["worker"] = require.modules["component~worker@master"];
+module.exports = NoveltyArchive;
 
 
-require.register("optimuslime~el.js@master", function (exports, module) {
-/**
-* el.js v0.3 - A JavaScript Node Creation Tool
-*
-* https://github.com/markgandolfo/el.js
-*
-* Copyright 2013 Mark Gandolfo and other contributors
-* Released under the MIT license.
-* http://en.wikipedia.org/wiki/MIT_License
-*/
+function distance(x, y)
+{
+    var dist = 0.0;
 
-module.exports = el;
+    if(!x || !y)
+        throw new Error("One of the behaviors is empty, can't compare distance!");
 
-function el(tagName, attrs, child) {
-  // Pattern to match id & class names
-  var pattern = /([a-z]+|#[\w-\d]+|\.[\w\d-]+)/g
-
-  if(arguments.length === 2) {
-    if(attrs instanceof Array
-    || typeof attrs === 'function'
-    || typeof attrs === 'string'
-    || attrs.constructor !== Object
-    ) {
-      child = attrs;
-      attrs = undefined;
+    //simple calculation, loop through double array and sum up square differences
+    for(var k=0;k<x.length;k++)
+    {
+        var delta = x[k]-y[k];
+        dist += delta*delta;
     }
 
-  }
-  // does the user pass attributes in, if not set an empty object up
-  attrs = typeof attrs !== 'undefined' ? attrs : {};
-  child = typeof child !== 'undefined' ? child : [];
-  child = child instanceof Array ? child : [child];
+    //return square distance of behavior
+    return dist;
+};
 
-  // run the pattern over the tagname an attempt to pull out class & id attributes
-  // shift the first record out as it's the element name
-  matched = tagName.match(pattern);
-  tagName = matched[0];
-  matched.shift();
+function NoveltyArchive(logger, config)
+{
+    var self = this;
 
-  // Iterate over the matches and concat the attrs to either class or id keys in attrs json object
-  for (var m in matched) {
-    if(matched[m][0] == '.') {
-      if(attrs['class'] == undefined) {
-        attrs['class'] = matched[m].substring(1, matched[m].length);
-      } else {
-        attrs['class'] = attrs['class'] + ' ' + matched[m].substring(1, matched[m].length);
-      }
-    } else if(matched[m][0] == '#') {
-      if(attrs['id'] == undefined) {
-        attrs['id'] = matched[m].substring(1, matched[m].length)
-      } else {
-        // Feels dirty having multiple id's, but it's allowed: http://www.w3.org/TR/selectors/#id-selectors
-        attrs['id'] = attrs['id'] + ' ' + matched[m].substring(1, matched[m].length);
-      }
-    }
-  }
+    //lets add some functions to self
+    self.nearestNeighbors = config.nearestNeighbors || 20;
+    //how do they enter the archive -- this is cusomizable from the outside
+    //this function returns true/false for entering an object into archive
+    var shouldEnterArchive = config.shouldEnterArchive || defaultShouldEnterArchive;
 
-  // create the element
-  var element = document.createElement(tagName);
-  for(var i = 0; i < child.length; i += 1) {
-    (function(child){
-      switch(typeof child) {
-        case 'object':
-          element.appendChild(child);
-          break;
-        case 'function':
-          var discardDoneCallbackResult = false;
-          var doneCallback = function doneCallback(content) {
-            if (!discardDoneCallbackResult) {
-              element.appendChild(content);
+    var preArchiveAdditions = config.preArchiveAdditions || defaultPreArchiveAdditions;
+    var postArchiveAdditions = config.postArchiveAdditions || defaultPostArchiveAdditions;
+
+    //by default we use thresholding to enter archive (in the future it will be probabilist additions)
+    self.archiveThreshold = config.archiveThreshold || 10.0;
+
+    //what's the most novel thing everrrrrrrr
+    self.maxDistSeen = Number.MIN_VALUE;
+
+    self.pending = {};
+
+    //archive and the measure against object
+    //these two determine your nearest neighbors -- and if you deserve entry into the archive!
+    self.archive = {};
+    self.measureAgainst = {};
+
+    self.isEmpty = true;
+
+
+    self.addPending = function()
+    {
+        //might do a few things -- if pending is empty, archive threshold can be adjusted
+        //or it might do nothing but couint number of new potential additions
+        preArchiveAdditions(self.pending);
+
+        var addedObjects = {};
+
+        for(var wid in self.pending)
+        {
+            var artifactEval = self.pending[wid];
+
+            //add object to our archive, if it returns positively from the shouldenter function
+            //should enter can be done a number of ways -- including by threshold or probabilistically (WOW THAT WORD)
+            if(shouldEnterArchive(wid, artifactEval, self.archive)){
+                self.archive[wid] = artifactEval;
+                addedObjects[wid] = artifactEval;
             }
-          }
-          var result = child.apply(null, [doneCallback])
-          if(typeof result != 'undefined') {
-            discardDoneCallbackResult = true;
-            element.appendChild(result);
-          }
-          break;
-        case 'string':
-          element.appendChild(document.createTextNode(child));
-        default:
-          //???
-      }
-    }(child[i]));
+        }
 
-  }
+        //just let anything know we've gone and added some objects to the archive 
+        postArchiveAdditions(addedObjects);
 
-  for (var key in attrs) {
-    if (attrs.hasOwnProperty(key)) {
-      element.setAttribute(key, attrs[key]);
+        //clear that out -- not needed anymore
+        addedObjects = {};
+
+        //clear our pending, thanks
+        self.pending = {};
     }
-  }
 
-  return element;
-};
+    self.setMeasureAgainst = function(popEvaluations)
+    {
+        self.measureAgainst = {};
+        for(var wid in popEvaluations)
+        {
+            //set the behaviors and things to compare against for the archive
+            self.measureAgainst[wid] = popEvaluations[wid];
+        }
+    }
 
-// alias
-el.create = el.c = el;
+    //this is the true functionality of novelty
+    self.measureNovelty = function(artWID, artifactEval)
+    {
+        var sum = 0.0;
+        var noveltyList = [];
 
-// vanity methods
-el.img = function(attrs) {
-  return el.create('img', attrs);
-};
+        for(var wid in self.measureAgainst)
+        {
+            var measure = self.measureAgainst[wid];
+            noveltyList.push(
+                {wid: wid, distance: distance(measure.behaviors, artifactEval.behaviors), list: "measureAgainst"}
+            );
+        }
 
-el.a = function(attrs, child) {
-  return el.create('a', attrs, child);
-};
+        for(var wid in self.archive)
+        {
+            var measure = self.archive[wid];
+            noveltyList.push(
+                {wid: wid, distance: distance(measure.behaviors, artifactEval.behaviors), list: "archive"}
+            );
+        }
 
-el.div = function(attrs, child) {
-  return el.create('div', attrs, child);
-};
+        //need a wid, an eval, and the archive
+        //see if we should add this genome to the archive
+        if(shouldEnterArchive(artWID, artifactEval, self.archive))
+        {
+            //add this to our pending objects that may very well be entered
+            self.pending[artWID] = artifactEval;
+        }
 
-el.p = function(attrs, child) {
-  return el.create('p', attrs, child);
-};
+        //now sort to find nearest neighbors
+        noveltyList.sort(function(a,b){return b.distance - a.distance});
 
-el.input = function(attrs, child) {
-  return el.create('input', attrs);
-};
 
+        var nn = self.nearestNeighbors;
+
+        //can't have more neighbors than THE WHOLE LIST
+        if(noveltyList.length < self.nearestNeighbors) {
+            nn=noveltyList.length;
+        }
+
+        //note our nearest neighbors is an object we'll be filling in shortly
+        var nearestNeighbors = {};
+
+        //Paul - reset local competition and local genome novelty -- might have been incrementing over time
+        //Not sure if that's the intention of the algorithm to keep around those scores to signify longer term success
+        //this would have a biasing effect on individuals that have been around for longer
+    //            artifactEval.competition = 0;
+    //            artifactEval.localGenomeNovelty = 0;
+
+
+        //TODO: Verify this is working - are local objectives set up, is this measuring properly?
+        for (var x = 0; x < nn; x++)
+        {
+            var dist = noveltyList[x].distance;
+            //measure the sum of your nearest neighbors
+            sum += dist;
+            //we store ID and distance for nearest neighbors
+            nearestNeighbors[noveltyList[x].wid] = dist;
+        }
+
+        //we send back the novelty information for this object
+        //how novel, nearest neighbors, and the actual count of nearest neighbors
+        return {novelty: sum, nearestNeighbors: nearestNeighbors, neighborCount: nn, averageNovelty: sum/nn};
+    }
+
+    function defaultShouldEnterArchive(wid, artifactEval, archive)
+    {
+        //the archive is a list of artifact wids, then the behavior objects
+        for(var wid in archive)
+        {
+            var eval = archive[wid];
+
+            //what is the distance
+            var dist = distance(artifactEval.behaviors, archive[wid].behaviors);
+
+            if(dist > self.maxDistSeen)
+            {
+                self.maxDistSeen = dist;
+                logger.log('Most novel dist: ' + self.maxDistSeen);
+            }
+
+            if(dist < self.archiveThreshold)
+                return false;
+        }
+
+        return true;
+    }
+
+    //can force anything into the archive!
+    //no callbacks here -- just insertion hehehe
+    self.forceAddArchive = function(wid, artifactEval)
+    {
+        self.archive[wid] = artifactEval;
+    }
+
+    //we alter the acrhive threhold depending 
+    function defaultPreArchiveAdditions(pending)
+    {
+        var length = Object.keys(pending).length;
+
+        if(length === 0)
+        {
+            self.archiveThreshold *= .95;
+        }
+        if(length > 5)
+        {
+            self.archiveThreshold *= 1.3;
+        }
+    }
+    //meh.
+    function defaultPostArchiveAdditions(added)
+    {
+    }
+
+    return self;
+}
 });
 
-require.modules["optimuslime-el.js"] = require.modules["optimuslime~el.js@master"];
-require.modules["optimuslime~el.js"] = require.modules["optimuslime~el.js@master"];
-require.modules["el.js"] = require.modules["optimuslime~el.js@master"];
+require.modules["optimuslime-win-novelty"] = require.modules["optimuslime~win-novelty@master"];
+require.modules["optimuslime~win-novelty"] = require.modules["optimuslime~win-novelty@master"];
+require.modules["win-novelty"] = require.modules["optimuslime~win-novelty@master"];
 
 
 require.register("component~reduce@1.0.1", function (exports, module) {
@@ -19149,6 +19510,47 @@ require.modules["component~keyname"] = require.modules["component~keyname@0.0.1"
 require.modules["keyname"] = require.modules["component~keyname@0.0.1"];
 
 
+require.register("component~type@1.0.0", function (exports, module) {
+
+/**
+ * toString ref.
+ */
+
+var toString = Object.prototype.toString;
+
+/**
+ * Return the type of `val`.
+ *
+ * @param {Mixed} val
+ * @return {String}
+ * @api public
+ */
+
+module.exports = function(val){
+  switch (toString.call(val)) {
+    case '[object Function]': return 'function';
+    case '[object Date]': return 'date';
+    case '[object RegExp]': return 'regexp';
+    case '[object Arguments]': return 'arguments';
+    case '[object Array]': return 'array';
+    case '[object String]': return 'string';
+  }
+
+  if (val === null) return 'null';
+  if (val === undefined) return 'undefined';
+  if (val && val.nodeType === 1) return 'element';
+  if (val === Object(val)) return 'object';
+
+  return typeof val;
+};
+
+});
+
+require.modules["component-type"] = require.modules["component~type@1.0.0"];
+require.modules["component~type"] = require.modules["component~type@1.0.0"];
+require.modules["type"] = require.modules["component~type@1.0.0"];
+
+
 require.register("component~props@1.1.2", function (exports, module) {
 /**
  * Global Names
@@ -19402,47 +19804,6 @@ function stripNested (prop, str, val) {
 require.modules["component-to-function"] = require.modules["component~to-function@2.0.5"];
 require.modules["component~to-function"] = require.modules["component~to-function@2.0.5"];
 require.modules["to-function"] = require.modules["component~to-function@2.0.5"];
-
-
-require.register("component~type@1.0.0", function (exports, module) {
-
-/**
- * toString ref.
- */
-
-var toString = Object.prototype.toString;
-
-/**
- * Return the type of `val`.
- *
- * @param {Mixed} val
- * @return {String}
- * @api public
- */
-
-module.exports = function(val){
-  switch (toString.call(val)) {
-    case '[object Function]': return 'function';
-    case '[object Date]': return 'date';
-    case '[object RegExp]': return 'regexp';
-    case '[object Arguments]': return 'arguments';
-    case '[object Array]': return 'array';
-    case '[object String]': return 'string';
-  }
-
-  if (val === null) return 'null';
-  if (val === undefined) return 'undefined';
-  if (val && val.nodeType === 1) return 'element';
-  if (val === Object(val)) return 'object';
-
-  return typeof val;
-};
-
-});
-
-require.modules["component-type"] = require.modules["component~type@1.0.0"];
-require.modules["component~type"] = require.modules["component~type@1.0.0"];
-require.modules["type"] = require.modules["component~type@1.0.0"];
 
 
 require.register("component~each@0.2.5", function (exports, module) {
@@ -21262,6 +21623,173 @@ function winhome(backbone, globalConfig, localConfig)
 require.modules["win-home-ui"] = require.modules["./libs/win-home-ui"];
 
 
+require.register("./libs/webworker-queue", function (exports, module) {
+
+var WebWorkerClass = require("component~worker@master");
+
+module.exports = webworkerqueue;
+
+function webworkerqueue(scriptName, workerCount)
+{ 
+    var self = this;
+
+    self.nextWorker = 0;
+    
+    //queue to pull from 
+    self.taskQueue = [];
+    self.taskCallbacks = {};
+
+    //store the web workers
+    self.workers = [];
+
+    //how many workers available
+    self.availableWorkers = workerCount;
+
+    //note who is in use
+    self.inUseWorkers = {};
+    
+    //and the full count of workers
+    self.totalWorkers = workerCount;
+
+    for(var i=0; i < workerCount; i++){
+
+        var webworker = new WebWorkerClass(scriptName);
+
+        //create a new worker id (simply the index will do)
+        var workerID = i;
+
+        //label our workers
+        webworker.workerID = workerID;
+
+        //create a webworker message callback unique for this worker
+        //webworker in this case is not a raw webworker, but an emitter object -- so we attach to the message object
+        webworker.on('message', uniqueWorkerCallback(workerID));
+
+        //store the worker inside here
+        self.workers.push(webworker);
+    }
+
+
+    function uniqueWorkerCallback(workerID)
+    {
+        return function(data){
+            //simply pass on the message with the tagged worker
+            workerMessage(workerID, data);
+        }
+    }
+
+    function getNextAvailableWorker()
+    {
+        //none available, return null
+        if(self.availableWorkers == 0)
+            return;
+
+        //otherwise, we know someone is available
+        setNextAvailableIx();
+
+        //grab the next worker available
+        var worker = self.workers[self.nextWorker];
+
+        //note that it's now in use
+        self.inUseWorkers[self.nextWorker] = true;
+
+        //less workers available
+        self.availableWorkers--;
+
+        //send back the worker
+        return worker;
+    }
+
+    function setNextAvailableIx()
+    {
+        for(var i=0; i < self.totalWorkers; i++)
+        {
+            //check if it's in use
+            if(!self.inUseWorkers[i])
+            {
+                self.nextWorker = i;
+                break;
+            }
+        }
+    }
+
+    //this function takes a workerID and a data object -- called from the worker
+    function workerMessage(workerID, data)
+    {
+        //we got our message, we pass it for callback
+
+        //we know what workerID, so pull the associated callback
+        var cb = self.taskCallbacks[workerID];
+
+        //now remove all things associated with the task
+        delete self.taskCallbacks[workerID];
+
+        //free the worker
+        delete self.inUseWorkers[workerID];
+
+        //now on the market :)
+        self.availableWorkers++;
+
+        //prepare the callback -- if it exists
+        if(cb)
+        {
+            //send the data back, pure and simple
+            cb(data);
+        }
+
+        //now, do we have any queue events waiting?
+        if(self.taskQueue.length > 0)
+        {
+            //now we need to process the task
+            var taskObject = self.taskQueue.shift();
+
+            //okay, queue it up! -- this should work immediately becuase we just freed a worker
+            self.queueJob(taskObject.data, taskObject.callback);
+        }
+    }
+
+    self.cancelJobs = function()
+    {
+        //clear out the task queue -- everything in process will be finished, but nothign else will be sent out
+        
+        //send back null data -- should trigger error!
+        for(var i=0; i < self.taskQueue.length; i++)
+            self.taskQueue[i].callback(null);
+
+        self.taskQueue = [];
+    }
+
+    self.queueJob = function(data, callback)
+    {
+
+        //if we have any available workers, just assign it directly, with a callback stored
+        var worker = getNextAvailableWorker();
+
+        if(worker)
+        {
+            //we have a worker to issue commands to now
+            //this is the callback we engage once the message comes back
+            self.taskCallbacks[worker.workerID] = callback;
+
+            //send the data now, thanks -- we'll handle callback in workerMessage function
+            worker.send(data);
+        }
+        else
+        {   
+            //otherwise, we need to add the item to the queue
+            self.taskQueue.push({data: data, callback: callback});
+            //the queue is cleared when the other workers return from their functions
+        }
+    }
+
+
+}
+
+});
+
+require.modules["webworker-queue"] = require.modules["./libs/webworker-queue"];
+
+
 require.register("./libs/geno-to-picture", function (exports, module) {
 //here we test the insert functions
 //making sure the database is filled with objects of the schema type
@@ -21845,255 +22373,6 @@ base64.encode = function(s) {
 require.modules["geno-to-picture"] = require.modules["./libs/geno-to-picture"];
 
 
-require.register("./libs/webworker-queue", function (exports, module) {
-
-var WebWorkerClass = require("component~worker@master");
-
-module.exports = webworkerqueue;
-
-function webworkerqueue(scriptName, workerCount)
-{ 
-    var self = this;
-
-    self.nextWorker = 0;
-    
-    //queue to pull from 
-    self.taskQueue = [];
-    self.taskCallbacks = {};
-
-    //store the web workers
-    self.workers = [];
-
-    //how many workers available
-    self.availableWorkers = workerCount;
-
-    //note who is in use
-    self.inUseWorkers = {};
-    
-    //and the full count of workers
-    self.totalWorkers = workerCount;
-
-    for(var i=0; i < workerCount; i++){
-
-        var webworker = new WebWorkerClass(scriptName);
-
-        //create a new worker id (simply the index will do)
-        var workerID = i;
-
-        //label our workers
-        webworker.workerID = workerID;
-
-        //create a webworker message callback unique for this worker
-        //webworker in this case is not a raw webworker, but an emitter object -- so we attach to the message object
-        webworker.on('message', uniqueWorkerCallback(workerID));
-
-        //store the worker inside here
-        self.workers.push(webworker);
-    }
-
-
-    function uniqueWorkerCallback(workerID)
-    {
-        return function(data){
-            //simply pass on the message with the tagged worker
-            workerMessage(workerID, data);
-        }
-    }
-
-    function getNextAvailableWorker()
-    {
-        //none available, return null
-        if(self.availableWorkers == 0)
-            return;
-
-        //otherwise, we know someone is available
-        setNextAvailableIx();
-
-        //grab the next worker available
-        var worker = self.workers[self.nextWorker];
-
-        //note that it's now in use
-        self.inUseWorkers[self.nextWorker] = true;
-
-        //less workers available
-        self.availableWorkers--;
-
-        //send back the worker
-        return worker;
-    }
-
-    function setNextAvailableIx()
-    {
-        for(var i=0; i < self.totalWorkers; i++)
-        {
-            //check if it's in use
-            if(!self.inUseWorkers[i])
-            {
-                self.nextWorker = i;
-                break;
-            }
-        }
-    }
-
-    //this function takes a workerID and a data object -- called from the worker
-    function workerMessage(workerID, data)
-    {
-        //we got our message, we pass it for callback
-
-        //we know what workerID, so pull the associated callback
-        var cb = self.taskCallbacks[workerID];
-
-        //now remove all things associated with the task
-        delete self.taskCallbacks[workerID];
-
-        //free the worker
-        delete self.inUseWorkers[workerID];
-
-        //now on the market :)
-        self.availableWorkers++;
-
-        //prepare the callback -- if it exists
-        if(cb)
-        {
-            //send the data back, pure and simple
-            cb(data);
-        }
-
-        //now, do we have any queue events waiting?
-        if(self.taskQueue.length > 0)
-        {
-            //now we need to process the task
-            var taskObject = self.taskQueue.shift();
-
-            //okay, queue it up! -- this should work immediately becuase we just freed a worker
-            self.queueJob(taskObject.data, taskObject.callback);
-        }
-    }
-
-
-    self.queueJob = function(data, callback)
-    {
-
-        //if we have any available workers, just assign it directly, with a callback stored
-        var worker = getNextAvailableWorker();
-
-        if(worker)
-        {
-            //we have a worker to issue commands to now
-            //this is the callback we engage once the message comes back
-            self.taskCallbacks[worker.workerID] = callback;
-
-            //send the data now, thanks -- we'll handle callback in workerMessage function
-            worker.send(data);
-        }
-        else
-        {   
-            //otherwise, we need to add the item to the queue
-            self.taskQueue.push({data: data, callback: callback});
-            //the queue is cleared when the other workers return from their functions
-        }
-    }
-
-}
-
-});
-
-require.modules["webworker-queue"] = require.modules["./libs/webworker-queue"];
-
-
-require.register("./libs/win-setup", function (exports, module) {
-//here we test the insert functions
-//making sure the database is filled with objects of the schema type
-// var wMath = require('win-utils').math;
-
-module.exports = winsetup;
-
-function winsetup(requiredEvents, moduleJSON, moduleConfigs, finished)
-{ 
-    var winback = require("optimuslime~win-backbone@0.0.4-5");
-
-    var Q = require("techjacker~q@master");
-
-    var backbone, generator, backEmit, backLog;
-
-    var emptyModule = 
-    {
-        winFunction : "experiment",
-        eventCallbacks : function(){ return {}; },
-        requiredEvents : function() {
-            return requiredEvents;
-        }
-    };
-
-    //add our own empty module onto this object
-    moduleJSON["setupExperiment"] = emptyModule;
-    
-    var qBackboneResponse = function()
-    {
-        var defer = Q.defer();
-        // self.log('qBBRes: Original: ', arguments);
-
-        //first add our own function type
-        var augmentArgs = arguments;
-        // [].splice.call(augmentArgs, 0, 0, self.winFunction);
-        //make some assumptions about the returning call
-        var callback = function(err)
-        {
-            if(err)
-            {
-              backLog("QCall fail: ", err);
-                defer.reject(err);
-            }
-            else
-            {
-                //remove the error object, send the info onwards
-                [].shift.call(arguments);
-                if(arguments.length > 1)
-                    defer.resolve(arguments);
-                else
-                    defer.resolve.apply(defer, arguments);
-            }
-        };
-
-        //then we add our callback to the end of our function -- which will get resolved here with whatever arguments are passed back
-        [].push.call(augmentArgs, callback);
-
-        // self.log('qBBRes: Augmented: ', augmentArgs);
-        //make the call, we'll catch it inside the callback!
-        backEmit.apply(backEmit, augmentArgs);
-
-        return defer.promise;
-    }
-
-    //do this up front yo
-    backbone = new winback();
-
-    backbone.logLevel = backbone.testing;
-
-    backEmit = backbone.getEmitter(emptyModule);
-    backLog = backbone.getLogger({winFunction:"experiment"});
-    backLog.logLevel = backbone.testing;
-
-    //loading modules is synchronous
-    backbone.loadModules(moduleJSON, moduleConfigs);
-
-    var registeredEvents = backbone.registeredEvents();
-    var requiredEvents = backbone.moduleRequirements();
-      
-    backLog('Backbone Events registered: ', registeredEvents);
-    backLog('Required: ', requiredEvents);
-
-    backbone.initializeModules(function(err)
-    {
-      backLog("Finished Module Init");
-      finished(err, {logger: backLog, emitter: backEmit, backbone: backbone, qCall: qBackboneResponse});
-    });
-}
-});
-
-require.modules["win-setup"] = require.modules["./libs/win-setup"];
-
-
 require.register("./libs/cppn-additions", function (exports, module) {
 //here we test the insert functions
 //making sure the database is filled with objects of the schema type
@@ -22210,6 +22489,99 @@ function cppnAdditions()
 });
 
 require.modules["cppn-additions"] = require.modules["./libs/cppn-additions"];
+
+
+require.register("./libs/win-setup", function (exports, module) {
+//here we test the insert functions
+//making sure the database is filled with objects of the schema type
+// var wMath = require('win-utils').math;
+
+module.exports = winsetup;
+
+function winsetup(requiredEvents, moduleJSON, moduleConfigs, finished)
+{ 
+    var winback = require("optimuslime~win-backbone@0.0.4-5");
+
+    var Q = require("techjacker~q@master");
+
+    var backbone, generator, backEmit, backLog;
+
+    var emptyModule = 
+    {
+        winFunction : "experiment",
+        eventCallbacks : function(){ return {}; },
+        requiredEvents : function() {
+            return requiredEvents;
+        }
+    };
+
+    //add our own empty module onto this object
+    moduleJSON["setupExperiment"] = emptyModule;
+    
+    var qBackboneResponse = function()
+    {
+        var defer = Q.defer();
+        // self.log('qBBRes: Original: ', arguments);
+
+        //first add our own function type
+        var augmentArgs = arguments;
+        // [].splice.call(augmentArgs, 0, 0, self.winFunction);
+        //make some assumptions about the returning call
+        var callback = function(err)
+        {
+            if(err)
+            {
+              backLog("QCall fail: ", err);
+                defer.reject(err);
+            }
+            else
+            {
+                //remove the error object, send the info onwards
+                [].shift.call(arguments);
+                if(arguments.length > 1)
+                    defer.resolve(arguments);
+                else
+                    defer.resolve.apply(defer, arguments);
+            }
+        };
+
+        //then we add our callback to the end of our function -- which will get resolved here with whatever arguments are passed back
+        [].push.call(augmentArgs, callback);
+
+        // self.log('qBBRes: Augmented: ', augmentArgs);
+        //make the call, we'll catch it inside the callback!
+        backEmit.apply(backEmit, augmentArgs);
+
+        return defer.promise;
+    }
+
+    //do this up front yo
+    backbone = new winback();
+
+    backbone.logLevel = backbone.testing;
+
+    backEmit = backbone.getEmitter(emptyModule);
+    backLog = backbone.getLogger({winFunction:"experiment"});
+    backLog.logLevel = backbone.testing;
+
+    //loading modules is synchronous
+    backbone.loadModules(moduleJSON, moduleConfigs);
+
+    var registeredEvents = backbone.registeredEvents();
+    var requiredEvents = backbone.moduleRequirements();
+      
+    backLog('Backbone Events registered: ', registeredEvents);
+    backLog('Required: ', requiredEvents);
+
+    backbone.initializeModules(function(err)
+    {
+      backLog("Finished Module Init");
+      finished(err, {logger: backLog, emitter: backEmit, backbone: backbone, qCall: qBackboneResponse});
+    });
+}
+});
+
+require.modules["win-setup"] = require.modules["./libs/win-setup"];
 
 
 require.register("./libs/pbEncoding", function (exports, module) {
@@ -23380,6 +23752,242 @@ function flexIEC(divValue, reqOptions)
 require.modules["flexiec"] = require.modules["./libs/flexiec"];
 
 
+require.register("./libs/win-flexNovelty", function (exports, module) {
+var flexIEC = require("./libs/flexiec");
+var winIEC = require("optimuslime~win-iec@master");
+
+var emitter = require("component~emitter@master");
+
+//we need to combine the two! Also, we're a win module -- so shape up!
+module.exports = winflex;
+
+function winflex(backbone, globalConfig, localConfig)
+{
+	//pull in backbone info, we gotta set our logger/emitter up
+	var self = this;
+
+	self.winFunction = "ui";
+
+	//this is how we talk to win-backbone
+	self.backEmit = backbone.getEmitter(self);
+
+	//grab our logger
+	self.log = backbone.getLogger(self);
+
+	//only vital stuff goes out for normal logs
+	self.log.logLevel = localConfig.logLevel || self.log.normal;
+
+	self.moreThanOneDisplay = localConfig.moreThanOneDisplay || false;
+
+	//we have logger and emitter, set up some of our functions
+
+	self.htmlEvoObjects = {};
+
+	//what events do we need?
+	self.requiredEvents = function()
+	{
+		return [
+			"evolution:loadSeeds",
+			"evolution:getOrCreateOffspring",
+			"evolution:selectParents",
+			"evolution:publishArtifact",
+			"evolution:unselectParents"
+			//in the future we will also need to save objects according to our save tendencies
+		];
+	}
+
+	//what events do we respond to?
+	self.eventCallbacks = function()
+	{ 
+		return {
+			"ui:initializeDisplay" : self.initializeDiv,
+			"ui:ready" : self.ready
+		};
+	}
+
+	var uiCount = 0;
+	var single = false;
+
+	var uiObjects = {};
+
+	self.chooseRandomSeed = function(seedMap)
+	{
+		var seedKeys = Object.keys(seedMap);
+		var rIx = Math.floor(Math.random()*seedKeys.length);
+		return seedKeys[rIx];
+	}
+
+	//initialize 
+	self.initializeDiv = function(seeds, div, flexOptions, done)
+	{
+		if(single && self.moreThanOneDisplay)
+			return;
+
+		if(!seeds.length)
+		{
+			done("Must send at least 1 seed to initialization -- for now");
+			return;
+		}
+
+		if(seeds.length > 1)
+			self.log("Undefined behavior with more than one seed in this UI object. You were warned, sorry :/")
+		//not getting stuck with an undefined issue
+		flexOptions = flexOptions || {};
+
+		//if you only ever allow one div to take over 
+		single = true;
+
+		//seed related -- start generating ids AFTER the seed count -- this is important
+		//why? Because effectively there is a mapping between ids created in the ui and ids of objects created in evoltuion
+		//they stay in sync all the time, except for seeds, where more ids exist than there are visuals. 
+		//for that purpose, seeds occupy [0, startIx), 
+		var startIx = seeds.length;
+		flexOptions.startIx = Math.max(startIx, flexOptions.startIx || 0);
+
+		//part of the issue here is that flexIEC uses the ids as an indicator of order because they are assumed to be numbers
+		//therefor remove oldest uses that info -- but in reality, it just needs to time stamp the creation of evo objects, and this can all be avoided in the future
+		var seedMap = {};
+		for(var i=0; i < seeds.length; i++)
+			seedMap["" + i] = seeds[i];
+
+		//untested if you switch that!
+		var nf = new flexIEC(div, flexOptions);
+
+		//add some stuff to our thing for emitting
+		var uiEmitter = {};
+		emitter(uiEmitter);
+
+		//a parent was selected by flex
+		nf.on('parentSelected', function(eID, eDiv, finished)
+		{
+			//now a parent has been selected -- let's get that parent selection to evolution!
+			 self.backEmit("evolution:selectParents", [eID], function(err, parents)
+			 {
+			 	//index into parent object, grab our single object
+			 	var parent = parents[eID];
+
+			 	//now we use this info and pass it along for other ui business we don't care about
+			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
+			 	uiEmitter.emit('parentSelected', eID, eDiv, parent, finished);
+			 });
+		});
+
+		//parent is no longer rocking it. Sorry to say. 
+		nf.on('parentUnselected', function(eID)
+		{
+			//now a parent has been selected -- let's get that parent selection to evolution!
+			 self.backEmit("evolution:unselectParents", [eID], function(err)
+			 {
+			 	//now we use this info and pass it along for other ui business we don't care about
+			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
+			 	uiEmitter.emit('parentUnselected', eID);
+
+		 		self.log("act pars: ",nf.activeParents());
+			 	//are we empty? fall back to the chosen seed please!
+			 	if(nf.activeParents() == 0)
+			 	 	nf.createParent(self.chooseRandomSeed(seedMap));
+
+			 });
+		});
+
+		//individual created inside the UI system -- let's make a corresponding object in evolution
+		nf.on('createIndividual', function(eID, eDiv, finished)
+		{
+			//let it be known that we are looking for a sweet payday -- them kids derr
+			 self.backEmit("evolution:getOrCreateOffspring", [eID], function(err, allIndividuals)
+			 {
+			 	// console.error("shitidjfdijfdf");
+			 	//we got the juice!
+			 	var individual = allIndividuals[eID];
+
+			 	self.log("Create ind. create returned: ", allIndividuals);
+
+			 	//now we use this info and pass it along for other ui business we don't care about
+			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
+			 	uiEmitter.emit('individualCreated', eID, eDiv, individual, finished);
+			 });
+		});
+
+		nf.on('publishArtifact', function(eID, meta, finished)
+		{
+			//let it be known that we are looking for a sweet payday -- them kids derr
+			 self.backEmit("evolution:publishArtifact", eID, meta, function(err)
+			 {
+			 	if(err)
+			 	{
+			 		uiEmitter.emit('publishError', eID, err);
+			 	}
+			 	else
+			 	{
+			 		uiEmitter.emit('publishSuccess', eID);
+			 	}
+
+			 	//now we are done publishing
+			 	finished();
+
+			 });
+		});
+
+		//might be published-- we are looking at the modal window
+		nf.on('publishShown', function(eID, eDiv, finished)
+		{
+			//we simply send back the indentifier, and where to put your display in the html object
+		 	uiEmitter.emit('publishShown', eID, eDiv, finished);
+		});
+
+		//we hid the object -- maybe animation needs to stop or something, let it be known
+		nf.on('publishHidden', function(eID)
+		{
+			uiEmitter.emit('publishHidden', eID);
+		});
+
+		//this is a temporary measure for now
+		//send the seeds for loading into iec -- there will be a better way to do this in the future
+		self.backEmit("evolution:loadSeeds", seedMap, function(err)
+		{
+			if(err)
+			{
+				done(err);
+			}
+			else
+			{
+				var uID = uiCount++;
+				var uiObj = {uID: uID, ui: nf, emitter: uiEmitter, seeds: seedMap};
+				uiObjects[uID] = uiObj;
+				//send back the ui object
+				done(undefined, uiObj);
+			}
+		});
+	}
+
+	self.ready = function(uID, done)
+	{
+		var uio = uiObjects[uID];
+
+		var nf = uio.ui;
+
+		//pull a random seed to set as the single parent (that's just our choice)
+		//we could pull 2 if they existed, but we don't
+		
+		var parentSeedID = self.chooseRandomSeed(uio.seeds);
+
+		//auto select parent -- this will cause changes to evolution
+		nf.createParent(parentSeedID);
+
+		//start up the display inside of the div passed in
+		nf.ready();
+
+	}
+
+
+	return self;
+}
+
+});
+
+require.modules["win-flexNovelty"] = require.modules["./libs/win-flexNovelty"];
+
+
 require.register("./libs/win-flexIEC", function (exports, module) {
 var flexIEC = require("./libs/flexiec");
 var winIEC = require("optimuslime~win-iec@master");
@@ -23614,6 +24222,47 @@ function winflex(backbone, globalConfig, localConfig)
 });
 
 require.modules["win-flexIEC"] = require.modules["./libs/win-flexIEC"];
+
+
+require.register("./libs/webworker-thread", function (exports, module) {
+
+var WebWorkerClass = require("component~worker@master");
+var emitter = require("component~emitter@master");
+
+module.exports = webworkerthread;
+
+function webworkerthread(scriptName)
+{ 
+    var self = this;
+
+    emitter(self);
+
+    self.thread = new WebWorkerClass(scriptName);
+
+    self.thread.on('message', messageCallback);
+ 
+    function messageCallback(threadData)
+    {
+        //here we get a callback with the data, we basically emit the event from the thread
+        if(threadData.event)
+        {
+            self.emit(threadData.event, threadData.data);
+        }
+    }
+
+    self.sendMessage = function(event, data)
+    {
+        self.thread.send({event: event, data: data});
+    }
+
+
+
+    return self;
+}
+
+});
+
+require.modules["webworker-thread"] = require.modules["./libs/webworker-thread"];
 
 
 require.register("win-picbreeder", function (exports, module) {

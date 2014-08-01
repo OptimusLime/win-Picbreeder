@@ -10,6 +10,7 @@
   "dependencies": {
     "component/worker": "master",
     "optimuslime/traverse": "0.6.6-1",
+    "optimuslime/win-novelty": "master",
     "optimuslime/el.js": "master",
     "optimuslime/win-iec": "0.0.2-6",
     "optimuslime/win-query": "0.0.1-4",
@@ -30,11 +31,13 @@
   "local": [
     "win-home-ui",
     "webworker-queue",
+    "webworker-thread",
     "geno-to-picture",
     "cppn-additions",
     "win-setup",
     "pbEncoding",
     "win-flexIEC",
+    "win-flexNovelty",
     "flexstatic",
     "flexparents",
     "flexiec"

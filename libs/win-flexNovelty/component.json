@@ -1,0 +1,15 @@
+{
+  "name": "win-flexNovelty",
+  "description": "Combine win-iec and flexIEC to be a UI comoponent with iec evolution callbacks",
+  "version": "0.0.1",
+  "local" : ["flexiec"],
+  "dependencies": {
+    "optimuslime/win-iec" : "master",
+    "component/emitter" : "master"
+  },
+  "scripts": [
+    "win-flexNovelty.js"
+  ],
+  "main": "win-flexNovelty.js",
+  "license": ["MIT"]
+}

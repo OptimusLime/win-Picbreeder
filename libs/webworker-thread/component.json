@@ -1,0 +1,17 @@
+{
+  "name": "webworker-thread",
+  "description": "Handles a revolving set of webworkers and tasks to be completed",
+  "version": "0.0.1",
+  "dependencies": {
+  },
+  "local" : [],
+  "scripts": [
+    "webworker-thread.js"
+  ],
+  "main": "webworker-thread.js",
+  "dependencies" : {
+      "component/worker" : "master",
+      "component/emitter" : "master"
+    },
+  "license": ["MIT"]
+}

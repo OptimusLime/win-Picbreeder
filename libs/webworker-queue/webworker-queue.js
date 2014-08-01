@@ -122,6 +122,16 @@ function webworkerqueue(scriptName, workerCount)
         }
     }
 
+    self.cancelJobs = function()
+    {
+        //clear out the task queue -- everything in process will be finished, but nothign else will be sent out
+        
+        //send back null data -- should trigger error!
+        for(var i=0; i < self.taskQueue.length; i++)
+            self.taskQueue[i].callback(null);
+
+        self.taskQueue = [];
+    }
 
     self.queueJob = function(data, callback)
     {
@@ -145,5 +155,6 @@ function webworkerqueue(scriptName, workerCount)
             //the queue is cleared when the other workers return from their functions
         }
     }
+
 
 }
