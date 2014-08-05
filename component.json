@@ -30,6 +30,8 @@
   "styles" : ["css/main.css"],
   "local": [
     "win-home-ui",
+    "win-NAIEC",
+    "thread-workers",
     "webworker-queue",
     "webworker-thread",
     "geno-to-picture",

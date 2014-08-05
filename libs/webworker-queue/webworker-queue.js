@@ -8,6 +8,8 @@ function webworkerqueue(scriptName, workerCount)
     var self = this;
 
     self.nextWorker = 0;
+
+    var isObjectArray = Array.isArray(scriptName);
     
     //queue to pull from 
     self.taskQueue = [];
@@ -17,17 +19,18 @@ function webworkerqueue(scriptName, workerCount)
     self.workers = [];
 
     //how many workers available
-    self.availableWorkers = workerCount;
+    self.availableWorkers = isObjectArray ? scriptName.length : workerCount;
 
     //note who is in use
     self.inUseWorkers = {};
     
     //and the full count of workers
-    self.totalWorkers = workerCount;
+    self.totalWorkers = isObjectArray ? scriptName.length : workerCount;
 
-    for(var i=0; i < workerCount; i++){
+    for(var i=0; i < self.totalWorkers; i++){
 
-        var webworker = new WebWorkerClass(scriptName);
+        //if we sent in an object array, just take the objects
+        var webworker = isObjectArray ? scriptName[i] : new WebWorkerClass(scriptName);
 
         //create a new worker id (simply the index will do)
         var workerID = i;

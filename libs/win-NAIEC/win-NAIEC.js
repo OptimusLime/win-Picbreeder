@@ -32,11 +32,11 @@ function winnaiec(backbone, globalConfig, localConfig)
 	self.maxParentSize = localConfig.maxParentSize || Number.MAX_VALUE;
 
 	if(!localConfig.behaviorGeneratorQueue || !localConfig.noveltyThread)
-		throw new Error("win-NAIEC requires a cppn queue or a novelty thread 
-			to accept async activation jobs -- node.js or browser based");
+		throw new Error("win-NAIEC requires a cppn queue or a novelty thread "
+			+ "to accept async activation jobs -- node.js or browser based");
 
 	if(!localConfig.convertToQueueObject)
-		throw new Error("Need function to convert individuals to format for sending to queue")
+		throw new Error("Need function \"convertToQueueObject\" to convert individuals to format for sending to queue")
 
 	if(!localConfig.genomeType)
 		throw new Error("win-IEC needs a genome type specified."); 
@@ -46,7 +46,11 @@ function winnaiec(backbone, globalConfig, localConfig)
 	self.convertToQueueObject = localConfig.convertToQueueObject;
 
 	self.noveltyThread.on('setupNovelty', setupNovelty);
+	self.noveltyThread.on('runGeneration', runGeneration);
 	self.noveltyThread.on('pauseNovelty', threadPauseNoveltySearch);
+	self.noveltyThread.on('error', handleNoveltyError);
+
+
 
 	var novelEmitter = {};
 	emitter(novelEmitter);
@@ -67,7 +71,7 @@ function winnaiec(backbone, globalConfig, localConfig)
 
 	self.uidCounter = 0;
 
-	function cleanEvolution()
+	function cleanEvolution(genomeType)
 	{
 		//optionally, we can change types if we need to 
 		if(genomeType)
@@ -108,8 +112,11 @@ function winnaiec(backbone, globalConfig, localConfig)
             "novelty:addPending",
             "novelty:clearArchive",
 			"novelty:getArchive",
-			"evolution:getOrCreateOffspring",
-			"evolution:publishArtifact",
+			"generator:createArtifacts",
+			"schema:replaceParentReferences",
+			"schema:getReferencesAndParents",
+			"publish:publishArtifacts",
+			// "evolution:getOrCreateOffspring",
 			//in the future we will also need to save objects according to our save tendencies
 		];
 	}
@@ -124,6 +131,7 @@ function winnaiec(backbone, globalConfig, localConfig)
 			"evolution:unselectParents" : self.unselectParents,
 			"evolution:getNoveltyEmitter" : self.getNoveltyEmitter,
 			"evolution:runNoveltySearch" : self.requestNovelIndividuals,
+			"evolution:publishArtifact" : self.publishArtifact,
 			"evolution:pauseNoveltySearch" : self.pauseNoveltySearch
 		};
 	}
@@ -164,7 +172,7 @@ function winnaiec(backbone, globalConfig, localConfig)
 
 		//mark the new identifiers in the array, as they'll be used to spawn new offspring
 		for(var i=0; i < identifiers.length; i++) {
-			requestedIdentifiers[identifiers[i]] = true;
+			self.requestedIdentifiers[identifiers[i]] = true;
 		}
 
 		//we need to tell our thread about this, it will handle request for starting/configuring novelty
@@ -174,7 +182,7 @@ function winnaiec(backbone, globalConfig, localConfig)
 	self.pauseNoveltySearch = function()
 	{
 		//pause these things -- cause a stop
-		self.noveltyThread.sendMessage("pauseNovelty", {identifiers: identifiers});
+		self.noveltyThread.sendMessage("pauseNovelty");
 	}
 
 	//this is the real request to pause -- we need to cancel the queue in this case
@@ -203,7 +211,7 @@ function winnaiec(backbone, globalConfig, localConfig)
 				}
 
 				//saved the objects, let it know we're done
-		 		self.thread.sendMessage("finishSetupNovelty", {count: self.allCount});
+		 		self.noveltyThread.sendMessage("finishSetupNovelty", {count: self.allCount});
 			})
 
 		
@@ -277,7 +285,7 @@ function winnaiec(backbone, globalConfig, localConfig)
 			var novelpop = [];
 
 			for(var key in novelty){
-				novelty[key].id = key;
+				novelty[key].noveltyID = key;
 				novelpop.push(novelty[key]);
 			}
 
@@ -293,7 +301,7 @@ function winnaiec(backbone, globalConfig, localConfig)
 			for(var i=0; i < self.noveltyPerGeneration; i++){
 				
 				//which object is this related to?
-				var key = novelpop[i].key;
+				var key = novelpop[i].noveltyID;
 
 				//grab the object itself
 				novelObjects.push(self.population[key]);
@@ -323,7 +331,12 @@ function winnaiec(backbone, globalConfig, localConfig)
 			}
 
 			//all done with the generation
-	 		self.thread.sendMessage("finishRunGeneration", {novelObjectCount: self.noveltyPerGeneration});
+	 		self.noveltyThread.sendMessage("finishRunGeneration", {novelObjectCount: self.noveltyPerGeneration});
+		})
+		.catch(function(err)
+		{
+			//got's to throw it if we catch it!
+			throw err;
 		});
 	}
 	
@@ -346,24 +359,27 @@ function winnaiec(backbone, globalConfig, localConfig)
 		//as many parents as we're willing to accept
 		var pCount = Math.min(self.maxParentSize, Math.floor(pSize*self.selectionPercentage));
 
+		var maxSelectionAttempts = 10*pCount;
+		var totalSelectionAttempts = 0;
 		//for each required parent, we do tournament selection 
-		for(var i=0; i < pCount; i++)
+		// for(var i=0; i < pCount; i++)
+		//avoid infinite loop, but make sure to get the desired amount
+		while(parentList.length < pCount && totalSelectionAttempts++ < maxSelectionAttempts)
 		{
 			var r1 = wMath.next(pSize);
-			var r2;
+			var r2 = wMath.next(pSize);
 			var cnt = 0;
 			while(cnt++ < 4 && r1 == r2)
 				r2 = wMath.next(pSize);
 
-			//if you have better novelty, add it to our parent list -- no dups
-			if(novelpop[r1].novelty >= novelpop[r2].novelty)
-			{
-				if(!parents[r1]){
-					var p = self.population[novelpop[r1].key];
-					parents[r1] = p;
-					parentList.push(p);
-				}
+			//choose the object with more novelty as the parent
+			var selectedIx = (novelpop[r1].novelty >= novelpop[r2].novelty ? r1 : r2);
 
+			//if you have better novelty, add it to our parent list -- no dups
+			if(!parents[selectedIx]){
+				var p = self.population[novelpop[selectedIx].noveltyID];
+				parents[selectedIx] = p;
+				parentList.push(p);
 			}
 		}
 
@@ -480,7 +496,7 @@ function winnaiec(backbone, globalConfig, localConfig)
 				defer.reject(err);
 			});
 
-		return defer.promise();
+		return defer.promise;
 	}
 
 	//no need for a callback here -- nuffin to do but load
@@ -593,6 +609,84 @@ function winnaiec(backbone, globalConfig, localConfig)
 
 		return parents;
 	}
+
+	self.publishArtifact = function(id, meta, finished)
+	{
+		//don't always have to send meta info -- since we don't know what to do with it anyways
+		if(typeof meta == "function")
+		{
+			finished = meta;
+			meta = {};
+		}
+		//we fetch the object from the id
+
+		var evoObject = self.evolutionObjects[id];
+
+		if(!evoObject)
+		{
+			finished("Evolutionary artifactID to publish is invalid: " + id);
+			return;
+		}
+		//we also want to store some meta info -- don't do anything about that for now 
+
+		// var seedParents = self.findSeedOrigins(id);
+
+		//
+		var seedList = [];
+		var finalClones;
+
+		//here is what needs to happen, the incoming evo object has the "wrong" parents
+		//the right parents are the published parents -- the other parents 
+
+		//this will need to be fixed in the future -- we need to know private vs public parents
+		//but for now, we simply send in the public parents -- good enough for picbreeder iec applications
+		//other types of applications might need more info.
+
+		var widObject = {};
+		widObject[evoObject.wid] = evoObject;
+		self.backEmit.qCall("schema:getReferencesAndParents", self.genomeType, widObject)
+		.then(function(refsAndParents){
+
+			//now we know our references
+			var refParents = refsAndParents[evoObject.wid];
+
+			//so we simply fetch our appropraite seed parents 
+			var evoSeedParents = self.noDuplicatSeedParents(refParents);
+
+			//now we have all the info we need to replace all our parent refs
+			return self.backEmit.qCall("schema:replaceParentReferences", self.genomeType, evoObject, evoSeedParents);
+		})
+		.then(function(cloned)
+		{
+			//now we have a cloned version for publishing, where it has public seeds
+			finalClones = cloned;
+			 //just publish everything public for now!
+	        var session = {sessionID: self.evolutionSessionID, publish: true};
+
+	        //we can also save private info
+	        //this is where we would grab all the parents of the individual
+	        var privateObjects = [];
+
+			return self.backEmit.qCall("publish:publishArtifacts", self.genomeType, session, [cloned], []);
+		})
+		.catch(function(err)
+		{
+			throw err;
+		})
+		.done(function()
+		{
+			finished(undefined, finalClones);
+		})
+       
+	}
+
+	function handleNoveltyError(errEvent)
+	{
+		console.log("Novelty Thread error: ", errEvent);
+
+	}
+
+
 
 	return self;
 }

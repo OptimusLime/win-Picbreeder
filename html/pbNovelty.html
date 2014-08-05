@@ -41,12 +41,30 @@
 			var WorkerQueue = require('webworker-queue');
 			var WorkerThread = require('webworker-thread');
 
+			var SingleThreadClasses = require('thread-workers');
+
 			var totalWorkers = 8;
 			//handling activation of netowrk
-			var queue = new WorkerQueue("/js/workerCPPNNovelAct.js", totalWorkers);
+
+			var singleThreadWorkers = [];
+			var singleDisplayWorkers = [];
+			for(var i=0; i < totalWorkers; i++)
+			{
+				singleThreadWorkers.push(new SingleThreadClasses.workerCPPNNovelAct());
+				singleDisplayWorkers.push(new SingleThreadClasses.cppnWorkerActivation());
+			}
+
+			var queue = new WorkerQueue("/js/thread-workers/workerCPPNNovelAct.js", totalWorkers);
+			// var queue = new WorkerQueue(singleThreadWorkers);
+			var displayQueue = new WorkerQueue("/js/thread-workers/cppnWorkerActivation.js", totalWorkers);
+			// var displayQueue = new WorkerQueue(singleDisplayWorkers);
 
 			//one webwork to control novelty
-			var noveltyRunner = new WorkerThread('/js/workerRunNovelty.js');
+			var NovelWorkerClass = SingleThreadClasses.workerRunNovelty;
+			//create an object that's not on another thread -- so we can debug
+			var nobj = new NovelWorkerClass();
+			var noveltyRunner = new WorkerThread('/js/thread-workers/workerRunNovelty.js');
+			// var noveltyRunner = new WorkerThread(nobj);
 
 			var winneat = require('win-neat');
 
@@ -61,6 +79,8 @@
 
 			var winsetup = require('win-setup');
 
+			var objSize = {width: 175, height: 175};
+	    	
 	    	var moduleJSON = 
 			{
 				"cppn-add" : require('cppn-additions'),
@@ -68,7 +88,8 @@
 				"win-flexNovelty" : require("win-flexNovelty"),
 				"win-query" : require("win-query"),
 				"win-pub" : require("win-publish"),
-				"win-iec" : require("win-iec"),
+				"win-NAIEC" : require("win-NAIEC"),
+				"win-novelty" : require("win-novelty"),
 				"win-gen" : require("win-gen"),
 				"win-schema" : require("win-schema"),
 				"win-neat" : winneat
@@ -103,7 +124,16 @@
 				"pbEncoding" : {
 					logLevel : testingLogLevel
 				},
-				"win-iec" : {
+				"win-novelty" : 
+				{	
+					shouldEnterArchive : probabilisticAddition,
+					logLevel : testingLogLevel,
+
+				},
+				"win-NAIEC" : {
+					behaviorGeneratorQueue : queue,
+					noveltyThread : noveltyRunner,
+					convertToQueueObject: convertIndividualToQueueJob,
 	                genomeType : picArtName
 	                //these options aren't relevant -- might change in the future -- these are for win-neat module
 					
@@ -123,6 +153,41 @@
 					// ,logLevel : testingLogLevel
 				}
 			};
+
+			//original: 25% probability of adding 
+			var noveltyProbabilityAdd = .25;
+
+			//now novelty stores things in the archive probabilisitically
+			function probabilisticAddition()
+			{
+				return (Math.random() < noveltyProbabilityAdd)
+			}
+
+			function convertIndividualToQueueJob(individual)
+			{
+				//get our genome
+				var ng = winneat.genotypeFromJSON(individual.genome);
+
+				//cppn decodeing
+				var cppn = ng.networkDecode();
+
+				//turn it into a function
+				var functionObject = cppn.createPureCPPNFunctions();
+
+				//job description huzzah
+				var jobData = {
+					wid: individual.wid,
+					width: objSize.width, 
+					height: objSize.height,
+					nodeOrder: functionObject.nodeOrder, 
+					stringFunctions: functionObject.stringFunctions,
+					biasCount: 1, //one bias node in neat genome -- ddoy
+					outputCount: ng.outputNodeCount //output count
+				};
+
+				//send job data back
+				return jobData;
+			}
 
 
 			var events = ["ui:initializeDisplay", "ui:ready", "query:getArtifacts", "query:getSeeds"];
@@ -193,7 +258,6 @@
 
 					var div = document.getElementById("flex");
 
-					var objSize = {width: 175, height: 175};
 
 					var parentSize = {width: objSize.width, height: objSize.height, columnMargin: 4}, 
 					evoSize = {width: objSize.width, height: objSize.height, rowMargin: 4, columnMargin: 4};
@@ -248,7 +312,7 @@
 							// onmessage({data: jobData});
 
 							//queue up this task with our webworkers, and get a callback with the dataURL
-							queue.queueJob(jobData, function(dataObject)
+							displayQueue.queueJob(jobData, function(dataObject)
 							{
 								//save this info for next time
 								evoIDToData[eID] = dataObject.dataURL;

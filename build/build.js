@@ -984,133 +984,6 @@ require.modules["optimuslime~traverse"] = require.modules["optimuslime~traverse@
 require.modules["traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
 
 
-require.register("optimuslime~el.js@master", function (exports, module) {
-/**
-* el.js v0.3 - A JavaScript Node Creation Tool
-*
-* https://github.com/markgandolfo/el.js
-*
-* Copyright 2013 Mark Gandolfo and other contributors
-* Released under the MIT license.
-* http://en.wikipedia.org/wiki/MIT_License
-*/
-
-module.exports = el;
-
-function el(tagName, attrs, child) {
-  // Pattern to match id & class names
-  var pattern = /([a-z]+|#[\w-\d]+|\.[\w\d-]+)/g
-
-  if(arguments.length === 2) {
-    if(attrs instanceof Array
-    || typeof attrs === 'function'
-    || typeof attrs === 'string'
-    || attrs.constructor !== Object
-    ) {
-      child = attrs;
-      attrs = undefined;
-    }
-
-  }
-  // does the user pass attributes in, if not set an empty object up
-  attrs = typeof attrs !== 'undefined' ? attrs : {};
-  child = typeof child !== 'undefined' ? child : [];
-  child = child instanceof Array ? child : [child];
-
-  // run the pattern over the tagname an attempt to pull out class & id attributes
-  // shift the first record out as it's the element name
-  matched = tagName.match(pattern);
-  tagName = matched[0];
-  matched.shift();
-
-  // Iterate over the matches and concat the attrs to either class or id keys in attrs json object
-  for (var m in matched) {
-    if(matched[m][0] == '.') {
-      if(attrs['class'] == undefined) {
-        attrs['class'] = matched[m].substring(1, matched[m].length);
-      } else {
-        attrs['class'] = attrs['class'] + ' ' + matched[m].substring(1, matched[m].length);
-      }
-    } else if(matched[m][0] == '#') {
-      if(attrs['id'] == undefined) {
-        attrs['id'] = matched[m].substring(1, matched[m].length)
-      } else {
-        // Feels dirty having multiple id's, but it's allowed: http://www.w3.org/TR/selectors/#id-selectors
-        attrs['id'] = attrs['id'] + ' ' + matched[m].substring(1, matched[m].length);
-      }
-    }
-  }
-
-  // create the element
-  var element = document.createElement(tagName);
-  for(var i = 0; i < child.length; i += 1) {
-    (function(child){
-      switch(typeof child) {
-        case 'object':
-          element.appendChild(child);
-          break;
-        case 'function':
-          var discardDoneCallbackResult = false;
-          var doneCallback = function doneCallback(content) {
-            if (!discardDoneCallbackResult) {
-              element.appendChild(content);
-            }
-          }
-          var result = child.apply(null, [doneCallback])
-          if(typeof result != 'undefined') {
-            discardDoneCallbackResult = true;
-            element.appendChild(result);
-          }
-          break;
-        case 'string':
-          element.appendChild(document.createTextNode(child));
-        default:
-          //???
-      }
-    }(child[i]));
-
-  }
-
-  for (var key in attrs) {
-    if (attrs.hasOwnProperty(key)) {
-      element.setAttribute(key, attrs[key]);
-    }
-  }
-
-  return element;
-};
-
-// alias
-el.create = el.c = el;
-
-// vanity methods
-el.img = function(attrs) {
-  return el.create('img', attrs);
-};
-
-el.a = function(attrs, child) {
-  return el.create('a', attrs, child);
-};
-
-el.div = function(attrs, child) {
-  return el.create('div', attrs, child);
-};
-
-el.p = function(attrs, child) {
-  return el.create('p', attrs, child);
-};
-
-el.input = function(attrs, child) {
-  return el.create('input', attrs);
-};
-
-});
-
-require.modules["optimuslime-el.js"] = require.modules["optimuslime~el.js@master"];
-require.modules["optimuslime~el.js"] = require.modules["optimuslime~el.js@master"];
-require.modules["el.js"] = require.modules["optimuslime~el.js@master"];
-
-
 require.register("optimuslime~win-utils@master", function (exports, module) {
 
 var winutils = {};
@@ -1513,6 +1386,494 @@ mathHelper.next = function(max)
 require.modules["optimuslime-win-utils"] = require.modules["optimuslime~win-utils@0.1.1"];
 require.modules["optimuslime~win-utils"] = require.modules["optimuslime~win-utils@0.1.1"];
 require.modules["win-utils"] = require.modules["optimuslime~win-utils@0.1.1"];
+
+
+require.register("optimuslime~win-novelty@master", function (exports, module) {
+//here we test the insert functions
+//making sure the database is filled with objects of the schema type
+
+var wMath = require("optimuslime~win-utils@0.1.1").math;
+
+//nov archive funcion handling done here
+var noveltyArchive = require("optimuslime~win-novelty@master/lib/novelty-archive.js");
+
+module.exports = winnovelty;
+
+function winnovelty(backbone, globalConfig, localConfig)
+{
+	var self = this;
+
+	//boom, let's get right into the business of novelty
+	self.winFunction = "novelty";
+
+	self.log = backbone.getLogger(self);
+	//only vital stuff goes out for normal logs
+	self.log.logLevel = localConfig.logLevel || self.log.normal;
+
+    //not default! -- normally we add pending after calling measure novelty
+    self.manualAddPending = localConfig.manualAddPending || false;
+
+    //need to pull local config
+    self.noveltyArchive = new noveltyArchive(self.log, localConfig);
+
+
+	self.eventCallbacks = function()
+	{ 
+		return {
+			//easy to handle neat geno full offspring
+            "novelty:measureNovelty" : self.measureNovelty,
+            "novelty:addPending" : self.addPending,
+            "novelty:clearArchive" : self.clearArchive,
+			"novelty:getArchive" : self.retrieveArchive
+		};
+	};
+	//need to be able to add our schema
+	self.requiredEvents = function() {
+		return [
+		];
+	};
+
+    self.addPending = function(finished)
+    {
+        self.noveltyArchive.addPending();
+        if(finished)
+            finished();
+    }
+
+   self.clearArchive = function(finished)
+    {
+        self.noveltyArchive = new noveltyArchive(self.log, localConfig);
+
+        //all done
+        if(finished)
+            finished();
+    }
+    self.retrieveArchive = function(finished)
+    {
+        if(finished)
+            finished(undefined, self.noveltyArchive.archive);
+        else
+            return self.noveltyArchive.archive;
+    }
+    //measure novelty of a population
+	self.measureNovelty = function(popEvaluations, finished)
+    {
+
+        //taking measurements
+        var noveltyMeasures = {};
+
+        //we'll count pop size
+        var count = 0;
+
+        //reset locality and competition for each genome
+        for(var wid in popEvaluations)
+        {
+            //one up, yo
+            count++;
+
+            //pull the evaluation
+            var eval = popEvaluations[wid]; 
+
+            //relevant part: behaviors
+            if(!eval.behaviors)
+                throw new Error("Population evaluation lacks a novelty behavior metric: "+ wid + " full eval: " + JSON.stringify(eval));
+
+            //let's create the novelty measures
+            var nm = {locality : 0, competition : 0, behaviors: eval.behaviors, nearestNeighbors: null, novelty: 0};
+
+            //we will store all results in these measures -- then send back appropriate information
+            noveltyMeasures[wid] = nm;
+        }
+
+        //now we have each object, and what we'll be measuring against for novelty purposes
+        self.noveltyArchive.setMeasureAgainst(popEvaluations);
+
+        var artEval;
+        var max = 0.0, min = 100000000000.0;
+
+        var nMeasurements = {};
+
+        for(var wid in popEvaluations)
+        {
+            artEval = popEvaluations[wid]
+            var measured = self.noveltyArchive.measureNovelty(wid, artEval);
+
+            max = Math.max(measured.novelty, max);
+            min = Math.min(measured.novelty, min);
+
+            nMeasurements[wid] = measured;
+        }
+
+        //print normal stuff about min/max novelty -- filtered out by different logging levels
+        self.log("nov min: "+ min + " max:" + max);
+
+        //after a good novelty measuring, we should add our pending objects to the archive --
+        //unless specified to call this manually
+        if(!self.manualAddPending)
+            self.noveltyArchive.addPending();
+
+        //return information about all the artifacts
+        var results = {minimum: min, maximum: max, novelty: nMeasurements};
+
+        if(finished)
+            finished(undefined, results);
+        else
+            return results;
+    };
+
+	return self;
+}
+
+});
+
+require.register("optimuslime~win-novelty@master/lib/novelty-archive.js", function (exports, module) {
+/**
+ * Module dependencies.
+ */
+
+/**
+ * Expose `Novelty`.
+ */
+
+module.exports = NoveltyArchive;
+
+
+function distance(x, y)
+{
+    var dist = 0.0;
+
+    if(!x || !y)
+        throw new Error("One of the behaviors is empty, can't compare distance!");
+
+    //simple calculation, loop through double array and sum up square differences
+    for(var k=0;k<x.length;k++)
+    {
+        var delta = x[k]-y[k];
+        dist += delta*delta;
+    }
+
+    //return square distance of behavior
+    return dist;
+};
+
+function NoveltyArchive(logger, config)
+{
+    var self = this;
+
+    //lets add some functions to self
+    self.nearestNeighbors = config.nearestNeighbors || 20;
+    //how do they enter the archive -- this is cusomizable from the outside
+    //this function returns true/false for entering an object into archive
+    var shouldEnterArchive = config.shouldEnterArchive || defaultShouldEnterArchive;
+
+    var preArchiveAdditions = config.preArchiveAdditions || defaultPreArchiveAdditions;
+    var postArchiveAdditions = config.postArchiveAdditions || defaultPostArchiveAdditions;
+
+    //by default we use thresholding to enter archive (in the future it will be probabilist additions)
+    self.archiveThreshold = config.archiveThreshold || 10.0;
+
+    //what's the most novel thing everrrrrrrr
+    self.maxDistSeen = Number.MIN_VALUE;
+
+    self.pending = {};
+
+    //archive and the measure against object
+    //these two determine your nearest neighbors -- and if you deserve entry into the archive!
+    self.archive = {};
+    self.measureAgainst = {};
+
+    self.isEmpty = true;
+
+
+    self.addPending = function()
+    {
+        //might do a few things -- if pending is empty, archive threshold can be adjusted
+        //or it might do nothing but couint number of new potential additions
+        preArchiveAdditions(self.pending);
+
+        var addedObjects = {};
+
+        for(var wid in self.pending)
+        {
+            var artifactEval = self.pending[wid];
+
+            //add object to our archive, if it returns positively from the shouldenter function
+            //should enter can be done a number of ways -- including by threshold or probabilistically (WOW THAT WORD)
+            if(shouldEnterArchive(wid, artifactEval, self.archive)){
+                self.archive[wid] = artifactEval;
+                addedObjects[wid] = artifactEval;
+            }
+        }
+
+        //just let anything know we've gone and added some objects to the archive 
+        postArchiveAdditions(addedObjects);
+
+        //clear that out -- not needed anymore
+        addedObjects = {};
+
+        //clear our pending, thanks
+        self.pending = {};
+    }
+
+    self.setMeasureAgainst = function(popEvaluations)
+    {
+        self.measureAgainst = {};
+        for(var wid in popEvaluations)
+        {
+            //set the behaviors and things to compare against for the archive
+            self.measureAgainst[wid] = popEvaluations[wid];
+        }
+    }
+
+    //this is the true functionality of novelty
+    self.measureNovelty = function(artWID, artifactEval)
+    {
+        var sum = 0.0;
+        var noveltyList = [];
+
+        for(var wid in self.measureAgainst)
+        {
+            var measure = self.measureAgainst[wid];
+            noveltyList.push(
+                {wid: wid, distance: distance(measure.behaviors, artifactEval.behaviors), list: "measureAgainst"}
+            );
+        }
+
+        for(var wid in self.archive)
+        {
+            var measure = self.archive[wid];
+            noveltyList.push(
+                {wid: wid, distance: distance(measure.behaviors, artifactEval.behaviors), list: "archive"}
+            );
+        }
+
+        //need a wid, an eval, and the archive
+        //see if we should add this genome to the archive
+        if(shouldEnterArchive(artWID, artifactEval, self.archive))
+        {
+            //add this to our pending objects that may very well be entered
+            self.pending[artWID] = artifactEval;
+        }
+
+        //now sort to find nearest neighbors
+        noveltyList.sort(function(a,b){return b.distance - a.distance});
+
+
+        var nn = self.nearestNeighbors;
+
+        //can't have more neighbors than THE WHOLE LIST
+        if(noveltyList.length < self.nearestNeighbors) {
+            nn=noveltyList.length;
+        }
+
+        //note our nearest neighbors is an object we'll be filling in shortly
+        var nearestNeighbors = {};
+
+        //Paul - reset local competition and local genome novelty -- might have been incrementing over time
+        //Not sure if that's the intention of the algorithm to keep around those scores to signify longer term success
+        //this would have a biasing effect on individuals that have been around for longer
+    //            artifactEval.competition = 0;
+    //            artifactEval.localGenomeNovelty = 0;
+
+
+        //TODO: Verify this is working - are local objectives set up, is this measuring properly?
+        for (var x = 0; x < nn; x++)
+        {
+            var dist = noveltyList[x].distance;
+            //measure the sum of your nearest neighbors
+            sum += dist;
+            //we store ID and distance for nearest neighbors
+            nearestNeighbors[noveltyList[x].wid] = dist;
+        }
+
+        //we send back the novelty information for this object
+        //how novel, nearest neighbors, and the actual count of nearest neighbors
+        return {novelty: sum, nearestNeighbors: nearestNeighbors, neighborCount: nn, averageNovelty: sum/nn};
+    }
+
+    function defaultShouldEnterArchive(wid, artifactEval, archive)
+    {
+        //the archive is a list of artifact wids, then the behavior objects
+        for(var wid in archive)
+        {
+            var eval = archive[wid];
+
+            //what is the distance
+            var dist = distance(artifactEval.behaviors, archive[wid].behaviors);
+
+            if(dist > self.maxDistSeen)
+            {
+                self.maxDistSeen = dist;
+                logger.log('Most novel dist: ' + self.maxDistSeen);
+            }
+
+            if(dist < self.archiveThreshold)
+                return false;
+        }
+
+        return true;
+    }
+
+    //can force anything into the archive!
+    //no callbacks here -- just insertion hehehe
+    self.forceAddArchive = function(wid, artifactEval)
+    {
+        self.archive[wid] = artifactEval;
+    }
+
+    //we alter the acrhive threhold depending 
+    function defaultPreArchiveAdditions(pending)
+    {
+        var length = Object.keys(pending).length;
+
+        if(length === 0)
+        {
+            self.archiveThreshold *= .95;
+        }
+        if(length > 5)
+        {
+            self.archiveThreshold *= 1.3;
+        }
+    }
+    //meh.
+    function defaultPostArchiveAdditions(added)
+    {
+    }
+
+    return self;
+}
+});
+
+require.modules["optimuslime-win-novelty"] = require.modules["optimuslime~win-novelty@master"];
+require.modules["optimuslime~win-novelty"] = require.modules["optimuslime~win-novelty@master"];
+require.modules["win-novelty"] = require.modules["optimuslime~win-novelty@master"];
+
+
+require.register("optimuslime~el.js@master", function (exports, module) {
+/**
+* el.js v0.3 - A JavaScript Node Creation Tool
+*
+* https://github.com/markgandolfo/el.js
+*
+* Copyright 2013 Mark Gandolfo and other contributors
+* Released under the MIT license.
+* http://en.wikipedia.org/wiki/MIT_License
+*/
+
+module.exports = el;
+
+function el(tagName, attrs, child) {
+  // Pattern to match id & class names
+  var pattern = /([a-z]+|#[\w-\d]+|\.[\w\d-]+)/g
+
+  if(arguments.length === 2) {
+    if(attrs instanceof Array
+    || typeof attrs === 'function'
+    || typeof attrs === 'string'
+    || attrs.constructor !== Object
+    ) {
+      child = attrs;
+      attrs = undefined;
+    }
+
+  }
+  // does the user pass attributes in, if not set an empty object up
+  attrs = typeof attrs !== 'undefined' ? attrs : {};
+  child = typeof child !== 'undefined' ? child : [];
+  child = child instanceof Array ? child : [child];
+
+  // run the pattern over the tagname an attempt to pull out class & id attributes
+  // shift the first record out as it's the element name
+  matched = tagName.match(pattern);
+  tagName = matched[0];
+  matched.shift();
+
+  // Iterate over the matches and concat the attrs to either class or id keys in attrs json object
+  for (var m in matched) {
+    if(matched[m][0] == '.') {
+      if(attrs['class'] == undefined) {
+        attrs['class'] = matched[m].substring(1, matched[m].length);
+      } else {
+        attrs['class'] = attrs['class'] + ' ' + matched[m].substring(1, matched[m].length);
+      }
+    } else if(matched[m][0] == '#') {
+      if(attrs['id'] == undefined) {
+        attrs['id'] = matched[m].substring(1, matched[m].length)
+      } else {
+        // Feels dirty having multiple id's, but it's allowed: http://www.w3.org/TR/selectors/#id-selectors
+        attrs['id'] = attrs['id'] + ' ' + matched[m].substring(1, matched[m].length);
+      }
+    }
+  }
+
+  // create the element
+  var element = document.createElement(tagName);
+  for(var i = 0; i < child.length; i += 1) {
+    (function(child){
+      switch(typeof child) {
+        case 'object':
+          element.appendChild(child);
+          break;
+        case 'function':
+          var discardDoneCallbackResult = false;
+          var doneCallback = function doneCallback(content) {
+            if (!discardDoneCallbackResult) {
+              element.appendChild(content);
+            }
+          }
+          var result = child.apply(null, [doneCallback])
+          if(typeof result != 'undefined') {
+            discardDoneCallbackResult = true;
+            element.appendChild(result);
+          }
+          break;
+        case 'string':
+          element.appendChild(document.createTextNode(child));
+        default:
+          //???
+      }
+    }(child[i]));
+
+  }
+
+  for (var key in attrs) {
+    if (attrs.hasOwnProperty(key)) {
+      element.setAttribute(key, attrs[key]);
+    }
+  }
+
+  return element;
+};
+
+// alias
+el.create = el.c = el;
+
+// vanity methods
+el.img = function(attrs) {
+  return el.create('img', attrs);
+};
+
+el.a = function(attrs, child) {
+  return el.create('a', attrs, child);
+};
+
+el.div = function(attrs, child) {
+  return el.create('div', attrs, child);
+};
+
+el.p = function(attrs, child) {
+  return el.create('p', attrs, child);
+};
+
+el.input = function(attrs, child) {
+  return el.create('input', attrs);
+};
+
+});
+
+require.modules["optimuslime-el.js"] = require.modules["optimuslime~el.js@master"];
+require.modules["optimuslime~el.js"] = require.modules["optimuslime~el.js@master"];
+require.modules["el.js"] = require.modules["optimuslime~el.js@master"];
 
 
 require.register("optimuslime~win-iec@master", function (exports, module) {
@@ -2491,367 +2852,6 @@ function winiec(backbone, globalConfig, localConfig)
 require.modules["optimuslime-win-iec"] = require.modules["optimuslime~win-iec@0.0.2-6"];
 require.modules["optimuslime~win-iec"] = require.modules["optimuslime~win-iec@0.0.2-6"];
 require.modules["win-iec"] = require.modules["optimuslime~win-iec@0.0.2-6"];
-
-
-require.register("optimuslime~win-novelty@master", function (exports, module) {
-//here we test the insert functions
-//making sure the database is filled with objects of the schema type
-
-var wMath = require("optimuslime~win-utils@0.1.1").math;
-
-//nov archive funcion handling done here
-var noveltyArchive = require("optimuslime~win-novelty@master/lib/novelty-archive.js");
-
-module.exports = winnovelty;
-
-function winnovelty(backbone, globalConfig, localConfig)
-{
-	var self = this;
-
-	//boom, let's get right into the business of novelty
-	self.winFunction = "novelty";
-
-	self.log = backbone.getLogger(self);
-	//only vital stuff goes out for normal logs
-	self.log.logLevel = localConfig.logLevel || self.log.normal;
-
-    //not default! -- normally we add pending after calling measure novelty
-    self.manualAddPending = localConfig.manualAddPending || false;
-
-    //need to pull local config
-    self.noveltyArchive = new noveltyArchive(self.log, localConfig);
-
-
-	self.eventCallbacks = function()
-	{ 
-		return {
-			//easy to handle neat geno full offspring
-            "novelty:measureNovelty" : self.measureNovelty,
-            "novelty:addPending" : self.addPending,
-            "novelty:clearArchive" : self.clearArchive,
-			"novelty:getArchive" : self.retrieveArchive
-		};
-	};
-	//need to be able to add our schema
-	self.requiredEvents = function() {
-		return [
-		];
-	};
-
-    self.addPending = function(finished)
-    {
-        self.noveltyArchive.addPending();
-        if(finished)
-            finished();
-    }
-
-   self.clearArchive = function(finished)
-    {
-        self.noveltyArchive = new noveltyArchive(self.log, localConfig);
-
-        //all done
-        if(finished)
-            finished();
-    }
-    self.retrieveArchive = function(finished)
-    {
-        if(finished)
-            finished(undefined, self.noveltyArchive.archive);
-        else
-            return self.noveltyArchive.archive;
-    }
-    //measure novelty of a population
-	self.measureNovelty = function(popEvaluations, finished)
-    {
-
-        //taking measurements
-        var noveltyMeasures = {};
-
-        //we'll count pop size
-        var count = 0;
-
-        //reset locality and competition for each genome
-        for(var wid in popEvaluations)
-        {
-            //one up, yo
-            count++;
-
-            //pull the evaluation
-            var eval = popEvaluations[wid]; 
-
-            //relevant part: behaviors
-            if(!eval.behaviors)
-                throw new Error("Population evaluation lacks a novelty behavior metric: "+ wid + " full eval: " + JSON.stringify(eval));
-
-            //let's create the novelty measures
-            var nm = {locality : 0, competition : 0, behaviors: eval.behaviors, nearestNeighbors: null, novelty: 0};
-
-            //we will store all results in these measures -- then send back appropriate information
-            noveltyMeasures[wid] = nm;
-        }
-
-        //now we have each object, and what we'll be measuring against for novelty purposes
-        self.noveltyArchive.setMeasureAgainst(popEvaluations);
-
-        var artEval;
-        var max = 0.0, min = 100000000000.0;
-
-        var nMeasurements = {};
-
-        for(var wid in popEvaluations)
-        {
-            artEval = popEvaluations[wid]
-            var measured = self.noveltyArchive.measureNovelty(wid, artEval);
-
-            max = Math.max(measured.novelty, max);
-            min = Math.min(measured.novelty, min);
-
-            nMeasurements[wid] = measured;
-        }
-
-        //print normal stuff about min/max novelty -- filtered out by different logging levels
-        self.log("nov min: "+ min + " max:" + max);
-
-        //after a good novelty measuring, we should add our pending objects to the archive --
-        //unless specified to call this manually
-        if(!self.manualAddPending)
-            self.noveltyArchive.addPending();
-
-        //return information about all the artifacts
-        var results = {minimum: min, maximum: max, novelty: nMeasurements};
-
-        if(finished)
-            finished(undefined, results);
-        else
-            return results;
-    };
-
-	return self;
-}
-
-});
-
-require.register("optimuslime~win-novelty@master/lib/novelty-archive.js", function (exports, module) {
-/**
- * Module dependencies.
- */
-
-/**
- * Expose `Novelty`.
- */
-
-module.exports = NoveltyArchive;
-
-
-function distance(x, y)
-{
-    var dist = 0.0;
-
-    if(!x || !y)
-        throw new Error("One of the behaviors is empty, can't compare distance!");
-
-    //simple calculation, loop through double array and sum up square differences
-    for(var k=0;k<x.length;k++)
-    {
-        var delta = x[k]-y[k];
-        dist += delta*delta;
-    }
-
-    //return square distance of behavior
-    return dist;
-};
-
-function NoveltyArchive(logger, config)
-{
-    var self = this;
-
-    //lets add some functions to self
-    self.nearestNeighbors = config.nearestNeighbors || 20;
-    //how do they enter the archive -- this is cusomizable from the outside
-    //this function returns true/false for entering an object into archive
-    var shouldEnterArchive = config.shouldEnterArchive || defaultShouldEnterArchive;
-
-    var preArchiveAdditions = config.preArchiveAdditions || defaultPreArchiveAdditions;
-    var postArchiveAdditions = config.postArchiveAdditions || defaultPostArchiveAdditions;
-
-    //by default we use thresholding to enter archive (in the future it will be probabilist additions)
-    self.archiveThreshold = config.archiveThreshold || 10.0;
-
-    //what's the most novel thing everrrrrrrr
-    self.maxDistSeen = Number.MIN_VALUE;
-
-    self.pending = {};
-
-    //archive and the measure against object
-    //these two determine your nearest neighbors -- and if you deserve entry into the archive!
-    self.archive = {};
-    self.measureAgainst = {};
-
-    self.isEmpty = true;
-
-
-    self.addPending = function()
-    {
-        //might do a few things -- if pending is empty, archive threshold can be adjusted
-        //or it might do nothing but couint number of new potential additions
-        preArchiveAdditions(self.pending);
-
-        var addedObjects = {};
-
-        for(var wid in self.pending)
-        {
-            var artifactEval = self.pending[wid];
-
-            //add object to our archive, if it returns positively from the shouldenter function
-            //should enter can be done a number of ways -- including by threshold or probabilistically (WOW THAT WORD)
-            if(shouldEnterArchive(wid, artifactEval, self.archive)){
-                self.archive[wid] = artifactEval;
-                addedObjects[wid] = artifactEval;
-            }
-        }
-
-        //just let anything know we've gone and added some objects to the archive 
-        postArchiveAdditions(addedObjects);
-
-        //clear that out -- not needed anymore
-        addedObjects = {};
-
-        //clear our pending, thanks
-        self.pending = {};
-    }
-
-    self.setMeasureAgainst = function(popEvaluations)
-    {
-        self.measureAgainst = {};
-        for(var wid in popEvaluations)
-        {
-            //set the behaviors and things to compare against for the archive
-            self.measureAgainst[wid] = popEvaluations[wid];
-        }
-    }
-
-    //this is the true functionality of novelty
-    self.measureNovelty = function(artWID, artifactEval)
-    {
-        var sum = 0.0;
-        var noveltyList = [];
-
-        for(var wid in self.measureAgainst)
-        {
-            var measure = self.measureAgainst[wid];
-            noveltyList.push(
-                {wid: wid, distance: distance(measure.behaviors, artifactEval.behaviors), list: "measureAgainst"}
-            );
-        }
-
-        for(var wid in self.archive)
-        {
-            var measure = self.archive[wid];
-            noveltyList.push(
-                {wid: wid, distance: distance(measure.behaviors, artifactEval.behaviors), list: "archive"}
-            );
-        }
-
-        //need a wid, an eval, and the archive
-        //see if we should add this genome to the archive
-        if(shouldEnterArchive(artWID, artifactEval, self.archive))
-        {
-            //add this to our pending objects that may very well be entered
-            self.pending[artWID] = artifactEval;
-        }
-
-        //now sort to find nearest neighbors
-        noveltyList.sort(function(a,b){return b.distance - a.distance});
-
-
-        var nn = self.nearestNeighbors;
-
-        //can't have more neighbors than THE WHOLE LIST
-        if(noveltyList.length < self.nearestNeighbors) {
-            nn=noveltyList.length;
-        }
-
-        //note our nearest neighbors is an object we'll be filling in shortly
-        var nearestNeighbors = {};
-
-        //Paul - reset local competition and local genome novelty -- might have been incrementing over time
-        //Not sure if that's the intention of the algorithm to keep around those scores to signify longer term success
-        //this would have a biasing effect on individuals that have been around for longer
-    //            artifactEval.competition = 0;
-    //            artifactEval.localGenomeNovelty = 0;
-
-
-        //TODO: Verify this is working - are local objectives set up, is this measuring properly?
-        for (var x = 0; x < nn; x++)
-        {
-            var dist = noveltyList[x].distance;
-            //measure the sum of your nearest neighbors
-            sum += dist;
-            //we store ID and distance for nearest neighbors
-            nearestNeighbors[noveltyList[x].wid] = dist;
-        }
-
-        //we send back the novelty information for this object
-        //how novel, nearest neighbors, and the actual count of nearest neighbors
-        return {novelty: sum, nearestNeighbors: nearestNeighbors, neighborCount: nn, averageNovelty: sum/nn};
-    }
-
-    function defaultShouldEnterArchive(wid, artifactEval, archive)
-    {
-        //the archive is a list of artifact wids, then the behavior objects
-        for(var wid in archive)
-        {
-            var eval = archive[wid];
-
-            //what is the distance
-            var dist = distance(artifactEval.behaviors, archive[wid].behaviors);
-
-            if(dist > self.maxDistSeen)
-            {
-                self.maxDistSeen = dist;
-                logger.log('Most novel dist: ' + self.maxDistSeen);
-            }
-
-            if(dist < self.archiveThreshold)
-                return false;
-        }
-
-        return true;
-    }
-
-    //can force anything into the archive!
-    //no callbacks here -- just insertion hehehe
-    self.forceAddArchive = function(wid, artifactEval)
-    {
-        self.archive[wid] = artifactEval;
-    }
-
-    //we alter the acrhive threhold depending 
-    function defaultPreArchiveAdditions(pending)
-    {
-        var length = Object.keys(pending).length;
-
-        if(length === 0)
-        {
-            self.archiveThreshold *= .95;
-        }
-        if(length > 5)
-        {
-            self.archiveThreshold *= 1.3;
-        }
-    }
-    //meh.
-    function defaultPostArchiveAdditions(added)
-    {
-    }
-
-    return self;
-}
-});
-
-require.modules["optimuslime-win-novelty"] = require.modules["optimuslime~win-novelty@master"];
-require.modules["optimuslime~win-novelty"] = require.modules["optimuslime~win-novelty@master"];
-require.modules["win-novelty"] = require.modules["optimuslime~win-novelty@master"];
 
 
 require.register("component~reduce@1.0.1", function (exports, module) {
@@ -21623,6 +21623,1691 @@ function winhome(backbone, globalConfig, localConfig)
 require.modules["win-home-ui"] = require.modules["./libs/win-home-ui"];
 
 
+require.register("./libs/win-NAIEC", function (exports, module) {
+var emitter = require("component~emitter@master");
+var Q = require("q");
+var uuid = require("optimuslime~win-utils@master").cuid;
+var wMath = require("optimuslime~win-utils@master").math;
+
+
+//we need to combine the two! Also, we're a win module -- so shape up!
+module.exports = winnaiec;
+
+function winnaiec(backbone, globalConfig, localConfig)
+{
+	//pull in backbone info, we gotta set our logger/emitter up
+	var self = this;
+
+	self.winFunction = "evolution";
+
+	//this is how we talk to win-backbone
+	self.backEmit = backbone.getEmitter(self);
+
+	//grab our logger
+	self.log = backbone.getLogger(self);
+
+	//only vital stuff goes out for normal logs
+	self.log.logLevel = localConfig.logLevel || self.log.normal;
+
+	self.populationSize = localConfig.populationSize || 30;
+
+	//pull the single most novel by default
+	self.noveltyPerGeneration = localConfig.noveltyPerGeneration || 1;
+
+	self.selectionPercentage = localConfig.selectionPercentage || .3;
+	self.maxParentSize = localConfig.maxParentSize || Number.MAX_VALUE;
+
+	if(!localConfig.behaviorGeneratorQueue || !localConfig.noveltyThread)
+		throw new Error("win-NAIEC requires a cppn queue or a novelty thread "
+			+ "to accept async activation jobs -- node.js or browser based");
+
+	if(!localConfig.convertToQueueObject)
+		throw new Error("Need function \"convertToQueueObject\" to convert individuals to format for sending to queue")
+
+	if(!localConfig.genomeType)
+		throw new Error("win-IEC needs a genome type specified."); 
+
+	self.behaviorGeneratorQueue = localConfig.behaviorGeneratorQueue;
+	self.noveltyThread = localConfig.noveltyThread;
+	self.convertToQueueObject = localConfig.convertToQueueObject;
+
+	self.noveltyThread.on('setupNovelty', setupNovelty);
+	self.noveltyThread.on('runGeneration', runGeneration);
+	self.noveltyThread.on('pauseNovelty', threadPauseNoveltySearch);
+	self.noveltyThread.on('error', handleNoveltyError);
+
+
+
+	var novelEmitter = {};
+	emitter(novelEmitter);
+
+	self.sessionObject = {};
+
+	self.inProgress = 0;
+	self.generatedIndividuals = {};
+	self.requestedIdentifiers = {};
+
+	self.mostNovel = [];
+	self.population = {};
+
+	self.behaviorsInProgress = {};
+	self.waitingBehaviors = 0;
+
+	self.allCount = 0;
+
+	self.uidCounter = 0;
+
+	function cleanEvolution(genomeType)
+	{
+		//optionally, we can change types if we need to 
+		if(genomeType)
+			self.genomeType = genomeType;
+
+		self.log("clear evo to type: ", self.genomeType)
+
+		self.selectedParents = {};
+		//all the evo objects we ceated -- parents are a subset
+		self.evolutionObjects = {};
+
+		//count it up
+		self.parentCount = 0;
+
+		//session information -- new nodes and connections yo! that's all we care about after all-- new innovative stuff
+		//i rambled just then. For no reason. Still doing it. Sucks that you're reading this. trolololol
+		self.sessionObject = {};
+
+		//everything we publish is linked by this session information
+		self.evolutionSessionID = uuid();
+
+		//save our seeds!
+		self.seeds = {};
+
+		//map children to parents for all objects
+		self.childrenToParents = {};
+
+		self.seedParents = {};
+	}
+
+	cleanEvolution(localConfig.genomeType)
+
+	//what events do we need?
+	self.requiredEvents = function()
+	{
+		return [
+			"novelty:measureNovelty",
+            "novelty:addPending",
+            "novelty:clearArchive",
+			"novelty:getArchive",
+			"generator:createArtifacts",
+			"schema:replaceParentReferences",
+			"schema:getReferencesAndParents",
+			"publish:publishArtifacts",
+			// "evolution:getOrCreateOffspring",
+			//in the future we will also need to save objects according to our save tendencies
+		];
+	}
+
+	//what events do we respond to?
+	self.eventCallbacks = function()
+	{ 
+		return {
+			//respond to load seed request -- for getting initial objects as parents
+			"evolution:loadSeeds" : self.loadSeeds,
+			"evolution:selectParents" : self.selectParents,
+			"evolution:unselectParents" : self.unselectParents,
+			"evolution:getNoveltyEmitter" : self.getNoveltyEmitter,
+			"evolution:runNoveltySearch" : self.requestNovelIndividuals,
+			"evolution:publishArtifact" : self.publishArtifact,
+			"evolution:pauseNoveltySearch" : self.pauseNoveltySearch
+		};
+	}
+
+	self.uniqueIDGenerator = function(count)
+	{
+		var uid = [];
+		for(var i=0; i < count; i++)
+		{
+			//nothing else will create these IDs other than this plugin
+			uid.push("naiec-"+ self.uidCounter++);
+		}
+
+		return uid;
+	}
+
+	self.chooseRandomSeed = function(seedMap)
+	{
+		var seedKeys = Object.keys(seedMap);
+		var rIx = Math.floor(Math.random()*seedKeys.length);
+		return seedKeys[rIx];
+	}
+
+	self.satisfyRequest = function(eid, artifact)
+	{
+		//emit this information -- and someone can subscribe to these real time events
+		novelEmitter.emit('novelIndividual', eid, artifact);
+	}
+
+	self.getNoveltyEmitter = function(done)
+	{
+		done(undefined, novelEmitter);
+	}
+	//we take in a webworker queue to run the evolutionary search
+	self.requestNovelIndividuals = function(identifiers)
+	{
+		//we need to setup novelty -- if it's running or not
+
+		//mark the new identifiers in the array, as they'll be used to spawn new offspring
+		for(var i=0; i < identifiers.length; i++) {
+			self.requestedIdentifiers[identifiers[i]] = true;
+		}
+
+		//we need to tell our thread about this, it will handle request for starting/configuring novelty
+		self.noveltyThread.sendMessage("request", {identifiers: identifiers});
+	}
+
+	self.pauseNoveltySearch = function()
+	{
+		//pause these things -- cause a stop
+		self.noveltyThread.sendMessage("pauseNovelty");
+	}
+
+	//this is the real request to pause -- we need to cancel the queue in this case
+	function threadPauseNoveltySearch()
+	{
+		//we need to cancel our jobs for our queue
+		self.behaviorGeneratorQueue.cancelJobs();
+	}
+
+	function setupNovelty(){
+
+		//grab a number of unique ids
+		self.population = {};
+
+		//grab our selected parents to initialize offspring with self.popsize number of individuals 
+		//gets the intial population for win-novelty 
+		self.createOffspring(self.populationSize)
+			.then(function(offspringMap)
+			{
+				//for each wid in the offspring map, do stuff
+				for(var key in offspringMap)
+				{
+					self.allCount++;
+		 			self.generatedIndividuals[key] = offspringMap[key];
+		 			self.population[key] = (offspringMap[key]);
+				}
+
+				//saved the objects, let it know we're done
+		 		self.noveltyThread.sendMessage("finishSetupNovelty", {count: self.allCount});
+			})
+
+		
+	}
+
+	function runGeneration()
+	{
+		//we should have a bunch of individuals, we need to evaluate our current population
+		self.waitingBehaviors = 0;
+
+		var promises = [];
+
+		for(var key in self.population)
+		{
+			var obj = self.population[key];
+
+			var queueData = self.convertToQueueObject(obj);
+			
+			// self.waitingBehaviors++;
+
+			//we need to convert all these objects into cppnouts -- our behaviors
+			promises.push(sendToBehaviorQueue(key, queueData));
+		}
+
+		//DDFA
+		// divergent discriminative feature accumulation
+
+
+		//we'll get back some behavior arrays for calculating novelty when all finished
+		var evaluatedBehaviors = {};
+
+		var abortBehaviorCollection = false;
+
+		//we wait for everything to finish being run before returning
+		Q.all(promises)
+		.then(function(behaviorPromises)
+		{
+			//going through all the behaviors, if any are null - that is an error, or it was abandoned
+			for(var i=0; i < behaviorPromises.length; i++)
+			{
+				//now we have all our promises from the queue ready
+				var rPromise = behaviorPromises[i];
+				
+				//if we have any data, we send it through
+				if(rPromise.behaviors)
+					evaluatedBehaviors[rPromise.key] = {behaviors: rPromise.behaviors};
+				else
+				{
+					//this is an emergency abort triggered, we need to stop this function
+					abortBehaviorCollection = true;
+					break;
+				}
+			}
+
+			if(abortBehaviorCollection)
+				return;
+
+			//now we have all of our bheaviors evaluations, let's measure novelty
+			return self.backEmit.qCall("novelty:measureNovelty", evaluatedBehaviors)
+		})
+		.then(function(novelMeasurements)
+		{
+			if(abortBehaviorCollection)
+				return;
+
+			//now we have measure of novelty -- let's pull the best for this collection, 
+			//then use that to create a new population
+			//and we're done for this genreation
+			var novelty = novelMeasurements.novelty;
+
+			var novelpop = [];
+
+			for(var key in novelty){
+				novelty[key].noveltyID = key;
+				novelpop.push(novelty[key]);
+			}
+
+			//sort by descending novelty
+			novelpop.sort(function(a,b){return b.novelty - a.novelty;})
+
+			//log this bugger, please
+			self.log(novelpop);
+
+			//now we're sorted by this, we pull out the number of novel objects per generation
+			var novelObjects = [];
+
+			for(var i=0; i < self.noveltyPerGeneration; i++){
+				
+				//which object is this related to?
+				var key = novelpop[i].noveltyID;
+
+				//grab the object itself
+				novelObjects.push(self.population[key]);
+			}
+
+			//now we need to satisfy the requested objects
+			handleNovelIndividuals(novelObjects);
+
+			//now we use this novelty population to make selections
+			var nextGenParents = selectParentsForNextGeneration(novelpop);
+
+
+			return self.createOffspring(nextGenParents, self.populationSize);
+		})
+		.then(function(widOffspring)
+		{
+			if(abortBehaviorCollection)
+				return;
+
+			//got our offspring for the next generation
+			self.population = {};
+
+			for(var wid in widOffspring)
+			{
+				self.population[wid] = widOffspring[wid];
+				self.evolutionObjects[wid] = widOffspring[wid];
+			}
+
+			//all done with the generation
+	 		self.noveltyThread.sendMessage("finishRunGeneration", {novelObjectCount: self.noveltyPerGeneration});
+		})
+		.catch(function(err)
+		{
+			//got's to throw it if we catch it!
+			throw err;
+		});
+	}
+	
+	//send back some novel individuals please-- we give back to the community
+	function handleNovelIndividuals(novelIndividuals)
+	{ 
+		//emit the novel individuals, that is all
+		for(var i=0; i < novelIndividuals.length; i++)
+			novelEmitter.emit('novelIndividual', novelIndividuals[i]);
+	}
+
+	function selectParentsForNextGeneration(novelpop)
+	{
+		//these are our novel objects, we need only to make tournament selections for the parents
+
+		var parents = {};
+		var parentList = [];
+		var pSize = novelpop.length;
+
+		//as many parents as we're willing to accept
+		var pCount = Math.min(self.maxParentSize, Math.floor(pSize*self.selectionPercentage));
+
+		var maxSelectionAttempts = 10*pCount;
+		var totalSelectionAttempts = 0;
+		//for each required parent, we do tournament selection 
+		// for(var i=0; i < pCount; i++)
+		//avoid infinite loop, but make sure to get the desired amount
+		while(parentList.length < pCount && totalSelectionAttempts++ < maxSelectionAttempts)
+		{
+			var r1 = wMath.next(pSize);
+			var r2 = wMath.next(pSize);
+			var cnt = 0;
+			while(cnt++ < 4 && r1 == r2)
+				r2 = wMath.next(pSize);
+
+			//choose the object with more novelty as the parent
+			var selectedIx = (novelpop[r1].novelty >= novelpop[r2].novelty ? r1 : r2);
+
+			//if you have better novelty, add it to our parent list -- no dups
+			if(!parents[selectedIx]){
+				var p = self.population[novelpop[selectedIx].noveltyID];
+				parents[selectedIx] = p;
+				parentList.push(p);
+			}
+		}
+
+		//all done, we have our tournament selected parents
+		return parentList;
+	}
+
+	function sendToBehaviorQueue(key, jobData)
+	{
+		var defer = Q.defer();
+
+		//queue up this object
+		self.behaviorGeneratorQueue.queueJob(jobData, function(behaviorData)
+		{
+			//behavior data can be null
+			defer.resolve({key: key, behaviors: behaviorData.allOutputs});
+		});
+
+		return defer.promise;
+	}
+
+	self.noDuplicatSeedParents = function(refsAndParents)
+	{
+		var allSeedNoDup = {};
+
+		//this is a map from the wid to the associated parent wids
+		for(var refWID in refsAndParents)
+		{
+			var parents = refsAndParents[refWID];
+
+			var mergeParents = [];
+
+			for(var i=0; i < parents.length; i++)
+			{
+				var seedsForEachParent = self.seedParents[parents[i]];
+
+				//now we just merge all these together
+				mergeParents = mergeParents.concat(seedsForEachParent);
+			}
+
+			//then we get rid of any duplicates
+			var nodups = {};
+			for(var i=0; i < mergeParents.length; i++)
+				nodups[mergeParents[i]] = true;
+
+			//by induction, each wid generated knows it's seed parents (where each seed reference wid references itself in array form)
+			//therefore, you just look at your reference's parents to see who they believe is their seed 
+			//and concat those results together -- pretty simple, just remove duplicates
+			allSeedNoDup[refWID] = Object.keys(nodups);
+		}	
+
+		return allSeedNoDup;	
+	}
+
+	self.createOffspring = function(parents, count)
+	{
+		//we give a promise for offspring -- it's an async process
+		var defer = Q.defer();
+
+
+		//without providing an array, we default to selected parents 
+		if(typeof parents == "number" || !Array.isArray(parents))
+		{
+			count = parents;
+			parents = self.getSelectedParents();
+		}
+
+		//we get some offspring objects in a map
+		var widOffspring = {};
+
+		//we need to go fetch some stuff
+		self.backEmit.qCall("generator:createArtifacts", self.genomeType, count, parents, self.sessionObject)
+			.then(function(artifacts)
+			{
+				//otherwise, let's do this thang! match artifacts to offspring -- arbitrary don't worry
+				var off = artifacts.offspring;
+
+				for(var i=0; i < off.length; i++)
+				{
+					var oObject = off[i];
+					widOffspring[oObject.wid] = oObject;
+				}
+
+				return self.backEmit.qCall("schema:getReferencesAndParents", self.genomeType, widOffspring);
+			})
+			.then(function(refsAndParents)
+			{
+				//check the refs for each object
+				for(var wid in widOffspring)
+				{
+					//here we are with refs and parents
+					var rAndP = refsAndParents[wid];
+
+					var widSeedParents = self.noDuplicatSeedParents(rAndP);
+
+					// self.log("\n\nwid seed parents: ".magenta, rAndP);
+
+					//for each key, we set our seed parents appropriately	
+					for(var key in widSeedParents)
+					{
+						self.seedParents[key] = widSeedParents[key];
+					}
+				}
+
+				//now we are done!
+			})
+			.done(function()
+			{
+				defer.resolve(widOffspring);
+
+			}, function(err)
+			{
+				//pass on the error if it happened
+				defer.reject(err);
+			});
+
+		return defer.promise;
+	}
+
+	//no need for a callback here -- nuffin to do but load
+	self.loadSeeds = function(idAndSeeds, finished)
+	{
+		//we have all the seeds and their ids, we just absorb them immediately
+		for(var eID in idAndSeeds)
+		{
+			var seed = idAndSeeds[eID];
+			//grab the objects and save them
+			self.evolutionObjects[eID] = seed;
+
+			//save our seeds
+			self.seeds[seed.wid] = seed;
+		}
+
+		self.log("seed objects: ", self.seeds);
+
+		self.backEmit("schema:getReferencesAndParents", self.genomeType, self.seeds, function(err, refsAndParents)
+		{
+			if(err)
+			{
+				//pass on the error if it happened
+				if(finished)
+					finished(err);
+				else
+					throw err;
+				return;
+			}
+			//there are no parent refs for seeds, just the refs themselves which are important
+			for(var wid in self.seeds)
+			{
+				var refs = Object.keys(refsAndParents[wid]);
+				for(var i=0; i < refs.length; i++)
+				{
+					//who is the parent seed of a particular wid? why itself duh!
+					self.seedParents[refs[i]] = [refs[i]];
+				}
+			}
+
+			// self.log("Seed parents: ", self.seedParents);
+
+			//note, there is no default behavior with seeds -- as usual, you must still tell iec to select parents
+			//there is no subsitute for parent selection
+			if(finished)
+				finished();
+		});
+	}
+
+	//just grab from evo objects -- throw error if issue
+	self.selectParents = function(eIDList, finished)
+	{
+		if(typeof eIDList == "string")
+			eIDList = [eIDList];
+
+		var selectedObjects = {};
+
+		for(var i=0; i < eIDList.length; i++)
+		{	
+			var eID = eIDList[i];
+
+			//grab from evo
+			var evoObject = self.evolutionObjects[eID];
+
+			if(!evoObject){
+				//wrong id 
+				finished("Invalid parent selection: " + eID);
+				return;
+			}
+
+			selectedObjects[eID] = evoObject;
+
+			//save as a selected parent
+			self.selectedParents[eID] = evoObject;
+			self.parentCount++;
+		}
+	
+		//send back the evolutionary object that is linked to this parentID
+		finished(undefined, selectedObjects);
+	}
+
+	self.unselectParents = function(eIDList, finished)
+	{
+		if(typeof eIDList == "string")
+			eIDList = [eIDList];
+
+		for(var i=0; i < eIDList.length; i++)
+		{	
+			var eID = eIDList[i];
+
+			//remove this parent from the selected parents -- doesn't delete from all the individuals
+			if(self.selectedParents[eID])
+				self.parentCount--;
+
+			delete self.selectedParents[eID];
+		}
+
+		//callback optional really, here for backwards compat 
+		if(finished)
+			finished();
+
+	}
+
+	self.getSelectedParents = function()
+	{
+		var parents = [];
+
+		for(var key in self.selectedParents)
+			parents.push(self.selectedParents[key]);
+
+		return parents;
+	}
+
+	self.publishArtifact = function(id, meta, finished)
+	{
+		//don't always have to send meta info -- since we don't know what to do with it anyways
+		if(typeof meta == "function")
+		{
+			finished = meta;
+			meta = {};
+		}
+		//we fetch the object from the id
+
+		var evoObject = self.evolutionObjects[id];
+
+		if(!evoObject)
+		{
+			finished("Evolutionary artifactID to publish is invalid: " + id);
+			return;
+		}
+		//we also want to store some meta info -- don't do anything about that for now 
+
+		// var seedParents = self.findSeedOrigins(id);
+
+		//
+		var seedList = [];
+		var finalClones;
+
+		//here is what needs to happen, the incoming evo object has the "wrong" parents
+		//the right parents are the published parents -- the other parents 
+
+		//this will need to be fixed in the future -- we need to know private vs public parents
+		//but for now, we simply send in the public parents -- good enough for picbreeder iec applications
+		//other types of applications might need more info.
+
+		var widObject = {};
+		widObject[evoObject.wid] = evoObject;
+		self.backEmit.qCall("schema:getReferencesAndParents", self.genomeType, widObject)
+		.then(function(refsAndParents){
+
+			//now we know our references
+			var refParents = refsAndParents[evoObject.wid];
+
+			//so we simply fetch our appropraite seed parents 
+			var evoSeedParents = self.noDuplicatSeedParents(refParents);
+
+			//now we have all the info we need to replace all our parent refs
+			return self.backEmit.qCall("schema:replaceParentReferences", self.genomeType, evoObject, evoSeedParents);
+		})
+		.then(function(cloned)
+		{
+			//now we have a cloned version for publishing, where it has public seeds
+			finalClones = cloned;
+			 //just publish everything public for now!
+	        var session = {sessionID: self.evolutionSessionID, publish: true};
+
+	        //we can also save private info
+	        //this is where we would grab all the parents of the individual
+	        var privateObjects = [];
+
+			return self.backEmit.qCall("publish:publishArtifacts", self.genomeType, session, [cloned], []);
+		})
+		.catch(function(err)
+		{
+			throw err;
+		})
+		.done(function()
+		{
+			finished(undefined, finalClones);
+		})
+       
+	}
+
+	function handleNoveltyError(errEvent)
+	{
+		console.log("Novelty Thread error: ", errEvent);
+
+	}
+
+
+
+	return self;
+}
+
+});
+
+require.modules["win-NAIEC"] = require.modules["./libs/win-NAIEC"];
+
+
+require.register("./libs/thread-workers", function (exports, module) {
+
+//just load up all the objects and export the classes
+
+module.exports = {
+    "workerCPPNNovelAct" : require("./libs/thread-workers/workerCPPNNovelAct.js"),
+    "workerRunNovelty" : require("./libs/thread-workers/workerRunNovelty.js"),
+    "cppnWorkerActivation" : require("./libs/thread-workers/cppnWorkerActivation.js")
+} 
+
+});
+
+require.register("./libs/thread-workers/cppnWorkerActivation.js", function (exports, module) {
+
+var emitter; 
+var module;
+if(typeof require != "undefined")
+    emitter = require("emitter");
+else
+    module = {};
+
+var base64 = {};
+var generateBitmap = {};
+
+module.exports = messageProcessingObject;
+
+function messageProcessingObject()
+{
+    var self  = this;
+
+     //add emission to us
+    if(emitter)
+        emitter(self);
+
+    var realThread = (typeof require == "undefined");
+
+    self.send = (realThread ? function(data)
+    {
+        messageProcess(data);
+    } : 
+    function(data)
+    {
+        //have to wrap the object when it's a fake thread for debugging purposes
+        messageProcess({data: data});
+    });
+
+    self.threadPostMessage = (realThread ? postMessage : function(data){
+        self.emit('message', data);
+    });
+
+    function messageProcess(e){
+    	try
+        {
+        		//grab our function data
+        		var funData = e.data;
+
+                //grab the wid
+                var wid = funData.wid;
+
+        		var nodeOrder = funData.nodeOrder;
+        		var biasCount = funData.biasCount;
+        		var outputCount = funData.outputCount;
+        		var stFun = funData.stringFunctions;
+
+        		if(!nodeOrder || !biasCount || !outputCount || !stFun)
+        			throw new Error("Improper worker message sent. Need Node Order, Bias and OutputCounts, and String Functions for network");
+
+                var nodeFunctions = {};
+        		//now we can create a contained function
+        		for(var id in stFun)
+        		{
+        			//replace string with function object
+        			nodeFunctions[id] = new Function([], stFun[id]);
+        		}
+
+
+        		//now we create a function that takes inputs, and runs the CPPN. BIATCH
+        		var cppnFunction = containCPPN(nodeOrder, nodeFunctions, biasCount, outputCount);
+
+
+        		//need with and height, thank you! non-zero ddoy
+        		if(!wid || !funData.width || !funData.height)
+        			throw new Error("No wid, width, or height provided for fixed size CPPN Activation");
+
+        		//okay, now we have our CPPN all pampered and ready to go
+        		var cppnOutputs = runCPPNAcrossFixedSize(cppnFunction, {width: funData.width, height: funData.height});
+
+        		//cppn outputs to RGB Bitmap -- huzzah!
+        		var fileOutput = generateBitmap.generateBitmapDataURL(cppnOutputs);
+
+        		//send back our data, we'll have to loop through it and convert to bytes, but this is the raw data
+        		self.threadPostMessage({wid: wid, dataURL: fileOutput, width: funData.width, height: funData.height});
+        	}
+        	catch(err)
+        	{
+        		 // Send back the error to the parent page
+          		self.threadPostMessage({error: err.message, stack: err.stack});
+        	}
+        }
+
+    return self;
+
+};
+
+//if we are a thread we create an object,  and hook it up to the provided thread methods
+//otherwise, we're creating on a single thread
+if(typeof require == "undefined")
+{
+    var messageHandler = new messageProcessingObject();
+
+    onmessage = messageHandler.send;
+    messageHandler.threadPostMessage = postMessage;
+}
+
+function containCPPN(nodesInOrder, functionsForNodes, biasCount, outputCount)
+{
+    return function(inputs)
+    {
+        var bias = 1.0;
+        var context = {};
+        context.rf = new Array(nodesInOrder.length);
+        var totalIn = inputs.length + biasCount;
+
+        for(var i=0; i < biasCount; i++)
+            context.rf[i] = bias;
+
+        for(var i=0; i < inputs.length; i++)
+            context.rf[i+biasCount] = inputs[i];
+
+
+        for(var i=0; i < nodesInOrder.length; i++)
+        {
+            var fIx = nodesInOrder[i];
+//                console.log('Ix to hit: ' fIx + );
+            context.rf[fIx] = (fIx < totalIn ? context.rf[fIx] : functionsForNodes[fIx].call(context));
+        }
+
+        return context.rf.slice(totalIn, totalIn + outputCount);
+    }
+};
+
+function runCPPNAcrossFixedSize(activationFunction, size)
+{
+    var inSqrt2 = Math.sqrt(2);
+
+    var allX = size.width, allY = size.height;
+    var width = size.width, height= size.height;
+
+    var startX = -1, startY = -1;
+    var dx = 2.0/(allX-1), dy = 2.0/(allY-1);
+
+    var currentX = startX, currentY = startY;
+
+    var newRow;
+    var rows = [];
+
+    var inputs = [];
+    var outputs, rgb;
+
+
+    //we go by the rows
+    for(var y=allY-1; y >=0; y--){
+
+        //init and push new row
+        var newRow = [];
+        rows.push(newRow);
+        for(var x=0; x < allX; x++){
+
+            //just like in picbreeder!
+            var currentX = ((x << 1) - width + 1) / width;
+            var currentY = ((y << 1) - height + 1) / height;
+
+            inputs = [currentX, currentY, Math.sqrt(currentX*currentX + currentY*currentY)*inSqrt2];
+
+            //run the CPPN please! Acyclic cppns only, thank you
+            outputs = activationFunction(inputs);
+
+            //rgb conversion here
+            rgb = FloatToByte(PicHSBtoRGB(outputs[0], clampZeroOne(outputs[1]), Math.abs(outputs[2])));
+
+            //add to list of outputs to return
+            newRow.push(rgb);
+        }
+    }
+
+    return rows;
+}
+
+function clampZeroOne(val)
+{
+    return Math.max(0.0, Math.min(val,1.0));
+};
+function FloatToByte(arr)
+{
+    var conv = [];
+
+    arr.forEach(function(col)
+    {
+        conv.push(Math.floor(col*255.0));
+    });
+
+    return conv;
+};
+
+function PicHSBtoRGB(h,s,v)
+{
+
+    h = (h*6.0)%6.0;
+
+
+    var r = 0.0, g = 0.0, b = 0.0;
+
+    if(h < 0.0) h += 6.0;
+    var hi = Math.floor(h);
+    var f = h - hi;
+
+    var vs = v * s;
+    var vsf = vs * f;
+
+    var p = v - vs;
+    var q = v - vsf;
+    var t = v - vs + vsf;
+
+    switch(hi) {
+        case 0: r = v; g = t; b = p; break;
+        case 1: r = q; g = v; b = p; break;
+        case 2: r = p; g = v; b = t; break;
+        case 3: r = p; g = q; b = v; break;
+        case 4: r = t; g = p; b = v; break;
+        case 5: r = v; g = p; b = q; break;
+    }
+
+    return [r,g,b];
+};
+
+
+//base64 stuff
+//from:
+//https://code.google.com/p/stringencoders/source/browse/trunk/javascript/base64.js?r=230
+
+
+/*
+ * Copyright (c) 2010 Nick Galbreath
+ * http://code.google.com/p/stringencoders/source/browse/#svn/trunk/javascript
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+/* base64 encode/decode compatible with window.btoa/atob
+ *
+ * window.atob/btoa is a Firefox extension to convert binary data (the "b")
+ * to base64 (ascii, the "a").
+ *
+ * It is also found in Safari and Chrome.  It is not available in IE.
+ *
+ * if (!window.btoa) window.btoa = base64.encode
+ * if (!window.atob) window.atob = base64.decode
+ *
+ * The original spec's for atob/btoa are a bit lacking
+ * https://developer.mozilla.org/en/DOM/window.atob
+ * https://developer.mozilla.org/en/DOM/window.btoa
+ *
+ * window.btoa and base64.encode takes a string where charCodeAt is [0,255]
+ * If any character is not [0,255], then an DOMException(5) is thrown.
+ *
+ * window.atob and base64.decode take a base64-encoded string
+ * If the input length is not a multiple of 4, or contains invalid characters
+ *   then an DOMException(5) is thrown.
+ */
+
+base64.PADCHAR = '=';
+base64.ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+base64.makeDOMException = function() {
+    // sadly in FF,Safari,Chrome you can't make a DOMException
+    var e, tmp;
+
+    try {
+        return new DOMException(DOMException.INVALID_CHARACTER_ERR);
+    } catch (tmp) {
+        // not available, just passback a duck-typed equiv
+        // https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Global_Objects/Error
+        // https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Global_Objects/Error/prototype
+        var ex = new Error("DOM Exception 5");
+
+        // ex.number and ex.description is IE-specific.
+        ex.code = ex.number = 5;
+        ex.name = ex.description = "INVALID_CHARACTER_ERR";
+
+        // Safari/Chrome output format
+        ex.toString = function() { return 'Error: ' + ex.name + ': ' + ex.message; };
+        return ex;
+    }
+};
+
+base64.getbyte64 = function(s,i) {
+    // This is oddly fast, except on Chrome/V8.
+    //  Minimal or no improvement in performance by using a
+    //   object with properties mapping chars to value (eg. 'A': 0)
+    var idx = base64.ALPHA.indexOf(s.charAt(i));
+    if (idx === -1) {
+        throw base64.makeDOMException();
+    }
+    return idx;
+};
+
+base64.decode = function(s) {
+    // convert to string
+    s = '' + s;
+    var getbyte64 = base64.getbyte64;
+    var pads, i, b10;
+    var imax = s.length;
+    if (imax === 0) {
+        return s;
+    }
+
+    if (imax % 4 !== 0) {
+        throw base64.makeDOMException();
+    }
+
+    pads = 0
+    if (s.charAt(imax - 1) === base64.PADCHAR) {
+        pads = 1;
+        if (s.charAt(imax - 2) === base64.PADCHAR) {
+            pads = 2;
+        }
+        // either way, we want to ignore this last block
+        imax -= 4;
+    }
+
+    var x = [];
+    for (i = 0; i < imax; i += 4) {
+        b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12) |
+            (getbyte64(s,i+2) << 6) | getbyte64(s,i+3);
+        x.push(String.fromCharCode(b10 >> 16, (b10 >> 8) & 0xff, b10 & 0xff));
+    }
+
+    switch (pads) {
+        case 1:
+            b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12) | (getbyte64(s,i+2) << 6);
+            x.push(String.fromCharCode(b10 >> 16, (b10 >> 8) & 0xff));
+            break;
+        case 2:
+            b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12);
+            x.push(String.fromCharCode(b10 >> 16));
+            break;
+    }
+    return x.join('');
+};
+
+base64.getbyte = function(s,i) {
+    var x = s.charCodeAt(i);
+    if (x > 255) {
+        throw base64.makeDOMException();
+    }
+    return x;
+};
+
+base64.encode = function(s) {
+    if (arguments.length !== 1) {
+        throw new SyntaxError("Not enough arguments");
+    }
+    var padchar = base64.PADCHAR;
+    var alpha   = base64.ALPHA;
+    var getbyte = base64.getbyte;
+
+    var i, b10;
+    var x = [];
+
+    // convert to string
+    s = '' + s;
+
+    var imax = s.length - s.length % 3;
+
+    if (s.length === 0) {
+        return s;
+    }
+    for (i = 0; i < imax; i += 3) {
+        b10 = (getbyte(s,i) << 16) | (getbyte(s,i+1) << 8) | getbyte(s,i+2);
+        x.push(alpha.charAt(b10 >> 18));
+        x.push(alpha.charAt((b10 >> 12) & 0x3F));
+        x.push(alpha.charAt((b10 >> 6) & 0x3f));
+        x.push(alpha.charAt(b10 & 0x3f));
+    }
+    switch (s.length - imax) {
+        case 1:
+            b10 = getbyte(s,i) << 16;
+            x.push(alpha.charAt(b10 >> 18) + alpha.charAt((b10 >> 12) & 0x3F) +
+                padchar + padchar);
+            break;
+        case 2:
+            b10 = (getbyte(s,i) << 16) | (getbyte(s,i+1) << 8);
+            x.push(alpha.charAt(b10 >> 18) + alpha.charAt((b10 >> 12) & 0x3F) +
+                alpha.charAt((b10 >> 6) & 0x3f) + padchar);
+            break;
+    }
+    return x.join('');
+};
+
+//Generate bitmap stuff
+/*
+* Code to generate Bitmap images (using data urls) from rows of RGB arrays.
+* Specifically for use with http://mrcoles.com/low-rest-paint/
+*
+* Research:
+*
+* RFC 2397 data URL
+* http://www.xs4all.nl/~wrb/Articles/Article_IMG_RFC2397_P1_01.htm
+*
+* BMP file Format
+* http://en.wikipedia.org/wiki/BMP_file_format#Example_of_a_2.C3.972_Pixel.2C_24-Bit_Bitmap_.28Windows_V3_DIB.29
+*
+* BMP Notes
+*
+* - Integer values are little-endian, including RGB pixels, e.g., (255, 0, 0) -> \x00\x00\xFF
+* - Bitmap data starts at lower left (and reads across rows)
+* - In the BMP data, padding bytes are inserted in order to keep the lines of data in multiples of four,
+*   e.g., a 24-bit bitmap with width 1 would have 3 bytes of data per row (R, G, B) + 1 byte of padding
+*/
+
+function _asLittleEndianHex(value, bytes) {
+    // Convert value into little endian hex bytes
+    // value - the number as a decimal integer (representing bytes)
+    // bytes - the number of bytes that this value takes up in a string
+
+    // Example:
+    // _asLittleEndianHex(2835, 4)
+    // > '\x13\x0b\x00\x00'
+
+    var result = [];
+
+    for (; bytes>0; bytes--) {
+        result.push(String.fromCharCode(value & 255));
+        value >>= 8;
+    }
+
+    return result.join('');
+}
+
+function _collapseData(rows, row_padding) {
+    // Convert rows of RGB arrays into BMP data
+    var i,
+        rows_len = rows.length,
+        j,
+        pixels_len = rows_len ? rows[0].length : 0,
+        pixel,
+        padding = '',
+        result = [];
+
+    for (; row_padding > 0; row_padding--) {
+        padding += '\x00';
+    }
+
+    for (i=0; i<rows_len; i++) {
+        for (j=0; j<pixels_len; j++) {
+            pixel = rows[i][j];
+            result.push(String.fromCharCode(pixel[2]) +
+                String.fromCharCode(pixel[1]) +
+                String.fromCharCode(pixel[0]));
+        }
+        result.push(padding);
+    }
+
+    return result.join('');
+}
+
+function _scaleRows(rows, scale) {
+    // Simplest scaling possible
+    var real_w = rows.length,
+        scaled_w = parseInt(real_w * scale),
+        real_h = real_w ? rows[0].length : 0,
+        scaled_h = parseInt(real_h * scale),
+        new_rows = [],
+        new_row, x, y;
+
+    for (y=0; y<scaled_h; y++) {
+        new_rows.push(new_row = []);
+        for (x=0; x<scaled_w; x++) {
+            new_row.push(rows[parseInt(y/scale)][parseInt(x/scale)]);
+        }
+    }
+    return new_rows;
+}
+
+//generate bitmaps from rows of rgb values
+//from: http://mrcoles.com/low-res-paint/
+//and: http://mrcoles.com/blog/making-images-byte-by-byte-javascript/
+generateBitmap.generateBitmapDataURL = function(rows, scale) {
+    // Expects rows starting in bottom left
+    // formatted like this: [[[255, 0, 0], [255, 255, 0], ...], ...]
+    // which represents: [[red, yellow, ...], ...]
+    scale = scale || 1;
+    if (scale != 1) {
+        rows = _scaleRows(rows, scale);
+    }
+
+    var height = rows.length,                                // the number of rows
+        width = height ? rows[0].length : 0,                 // the number of columns per row
+        row_padding = (4 - (width * 3) % 4) % 4,             // pad each row to a multiple of 4 bytes
+        num_data_bytes = (width * 3 + row_padding) * height, // size in bytes of BMP data
+        num_file_bytes = 54 + num_data_bytes,                // full header size (offset) + size of data
+        file;
+
+    height = _asLittleEndianHex(height, 4);
+    width = _asLittleEndianHex(width, 4);
+    num_data_bytes = _asLittleEndianHex(num_data_bytes, 4);
+    num_file_bytes = _asLittleEndianHex(num_file_bytes, 4);
+
+    // these are the actual bytes of the file...
+
+    file = ('BM' +               // "Magic Number"
+        num_file_bytes +     // size of the file (bytes)*
+        '\x00\x00' +         // reserved
+        '\x00\x00' +         // reserved
+        '\x36\x00\x00\x00' + // offset of where BMP data lives (54 bytes)
+        '\x28\x00\x00\x00' + // number of remaining bytes in header from here (40 bytes)
+        width +              // the width of the bitmap in pixels*
+        height +             // the height of the bitmap in pixels*
+        '\x01\x00' +         // the number of color planes (1)
+        '\x18\x00' +         // 24 bits / pixel
+        '\x00\x00\x00\x00' + // No compression (0)
+        num_data_bytes +     // size of the BMP data (bytes)*
+        '\x13\x0B\x00\x00' + // 2835 pixels/meter - horizontal resolution
+        '\x13\x0B\x00\x00' + // 2835 pixels/meter - the vertical resolution
+        '\x00\x00\x00\x00' + // Number of colors in the palette (keep 0 for 24-bit)
+        '\x00\x00\x00\x00' + // 0 important colors (means all colors are important)
+        _collapseData(rows, row_padding)
+        );
+
+    return 'data:image/bmp;base64,' + base64.encode(file);
+};
+});
+
+require.register("./libs/thread-workers/workerRunNovelty.js", function (exports, module) {
+var emitter; 
+var module;
+if(typeof require != "undefined")
+    emitter = require("emitter");
+else
+    module = {};
+
+var NoveltyEvents = 
+{
+    newIndividual: "novelIndividual",
+    requestIndividual: "request",
+    setupNovelty : "setupNovelty",
+    finishSetup : "finishSetupNovelty",
+    runGeneration : "runGeneration",
+    finishRunGeneration : "finishRunGeneration",
+    pauseNovelty : "pauseNovelty"
+}
+
+var NoveltyStates = 
+{
+    blank : 0,
+    initializing : 1,
+    running : 2,
+    pausing: 3,
+    paused: 4,
+    ending : 5,
+    restarting: 6
+}
+
+module.exports = messageProcessingObject;
+
+function messageProcessingObject()
+{
+    var self  = this;
+
+    //start off in a blank state
+    var currentState = NoveltyStates.blank;
+
+    var novelObjectsRequested = 0;
+
+    //add emission to us
+    if(emitter)
+        emitter(self);
+
+    var realThread = (typeof require == "undefined");
+
+    self.send = (realThread ? function(data)
+    {
+        messageProcess(data);
+    } : 
+    function(data)
+    {
+        //have to wrap the object when it's a fake thread for debugging purposes
+        messageProcess({data: data});
+    });
+
+
+    self.threadPostMessage = (realThread ? postMessage : function(data){
+        self.emit('message', data);
+    });
+
+    function messageProcess(e){
+
+        try{
+
+
+            var threadedData = e.data;
+
+            var nEvent = threadedData.event;
+
+            switch(nEvent)
+            {
+                case NoveltyEvents.requestIndividual:
+                    newNoveltyRequest(threadedData.data);
+                    break;
+                case NoveltyEvents.finishSetup:
+                    finishSetup();
+                    break;
+                case NoveltyEvents.pauseNovelty:
+                    //rtigger an immediate pasue event
+                    pauseNovelty();
+                    break;
+                 case NoveltyEvents.finishRunGeneration: 
+                    finishRunGeneration(threadedData.data);
+            }
+        }
+        catch(err)
+        {
+            console.log("Run Novelty error! ", err);
+             // Send back the error to the parent page
+            self.threadPostMessage({event: "error", data: {error: err.message, stack: err.stack}});
+        }
+    };
+
+    function newNoveltyRequest(novelData)
+    {
+        //here, we request have requested to run novelty
+        if(!novelData.identifiers || !Array.isArray(novelData.identifiers))
+            throw new Error("Cannot request novel objects without array of identifiers");
+        
+        //no matter what state we're in, we'll need to record the extra 
+        //requests for new data
+        novelObjectsRequested += novelData.identifiers.length;
+
+        //depending on our state, we behave differently
+        switch(currentState)
+        {
+            case NoveltyStates.blank:
+
+                //we are nothing! we must first setup to run
+                currentState = NoveltyStates.initializing;
+
+                //send a message saying we want novelty all setup/
+                self.threadPostMessage({event: NoveltyEvents.setupNovelty, data : {}});
+                break;
+            case NoveltyStates.initializing:
+            //nothing to be done, we're initializing, and when it finishes, we'll take care of the request
+                break;
+            case NoveltyStates.running: 
+                break;
+            case NoveltyStates.paused: 
+                //we now need to start novelty back up -- where we left off
+                unpauseNovelty();
+                break;
+
+        }
+    }
+
+    function finishSetup()
+    {
+        //now we've got to get everything ready to run --
+        //we'll need to set timers that call regularly, 
+        //to see if novelty is progressing
+        currentState = NoveltyStates.running;
+        runGeneration();
+    }
+
+    function runGeneration()
+    {
+        //we make a request to get the next genreation of objects evaluated
+        self.threadPostMessage({event: NoveltyEvents.runGeneration, data: {}});
+    }
+    //here we've finished running our generation
+    function finishRunGeneration(generationData)
+    {
+        //the question is, how many novel objects did we accumulate during the last generation?!?!?
+        var foundObjects = generationData.novelObjectCount;
+
+        //this tells us if we've found the required number of objects yet!
+        novelObjectsRequested -= foundObjects;
+
+        //don't go negative please
+        novelObjectsRequested = Math.max(0, novelObjectsRequested);
+
+        if(novelObjectsRequested == 0)
+        {
+            //pause evolution -- we don't need anymore individuals
+            pauseNovelty();
+            //don't do anything more, we're paused!
+            return;
+        }
+
+        //if we're still short, we need to keep running!
+        runGeneration();
+    }
+
+    function pauseNovelty()
+    {
+        currentState = NoveltyStates.paused;
+
+        //send out info that we're pausing
+        self.threadPostMessage({event: NoveltyEvents.pauseNovelty, data : {}});
+    }
+
+    function unpauseNovelty()
+    {
+        //let it be known we've started again!
+        currentState = NoveltyStates.running;
+        runGeneration();
+    }
+}
+
+//if we are a thread we create an object,  and hook it up to the provided thread methods
+//otherwise, we're creating on a single thread
+if(typeof require == "undefined")
+{
+    var messageHandler = new messageProcessingObject();
+
+    onmessage = messageHandler.send;
+    messageHandler.threadPostMessage = postMessage;
+}
+
+
+});
+
+require.register("./libs/thread-workers/workerCPPNNovelAct.js", function (exports, module) {
+var emitter; 
+var module;
+if(typeof require != "undefined")
+    emitter = require("emitter");
+else
+    module = {};
+
+var base64 = {};
+var generateBitmap = {};
+
+module.exports = messageProcessingObject;
+
+function messageProcessingObject()
+{
+    var self  = this;
+
+     //add emission to us
+    if(emitter)
+        emitter(self);
+
+    var realThread = (typeof require == "undefined");
+
+    self.send = (realThread ? function(data)
+    {
+        messageProcess(data);
+    } : 
+    function(data)
+    {
+        //have to wrap the object when it's a fake thread for debugging purposes
+        messageProcess({data: data});
+    });
+
+    self.threadPostMessage = (realThread ? postMessage : function(data){
+        self.emit('message', data);
+    });
+
+     function messageProcess(e){
+        try{
+
+            //grab our function data
+            var funData = e.data;
+
+            //grab the wid
+            var wid = funData.wid;
+
+            var nodeOrder = funData.nodeOrder;
+            var biasCount = funData.biasCount;
+            var outputCount = funData.outputCount;
+            var stFun = funData.stringFunctions;
+
+            if(!nodeOrder || !biasCount || !outputCount || !stFun)
+                throw new Error("Improper worker message sent. Need Node Order, Bias and OutputCounts, and String Functions for network");
+
+            var nodeFunctions = {};
+            //now we can create a contained function
+            for(var id in stFun)
+            {
+                //replace string with function object
+                nodeFunctions[id] = new Function([], stFun[id]);
+            }
+
+
+            //now we create a function that takes inputs, and runs the CPPN. BIATCH
+            var cppnFunction = containCPPN(nodeOrder, nodeFunctions, biasCount, outputCount);
+
+
+            //need with and height, thank you! non-zero ddoy
+            if(!wid || !funData.width || !funData.height)
+                throw new Error("No wid, width, or height provided for fixed size CPPN Activation");
+
+            //okay, now we have our CPPN all pampered and ready to go
+            var cppnOutputs = runCPPNAcrossFixedSize(cppnFunction, {width: funData.width, height: funData.height});
+
+            var allActivations = [];
+            for(var i=0; i < cppnOutputs.length; i++)
+            {
+                var row  = cppnOutputs[i];
+                for(var r=0; r < row.length; r++)
+                {
+                    var rgb = row[r];
+                    for(var c=0; c < rgb.length; c++)
+                        allActivations.push(rgb[c]);
+                }
+            }
+
+            //cppn outputs to RGB Bitmap -- huzzah!
+            // var fileOutput = generateBitmap.generateBitmapDataURL(cppnOutputs);
+
+            //send back our data, we'll have to loop through it and convert to bytes, but this is the raw data
+            self.threadPostMessage({wid: wid, allOutputs: allActivations, width: funData.width, height: funData.height});
+        }
+        catch(err)
+        {
+             // Send back the error to the parent page
+            self.threadPostMessage({error: err.message, stack: err.stack});
+        }
+    }
+
+
+    return self;
+}   
+
+//if we are a thread we create an object,  and hook it up to the provided thread methods
+//otherwise, we're creating on a single thread
+if(typeof require == "undefined")
+{
+    var messageHandler = new messageProcessingObject();
+
+    onmessage = messageHandler.send;
+    messageHandler.threadPostMessage = postMessage;
+}
+
+function containCPPN(nodesInOrder, functionsForNodes, biasCount, outputCount)
+{
+    return function(inputs)
+    {
+        var bias = 1.0;
+        var context = {};
+        context.rf = new Array(nodesInOrder.length);
+        var totalIn = inputs.length + biasCount;
+
+        for(var i=0; i < biasCount; i++)
+            context.rf[i] = bias;
+
+        for(var i=0; i < inputs.length; i++)
+            context.rf[i+biasCount] = inputs[i];
+
+
+        for(var i=0; i < nodesInOrder.length; i++)
+        {
+            var fIx = nodesInOrder[i];
+//                console.log('Ix to hit: ' fIx + );
+            context.rf[fIx] = (fIx < totalIn ? context.rf[fIx] : functionsForNodes[fIx].call(context));
+        }
+
+        return context.rf.slice(totalIn, totalIn + outputCount);
+    }
+};
+
+function runCPPNAcrossFixedSize(activationFunction, size)
+{
+    var inSqrt2 = Math.sqrt(2);
+
+    var allX = size.width, allY = size.height;
+    var width = size.width, height= size.height;
+
+    var startX = -1, startY = -1;
+    var dx = 2.0/(allX-1), dy = 2.0/(allY-1);
+
+    var currentX = startX, currentY = startY;
+
+    var newRow;
+    var rows = [];
+
+    var inputs = [];
+    var outputs, rgb;
+
+
+    //we go by the rows
+    for(var y=allY-1; y >=0; y--){
+
+        //init and push new row
+        var newRow = [];
+        rows.push(newRow);
+        for(var x=0; x < allX; x++){
+
+            //just like in picbreeder!
+            var currentX = ((x << 1) - width + 1) / width;
+            var currentY = ((y << 1) - height + 1) / height;
+
+            inputs = [currentX, currentY, Math.sqrt(currentX*currentX + currentY*currentY)*inSqrt2];
+
+            //run the CPPN please! Acyclic cppns only, thank you
+            outputs = activationFunction(inputs);
+
+            //rgb conversion here
+            rgb = FloatToByte(PicHSBtoRGB(outputs[0], clampZeroOne(outputs[1]), Math.abs(outputs[2])));
+
+            //add to list of outputs to return
+            newRow.push(rgb);
+        }
+    }
+
+    return rows;
+}
+
+function clampZeroOne(val)
+{
+    return Math.max(0.0, Math.min(val,1.0));
+};
+function FloatToByte(arr)
+{
+    var conv = [];
+
+    arr.forEach(function(col)
+    {
+        conv.push(Math.floor(col*255.0));
+    });
+
+    return conv;
+};
+
+function PicHSBtoRGB(h,s,v)
+{
+
+    h = (h*6.0)%6.0;
+
+
+    var r = 0.0, g = 0.0, b = 0.0;
+
+    if(h < 0.0) h += 6.0;
+    var hi = Math.floor(h);
+    var f = h - hi;
+
+    var vs = v * s;
+    var vsf = vs * f;
+
+    var p = v - vs;
+    var q = v - vsf;
+    var t = v - vs + vsf;
+
+    switch(hi) {
+        case 0: r = v; g = t; b = p; break;
+        case 1: r = q; g = v; b = p; break;
+        case 2: r = p; g = v; b = t; break;
+        case 3: r = p; g = q; b = v; break;
+        case 4: r = t; g = p; b = v; break;
+        case 5: r = v; g = p; b = q; break;
+    }
+
+    return [r,g,b];
+};
+});
+
+require.modules["thread-workers"] = require.modules["./libs/thread-workers"];
+
+
 require.register("./libs/webworker-queue", function (exports, module) {
 
 var WebWorkerClass = require("component~worker@master");
@@ -21634,6 +23319,8 @@ function webworkerqueue(scriptName, workerCount)
     var self = this;
 
     self.nextWorker = 0;
+
+    var isObjectArray = Array.isArray(scriptName);
     
     //queue to pull from 
     self.taskQueue = [];
@@ -21643,17 +23330,18 @@ function webworkerqueue(scriptName, workerCount)
     self.workers = [];
 
     //how many workers available
-    self.availableWorkers = workerCount;
+    self.availableWorkers = isObjectArray ? scriptName.length : workerCount;
 
     //note who is in use
     self.inUseWorkers = {};
     
     //and the full count of workers
-    self.totalWorkers = workerCount;
+    self.totalWorkers = isObjectArray ? scriptName.length : workerCount;
 
-    for(var i=0; i < workerCount; i++){
+    for(var i=0; i < self.totalWorkers; i++){
 
-        var webworker = new WebWorkerClass(scriptName);
+        //if we sent in an object array, just take the objects
+        var webworker = isObjectArray ? scriptName[i] : new WebWorkerClass(scriptName);
 
         //create a new worker id (simply the index will do)
         var workerID = i;
@@ -21788,6 +23476,47 @@ function webworkerqueue(scriptName, workerCount)
 });
 
 require.modules["webworker-queue"] = require.modules["./libs/webworker-queue"];
+
+
+require.register("./libs/webworker-thread", function (exports, module) {
+
+var WebWorkerClass = require("component~worker@master");
+var emitter = require("component~emitter@master");
+
+module.exports = webworkerthread;
+
+function webworkerthread(scriptName)
+{ 
+    var self = this;
+
+    emitter(self);
+
+    //if we're a string, load us up, if we're an object -- jsut accept the object!
+    self.thread = (typeof scriptName == "string" ? new WebWorkerClass(scriptName) : scriptName);
+
+    self.thread.on('message', messageCallback);
+ 
+    function messageCallback(threadData)
+    {
+        //here we get a callback with the data, we basically emit the event from the thread
+        if(threadData.event)
+        {
+            self.emit(threadData.event, threadData.data);
+        }
+    }
+
+    self.sendMessage = function(event, data)
+    {
+        self.thread.send({event: event, data: data});
+    }
+
+
+    return self;
+}
+
+});
+
+require.modules["webworker-thread"] = require.modules["./libs/webworker-thread"];
 
 
 require.register("./libs/geno-to-picture", function (exports, module) {
@@ -23752,242 +25481,6 @@ function flexIEC(divValue, reqOptions)
 require.modules["flexiec"] = require.modules["./libs/flexiec"];
 
 
-require.register("./libs/win-flexNovelty", function (exports, module) {
-var flexIEC = require("./libs/flexiec");
-var winIEC = require("optimuslime~win-iec@master");
-
-var emitter = require("component~emitter@master");
-
-//we need to combine the two! Also, we're a win module -- so shape up!
-module.exports = winflex;
-
-function winflex(backbone, globalConfig, localConfig)
-{
-	//pull in backbone info, we gotta set our logger/emitter up
-	var self = this;
-
-	self.winFunction = "ui";
-
-	//this is how we talk to win-backbone
-	self.backEmit = backbone.getEmitter(self);
-
-	//grab our logger
-	self.log = backbone.getLogger(self);
-
-	//only vital stuff goes out for normal logs
-	self.log.logLevel = localConfig.logLevel || self.log.normal;
-
-	self.moreThanOneDisplay = localConfig.moreThanOneDisplay || false;
-
-	//we have logger and emitter, set up some of our functions
-
-	self.htmlEvoObjects = {};
-
-	//what events do we need?
-	self.requiredEvents = function()
-	{
-		return [
-			"evolution:loadSeeds",
-			"evolution:getOrCreateOffspring",
-			"evolution:selectParents",
-			"evolution:publishArtifact",
-			"evolution:unselectParents"
-			//in the future we will also need to save objects according to our save tendencies
-		];
-	}
-
-	//what events do we respond to?
-	self.eventCallbacks = function()
-	{ 
-		return {
-			"ui:initializeDisplay" : self.initializeDiv,
-			"ui:ready" : self.ready
-		};
-	}
-
-	var uiCount = 0;
-	var single = false;
-
-	var uiObjects = {};
-
-	self.chooseRandomSeed = function(seedMap)
-	{
-		var seedKeys = Object.keys(seedMap);
-		var rIx = Math.floor(Math.random()*seedKeys.length);
-		return seedKeys[rIx];
-	}
-
-	//initialize 
-	self.initializeDiv = function(seeds, div, flexOptions, done)
-	{
-		if(single && self.moreThanOneDisplay)
-			return;
-
-		if(!seeds.length)
-		{
-			done("Must send at least 1 seed to initialization -- for now");
-			return;
-		}
-
-		if(seeds.length > 1)
-			self.log("Undefined behavior with more than one seed in this UI object. You were warned, sorry :/")
-		//not getting stuck with an undefined issue
-		flexOptions = flexOptions || {};
-
-		//if you only ever allow one div to take over 
-		single = true;
-
-		//seed related -- start generating ids AFTER the seed count -- this is important
-		//why? Because effectively there is a mapping between ids created in the ui and ids of objects created in evoltuion
-		//they stay in sync all the time, except for seeds, where more ids exist than there are visuals. 
-		//for that purpose, seeds occupy [0, startIx), 
-		var startIx = seeds.length;
-		flexOptions.startIx = Math.max(startIx, flexOptions.startIx || 0);
-
-		//part of the issue here is that flexIEC uses the ids as an indicator of order because they are assumed to be numbers
-		//therefor remove oldest uses that info -- but in reality, it just needs to time stamp the creation of evo objects, and this can all be avoided in the future
-		var seedMap = {};
-		for(var i=0; i < seeds.length; i++)
-			seedMap["" + i] = seeds[i];
-
-		//untested if you switch that!
-		var nf = new flexIEC(div, flexOptions);
-
-		//add some stuff to our thing for emitting
-		var uiEmitter = {};
-		emitter(uiEmitter);
-
-		//a parent was selected by flex
-		nf.on('parentSelected', function(eID, eDiv, finished)
-		{
-			//now a parent has been selected -- let's get that parent selection to evolution!
-			 self.backEmit("evolution:selectParents", [eID], function(err, parents)
-			 {
-			 	//index into parent object, grab our single object
-			 	var parent = parents[eID];
-
-			 	//now we use this info and pass it along for other ui business we don't care about
-			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
-			 	uiEmitter.emit('parentSelected', eID, eDiv, parent, finished);
-			 });
-		});
-
-		//parent is no longer rocking it. Sorry to say. 
-		nf.on('parentUnselected', function(eID)
-		{
-			//now a parent has been selected -- let's get that parent selection to evolution!
-			 self.backEmit("evolution:unselectParents", [eID], function(err)
-			 {
-			 	//now we use this info and pass it along for other ui business we don't care about
-			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
-			 	uiEmitter.emit('parentUnselected', eID);
-
-		 		self.log("act pars: ",nf.activeParents());
-			 	//are we empty? fall back to the chosen seed please!
-			 	if(nf.activeParents() == 0)
-			 	 	nf.createParent(self.chooseRandomSeed(seedMap));
-
-			 });
-		});
-
-		//individual created inside the UI system -- let's make a corresponding object in evolution
-		nf.on('createIndividual', function(eID, eDiv, finished)
-		{
-			//let it be known that we are looking for a sweet payday -- them kids derr
-			 self.backEmit("evolution:getOrCreateOffspring", [eID], function(err, allIndividuals)
-			 {
-			 	// console.error("shitidjfdijfdf");
-			 	//we got the juice!
-			 	var individual = allIndividuals[eID];
-
-			 	self.log("Create ind. create returned: ", allIndividuals);
-
-			 	//now we use this info and pass it along for other ui business we don't care about
-			 	//emit for further behavior -- must be satisfied or loading never ends hehehe
-			 	uiEmitter.emit('individualCreated', eID, eDiv, individual, finished);
-			 });
-		});
-
-		nf.on('publishArtifact', function(eID, meta, finished)
-		{
-			//let it be known that we are looking for a sweet payday -- them kids derr
-			 self.backEmit("evolution:publishArtifact", eID, meta, function(err)
-			 {
-			 	if(err)
-			 	{
-			 		uiEmitter.emit('publishError', eID, err);
-			 	}
-			 	else
-			 	{
-			 		uiEmitter.emit('publishSuccess', eID);
-			 	}
-
-			 	//now we are done publishing
-			 	finished();
-
-			 });
-		});
-
-		//might be published-- we are looking at the modal window
-		nf.on('publishShown', function(eID, eDiv, finished)
-		{
-			//we simply send back the indentifier, and where to put your display in the html object
-		 	uiEmitter.emit('publishShown', eID, eDiv, finished);
-		});
-
-		//we hid the object -- maybe animation needs to stop or something, let it be known
-		nf.on('publishHidden', function(eID)
-		{
-			uiEmitter.emit('publishHidden', eID);
-		});
-
-		//this is a temporary measure for now
-		//send the seeds for loading into iec -- there will be a better way to do this in the future
-		self.backEmit("evolution:loadSeeds", seedMap, function(err)
-		{
-			if(err)
-			{
-				done(err);
-			}
-			else
-			{
-				var uID = uiCount++;
-				var uiObj = {uID: uID, ui: nf, emitter: uiEmitter, seeds: seedMap};
-				uiObjects[uID] = uiObj;
-				//send back the ui object
-				done(undefined, uiObj);
-			}
-		});
-	}
-
-	self.ready = function(uID, done)
-	{
-		var uio = uiObjects[uID];
-
-		var nf = uio.ui;
-
-		//pull a random seed to set as the single parent (that's just our choice)
-		//we could pull 2 if they existed, but we don't
-		
-		var parentSeedID = self.chooseRandomSeed(uio.seeds);
-
-		//auto select parent -- this will cause changes to evolution
-		nf.createParent(parentSeedID);
-
-		//start up the display inside of the div passed in
-		nf.ready();
-
-	}
-
-
-	return self;
-}
-
-});
-
-require.modules["win-flexNovelty"] = require.modules["./libs/win-flexNovelty"];
-
-
 require.register("./libs/win-flexIEC", function (exports, module) {
 var flexIEC = require("./libs/flexiec");
 var winIEC = require("optimuslime~win-iec@master");
@@ -24224,45 +25717,278 @@ function winflex(backbone, globalConfig, localConfig)
 require.modules["win-flexIEC"] = require.modules["./libs/win-flexIEC"];
 
 
-require.register("./libs/webworker-thread", function (exports, module) {
+require.register("./libs/win-flexNovelty", function (exports, module) {
+var flexIEC = require("./libs/flexiec");
+var winIEC = require("optimuslime~win-iec@master");
 
-var WebWorkerClass = require("component~worker@master");
 var emitter = require("component~emitter@master");
 
-module.exports = webworkerthread;
+//we need to combine the two! Also, we're a win module -- so shape up!
+module.exports = winflex;
 
-function webworkerthread(scriptName)
-{ 
-    var self = this;
+function winflex(backbone, globalConfig, localConfig)
+{
+	//pull in backbone info, we gotta set our logger/emitter up
+	var self = this;
 
-    emitter(self);
+	self.winFunction = "ui";
 
-    self.thread = new WebWorkerClass(scriptName);
+	//this is how we talk to win-backbone
+	self.backEmit = backbone.getEmitter(self);
 
-    self.thread.on('message', messageCallback);
- 
-    function messageCallback(threadData)
-    {
-        //here we get a callback with the data, we basically emit the event from the thread
-        if(threadData.event)
-        {
-            self.emit(threadData.event, threadData.data);
-        }
-    }
+	//grab our logger
+	self.log = backbone.getLogger(self);
 
-    self.sendMessage = function(event, data)
-    {
-        self.thread.send({event: event, data: data});
-    }
+	//only vital stuff goes out for normal logs
+	self.log.logLevel = localConfig.logLevel || self.log.normal;
+
+	self.moreThanOneDisplay = localConfig.moreThanOneDisplay || false;
+
+	//we have logger and emitter, set up some of our functions
+
+	self.finishCreateIndividualCallbacks = [];
+
+	self.htmlEvoObjects = {};
+
+	//what events do we need?
+	self.requiredEvents = function()
+	{
+		return [
+			"evolution:loadSeeds",
+			// "evolution:getOrCreateOffspring",
+			"evolution:selectParents",
+			"evolution:runNoveltySearch",
+			"evolution:publishArtifact",
+			"evolution:unselectParents",
+			"evolution:getNoveltyEmitter"
+			//in the future we will also need to save objects according to our save tendencies
+		];
+	}
+
+	//what events do we respond to?
+	self.eventCallbacks = function()
+	{ 
+		return {
+			"ui:initializeDisplay" : self.initializeDiv,
+			"ui:ready" : self.ready
+		};
+	}
+
+	var uiCount = 0;
+	var single = false;
+
+	var uiObjects = {};
+
+	self.chooseRandomSeed = function(seedMap)
+	{
+		var seedKeys = Object.keys(seedMap);
+		var rIx = Math.floor(Math.random()*seedKeys.length);
+		return seedKeys[rIx];
+	}
+
+	//initialize 
+	self.initializeDiv = function(seeds, div, flexOptions, done)
+	{
+		if(single && self.moreThanOneDisplay)
+			return;
+
+		if(!seeds.length)
+		{
+			done("Must send at least 1 seed to initialization -- for now");
+			return;
+		}
+
+		if(seeds.length > 1)
+			self.log("Undefined behavior with more than one seed in this UI object. You were warned, sorry :/")
+
+		var flexUI;
+
+		//add some stuff to our thing for emitting
+		var uiEmitter = {};
+		emitter(uiEmitter);
+
+		//mapping our seed objects to wid
+		var seedMap = {};
+
+		self.backEmit.qCall("evolution:getNoveltyEmitter")
+			.then(function(novelEmitter)
+			{
+				self.noveltyEmitter = novelEmitter;
+
+				self.noveltyEmitter.on('novelIndividual', self.novelIndividualCreated);
+
+				//not getting stuck with an undefined issue
+				flexOptions = flexOptions || {};
+
+				//if you only ever allow one div to take over 
+				single = true;
+
+				//seed related -- start generating ids AFTER the seed count -- this is important
+				//why? Because effectively there is a mapping between ids created in the ui and ids of objects created in evoltuion
+				//they stay in sync all the time, except for seeds, where more ids exist than there are visuals. 
+				//for that purpose, seeds occupy [0, startIx), 
+				var startIx = seeds.length;
+				flexOptions.startIx = Math.max(startIx, flexOptions.startIx || 0);
+
+				//part of the issue here is that flexIEC uses the ids as an indicator of order because they are assumed to be numbers
+				//therefor remove oldest uses that info -- but in reality, it just needs to time stamp the creation of evo objects, and this can all be avoided in the future
+				
+				for(var i=0; i < seeds.length; i++)
+					seedMap["" + i] = seeds[i];
+
+				//untested if you switch that!
+				var nf = new flexIEC(div, flexOptions);
+				flexUI = nf;
 
 
 
-    return self;
+				//a parent was selected by flex
+				nf.on('parentSelected', function(eID, eDiv, finished)
+				{
+					//now a parent has been selected -- let's get that parent selection to evolution!
+					 self.backEmit("evolution:selectParents", [eID], function(err, parents)
+					 {
+					 	//index into parent object, grab our single object
+					 	var parent = parents[eID];
+
+					 	//now we use this info and pass it along for other ui business we don't care about
+					 	//emit for further behavior -- must be satisfied or loading never ends hehehe
+					 	uiEmitter.emit('parentSelected', eID, eDiv, parent, finished);
+					 });
+				});
+
+				//parent is no longer rocking it. Sorry to say. 
+				nf.on('parentUnselected', function(eID)
+				{
+					//now a parent has been selected -- let's get that parent selection to evolution!
+					 self.backEmit("evolution:unselectParents", [eID], function(err)
+					 {
+					 	//now we use this info and pass it along for other ui business we don't care about
+					 	//emit for further behavior -- must be satisfied or loading never ends hehehe
+					 	uiEmitter.emit('parentUnselected', eID);
+
+				 		self.log("act pars: ",nf.activeParents());
+					 	//are we empty? fall back to the chosen seed please!
+					 	if(nf.activeParents() == 0)
+					 	 	nf.createParent(self.chooseRandomSeed(seedMap));
+
+					 });
+				});
+
+				//individual created inside the UI system -- let's make a corresponding object in evolution
+				nf.on('createIndividual', function(eID, eDiv, finished)
+				{
+					self.requestNovelIndividual(eID, eDiv, uiEmitter, finished);					
+				});
+
+				nf.on('publishArtifact', function(eID, meta, finished)
+				{
+					//let it be known that we are looking for a sweet payday -- them kids derr
+					 self.backEmit("evolution:publishArtifact", eID, meta, function(err)
+					 {
+					 	if(err)
+					 	{
+					 		uiEmitter.emit('publishError', eID, err);
+					 	}
+					 	else
+					 	{
+					 		uiEmitter.emit('publishSuccess', eID);
+					 	}
+
+					 	//now we are done publishing
+					 	finished();
+
+					 });
+				});
+
+				//might be published-- we are looking at the modal window
+				nf.on('publishShown', function(eID, eDiv, finished)
+				{
+					//we simply send back the indentifier, and where to put your display in the html object
+				 	uiEmitter.emit('publishShown', eID, eDiv, finished);
+				});
+
+				//we hid the object -- maybe animation needs to stop or something, let it be known
+				nf.on('publishHidden', function(eID)
+				{
+					uiEmitter.emit('publishHidden', eID);
+				});
+
+				//this is a temporary measure for now
+				//send the seeds for loading into iec -- there will be a better way to do this in the future
+				return self.backEmit.qCall("evolution:loadSeeds", seedMap);
+			})
+			.catch(function(err)
+			{
+				done(err);
+			})
+			.done(function()
+			{
+				var uID = uiCount++;
+				var uiObj = {uID: uID, ui: flexUI, emitter: uiEmitter, seeds: seedMap};
+				uiObjects[uID] = uiObj;
+				//send back the ui object
+				done(undefined, uiObj);
+			}); 
+	}
+
+	self.novelIndividualCreated = function(individual)
+	{
+		//pull the finish function, send the individual
+		if(self.finishCreateIndividualCallbacks.length)
+		{
+			var singleCall = self.finishCreateIndividualCallbacks.shift();
+			singleCall(individual);
+		}
+	}
+
+	self.requestNovelIndividual = function(eID, eDiv, uiEmitter, finished)
+	{
+		//basically, we want to register that we need a novel object
+		//and when we get one, we satisfy the callback to this object uiEmitter
+		self.finishCreateIndividualCallbacks.push(function(individual)
+		{
+			//we got the juice!
+		 	self.log("Create ind. create returned: ", individual);
+
+		 	//now we use this info and pass it along for other ui business we don't care about
+		 	//emit for further behavior -- must be satisfied or loading never ends hehehe
+		 	uiEmitter.emit('individualCreated', eID, eDiv, individual, finished);
+		})
+
+		//let it be known that we are looking for a sweet payday -- them kids derr
+		 self.backEmit.qCall("evolution:runNoveltySearch", [eID])
+		 .done(function()
+		 {	
+		 }, function(err){throw err;});
+	}
+
+	self.ready = function(uID, done)
+	{
+		var uio = uiObjects[uID];
+
+		var nf = uio.ui;
+
+		//pull a random seed to set as the single parent (that's just our choice)
+		//we could pull 2 if they existed, but we don't
+		
+		var parentSeedID = self.chooseRandomSeed(uio.seeds);
+
+		//auto select parent -- this will cause changes to evolution
+		nf.createParent(parentSeedID);
+
+		//start up the display inside of the div passed in
+		nf.ready();
+
+	}
+
+
+	return self;
 }
 
 });
 
-require.modules["webworker-thread"] = require.modules["./libs/webworker-thread"];
+require.modules["win-flexNovelty"] = require.modules["./libs/win-flexNovelty"];
 
 
 require.register("win-picbreeder", function (exports, module) {

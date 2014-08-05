@@ -35,10 +35,12 @@ function winflex(backbone, globalConfig, localConfig)
 	{
 		return [
 			"evolution:loadSeeds",
-			"evolution:getOrCreateOffspring",
+			// "evolution:getOrCreateOffspring",
 			"evolution:selectParents",
+			"evolution:runNoveltySearch",
 			"evolution:publishArtifact",
-			"evolution:unselectParents"
+			"evolution:unselectParents",
+			"evolution:getNoveltyEmitter"
 			//in the future we will also need to save objects according to our save tendencies
 		];
 	}
@@ -79,6 +81,14 @@ function winflex(backbone, globalConfig, localConfig)
 		if(seeds.length > 1)
 			self.log("Undefined behavior with more than one seed in this UI object. You were warned, sorry :/")
 
+		var flexUI;
+
+		//add some stuff to our thing for emitting
+		var uiEmitter = {};
+		emitter(uiEmitter);
+
+		//mapping our seed objects to wid
+		var seedMap = {};
 
 		self.backEmit.qCall("evolution:getNoveltyEmitter")
 			.then(function(novelEmitter)
@@ -102,16 +112,15 @@ function winflex(backbone, globalConfig, localConfig)
 
 				//part of the issue here is that flexIEC uses the ids as an indicator of order because they are assumed to be numbers
 				//therefor remove oldest uses that info -- but in reality, it just needs to time stamp the creation of evo objects, and this can all be avoided in the future
-				var seedMap = {};
+				
 				for(var i=0; i < seeds.length; i++)
 					seedMap["" + i] = seeds[i];
 
 				//untested if you switch that!
 				var nf = new flexIEC(div, flexOptions);
+				flexUI = nf;
 
-				//add some stuff to our thing for emitting
-				var uiEmitter = {};
-				emitter(uiEmitter);
+
 
 				//a parent was selected by flex
 				nf.on('parentSelected', function(eID, eDiv, finished)
@@ -149,7 +158,7 @@ function winflex(backbone, globalConfig, localConfig)
 				//individual created inside the UI system -- let's make a corresponding object in evolution
 				nf.on('createIndividual', function(eID, eDiv, finished)
 				{
-					self.requestNovelIndividual(eid, eDiv, uiEmitter, finished);					
+					self.requestNovelIndividual(eID, eDiv, uiEmitter, finished);					
 				});
 
 				nf.on('publishArtifact', function(eID, meta, finished)
@@ -189,18 +198,18 @@ function winflex(backbone, globalConfig, localConfig)
 				//send the seeds for loading into iec -- there will be a better way to do this in the future
 				return self.backEmit.qCall("evolution:loadSeeds", seedMap);
 			})
-			.then(function(uiObjects)
+			.catch(function(err)
+			{
+				done(err);
+			})
+			.done(function()
 			{
 				var uID = uiCount++;
-				var uiObj = {uID: uID, ui: nf, emitter: uiEmitter, seeds: seedMap};
+				var uiObj = {uID: uID, ui: flexUI, emitter: uiEmitter, seeds: seedMap};
 				uiObjects[uID] = uiObj;
 				//send back the ui object
 				done(undefined, uiObj);
-			}, 
-			function(err)
-			{
-				done(err);
-			});
+			}); 
 	}
 
 	self.novelIndividualCreated = function(individual)

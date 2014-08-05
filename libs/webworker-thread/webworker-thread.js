@@ -10,7 +10,8 @@ function webworkerthread(scriptName)
 
     emitter(self);
 
-    self.thread = new WebWorkerClass(scriptName);
+    //if we're a string, load us up, if we're an object -- jsut accept the object!
+    self.thread = (typeof scriptName == "string" ? new WebWorkerClass(scriptName) : scriptName);
 
     self.thread.on('message', messageCallback);
  
@@ -27,7 +28,6 @@ function webworkerthread(scriptName)
     {
         self.thread.send({event: event, data: data});
     }
-
 
 
     return self;

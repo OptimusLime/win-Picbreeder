@@ -1,0 +1,16 @@
+{
+  "name": "thread-workers",
+  "description": "Handles threaded scripts -- everything in this folder",
+  "version": "0.0.1",
+  "dependencies": {
+  },
+  "scripts": [
+    "threads.js",
+    "cppnWorkerActivation.js",
+    "workerRunNovelty.js",
+    "workerCPPNNovelAct.js"
+
+  ],
+  "main": "threads.js",
+  "license": ["MIT"]
+}

@@ -1,67 +1,109 @@
 
-var self = this;
+//globals that need to exist
+var emitter; 
+var messageHandler;
+
+if(typeof require != "undefined")
+    emitter = require('emitter');
+
 var base64 = {};
 var generateBitmap = {};
 
-onmessage = function(e){
+if(typeof module != "undefined")
+    module.exports = messageProcessingObject;
 
-	try{
+function messageProcessingObject()
+{
+    var self  = this;
 
-		//grab our function data
-		var funData = e.data;
+     //add emission to us
+    if(emitter)
+        emitter(self);
 
-        //grab the wid
-        var wid = funData.wid;
+    var realThread = (typeof require == "undefined");
 
-		var nodeOrder = funData.nodeOrder;
-		var biasCount = funData.biasCount;
-		var outputCount = funData.outputCount;
-		var stFun = funData.stringFunctions;
+    self.send = (realThread ? function(data)
+    {
+        messageProcess(data);
+    } : 
+    function(data)
+    {
+        //have to wrap the object when it's a fake thread for debugging purposes
+        messageProcess({data: data});
+    });
 
-		if(!nodeOrder || !biasCount || !outputCount || !stFun)
-			throw new Error("Improper worker message sent. Need Node Order, Bias and OutputCounts, and String Functions for network");
+    self.threadPostMessage = (realThread ? postMessage : function(data){
+        self.emit('message', data);
+    });
 
-        var nodeFunctions = {};
-		//now we can create a contained function
-		for(var id in stFun)
-		{
-			//replace string with function object
-			nodeFunctions[id] = new Function([], stFun[id]);
-		}
-
-
-		//now we create a function that takes inputs, and runs the CPPN. BIATCH
-		var cppnFunction = containCPPN(nodeOrder, nodeFunctions, biasCount, outputCount);
-
-
-		//need with and height, thank you! non-zero ddoy
-		if(!wid || !funData.width || !funData.height)
-			throw new Error("No wid, width, or height provided for fixed size CPPN Activation");
-
-		//okay, now we have our CPPN all pampered and ready to go
-		var cppnOutputs = runCPPNAcrossFixedSize(cppnFunction, {width: funData.width, height: funData.height});
-
-        var allActivations = [];
-        for(var i=0; i < cppnOutputs.length; i++)
+    function messageProcess(e){
+    	try
         {
-            var rgb = cppnOutputs[i];
-            for(var r=0; r < rgb.length; r++)
-                allActivations.push(rgb[r]);
+        		//grab our function data
+        		var funData = e.data;
+
+                //grab the wid
+                var wid = funData.wid;
+
+        		var nodeOrder = funData.nodeOrder;
+        		var biasCount = funData.biasCount;
+        		var outputCount = funData.outputCount;
+        		var stFun = funData.stringFunctions;
+
+        		if(!nodeOrder || !biasCount || !outputCount || !stFun)
+        			throw new Error("Improper worker message sent. Need Node Order, Bias and OutputCounts, and String Functions for network");
+
+                var nodeFunctions = {};
+        		//now we can create a contained function
+        		for(var id in stFun)
+        		{
+        			//replace string with function object
+        			nodeFunctions[id] = new Function([], stFun[id]);
+        		}
+
+
+        		//now we create a function that takes inputs, and runs the CPPN. BIATCH
+        		var cppnFunction = containCPPN(nodeOrder, nodeFunctions, biasCount, outputCount);
+
+
+        		//need with and height, thank you! non-zero ddoy
+        		if(!wid || !funData.width || !funData.height)
+        			throw new Error("No wid, width, or height provided for fixed size CPPN Activation");
+
+        		//okay, now we have our CPPN all pampered and ready to go
+        		var cppnOutputs = runCPPNAcrossFixedSize(cppnFunction, {width: funData.width, height: funData.height});
+
+        		//cppn outputs to RGB Bitmap -- huzzah!
+        		var fileOutput = generateBitmap.generateBitmapDataURL(cppnOutputs);
+
+        		//send back our data, we'll have to loop through it and convert to bytes, but this is the raw data
+        		self.threadPostMessage({wid: wid, dataURL: fileOutput, width: funData.width, height: funData.height});
+        	}
+        	catch(err)
+        	{
+                console.log("CPPN Worker error: ", err);
+                console.log(err.toString());
+                console.log(err.message);
+                console.log(err.stack);
+                console.log("end cppnworker error");
+        		 // Send back the error to the parent page
+          		self.threadPostMessage({error: err.message, stack: err.stack});
+        	}
         }
 
-		//cppn outputs to RGB Bitmap -- huzzah!
-		// var fileOutput = generateBitmap.generateBitmapDataURL(cppnOutputs);
+    return self;
 
-		//send back our data, we'll have to loop through it and convert to bytes, but this is the raw data
-		postMessage({wid: wid, allOutputs: allActivations, width: funData.width, height: funData.height});
-	}
-	catch(e)
-	{
-		 // Send back the error to the parent page
-  		postMessage({error: e.message, stack: e.stack});
-	}
 };
 
+//if we are a thread we create an object,  and hook it up to the provided thread methods
+//otherwise, we're creating on a single thread
+if(typeof require == "undefined")
+{
+    messageHandler = new messageProcessingObject();
+
+    onmessage = messageHandler.send;
+    messageHandler.threadPostMessage = postMessage;
+}
 
 function containCPPN(nodesInOrder, functionsForNodes, biasCount, outputCount)
 {

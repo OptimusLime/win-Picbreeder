@@ -7,7 +7,7 @@
 	<link rel="stylesheet" type="text/css" media="screen" href="./build/build.css" />
 	<script type="text/javascript" src="./build/build.js"></script>
 	<script type="text/javascript" src="./js/modernizr.custom.js"></script>
-	<script type="text/javascript" src="./js/cppnWorkerActivation.js"></script>
+	<script type="text/javascript" src="./js/thread-workers/cppnWorkerActivation.js"></script>
 
 
 </head>
@@ -47,7 +47,7 @@
 			var WorkerQueue = require('webworker-queue');
 
 			var totalWorkers = 8;
-			var queue = new WorkerQueue("/js/cppnWorkerActivation.js", totalWorkers);
+			var queue = new WorkerQueue("/js/thread-workers/cppnWorkerActivation.js", totalWorkers);
 
 			//how we turn a genotype into a picture
 			var genoToPicture = require('geno-to-picture');

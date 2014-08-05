@@ -43,7 +43,7 @@
 			var WorkerQueue = require('webworker-queue');
 
 			var totalWorkers = 8;
-			var queue = new WorkerQueue("/js/cppnWorkerActivation.js", totalWorkers);
+			var queue = new WorkerQueue("/js/thread-workers/cppnWorkerActivation.js", totalWorkers);
 			var winneat = require('win-neat');
 
 
