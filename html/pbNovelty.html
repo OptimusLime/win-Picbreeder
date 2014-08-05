@@ -131,6 +131,7 @@
 
 				},
 				"win-NAIEC" : {
+					populationSize : 25,
 					behaviorGeneratorQueue : queue,
 					noveltyThread : noveltyRunner,
 					convertToQueueObject: convertIndividualToQueueJob,
@@ -177,8 +178,8 @@
 				//job description huzzah
 				var jobData = {
 					wid: individual.wid,
-					width: objSize.width, 
-					height: objSize.height,
+					width: objSize.width/5, //when we do novelty calc, we divide by four -- we don't need as much detail
+					height: objSize.height/5, //same as width
 					nodeOrder: functionObject.nodeOrder, 
 					stringFunctions: functionObject.stringFunctions,
 					biasCount: 1, //one bias node in neat genome -- ddoy

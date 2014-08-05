@@ -72,27 +72,59 @@ function messageProcessingObject()
             var cppnOutputs = runCPPNAcrossFixedSize(cppnFunction, {width: funData.width, height: funData.height});
 
             var allActivations = [];
+
+            var avg = 0;
             for(var i=0; i < cppnOutputs.length; i++)
             {
                 var row  = cppnOutputs[i];
                 for(var r=0; r < row.length; r++)
                 {
                     var rgb = row[r];
-                    for(var c=0; c < rgb.length; c++)
-                        allActivations.push(rgb[c]);
+                    //convert to grayscale
+                    var grayScale = .21*rgb[0] + .72*rgb[1] + .07*rgb[2];
+                    allActivations.push(grayScale);
+                    avg += grayScale;
+                    // for(var c=0; c < rgb.length; c++)
+                        // allActivations.push(rgb[c]);
                 }
             }
+
+            //divide sum by activaiton length for avg! 
+            avg /= allActivations.length;
+            
+            // var stdDev = 0;
+            // var delta;
+            // for(var i=0; i < allActivations.length; i++)
+            // {
+            //     delta = (allActivations[i] - avg);
+            //     stdDev += delta*delta;
+            // }
+            // //divide standard deviation by activaiton length
+            // stdDev /= allActivations.length;
+
+            // //if we have 0 std dev -- then we're all the same number -- just set 1 so we don't divide by zero 
+            // if(stdDev == 0)
+            //     stdDev = 1;
+
+            // var rep;
+
+            // //now we zscore noralize the results
+            // for(var i=0; i < allActivations.length; i++)
+            // {
+            //     rep = (allActivations[i] - avg)/stdDev;
+            //     allActivations[i] = rep;
+            // }
 
             //cppn outputs to RGB Bitmap -- huzzah!
             // var fileOutput = generateBitmap.generateBitmapDataURL(cppnOutputs);
 
             //send back our data, we'll have to loop through it and convert to bytes, but this is the raw data
-            self.threadPostMessage({wid: wid, allOutputs: allActivations, width: funData.width, height: funData.height});
+            self.threadPostMessage.apply(this, [{wid: wid, allOutputs: allActivations, width: funData.width, height: funData.height}])
         }
         catch(err)
         {
              // Send back the error to the parent page
-            self.threadPostMessage({error: err.message, stack: err.stack});
+            self.threadPostMessage.apply(this, [{error: err.message, stack: err.stack}]);
         }
     }
 

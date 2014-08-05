@@ -194,12 +194,33 @@ function winnaiec(backbone, globalConfig, localConfig)
 
 	function setupNovelty(){
 
+		self.noveltyInitialized = true;
+		//send to internal reset without any arugments -- will create from selected parents
+		internalResetNoveltySearch()
+		.then(function()
+		{
+			//saved the objects, let it know we're done
+	 		self.noveltyThread.sendMessage("finishSetupNovelty", {count: self.allCount});
+		})
+		.catch(function(err)
+		{
+			throw err;
+		});
+	}
+
+	function internalResetNoveltySearch(parents){
+
 		//grab a number of unique ids
 		self.population = {};
+		self.allCount = 0;
 
 		//grab our selected parents to initialize offspring with self.popsize number of individuals 
 		//gets the intial population for win-novelty 
-		self.createOffspring(self.populationSize)
+		return self.backEmit.qCall("novelty:clearArchive")
+			.then(function()
+			{
+				return self.createOffspring(parents, self.populationSize)
+			})
 			.then(function(offspringMap)
 			{
 				//for each wid in the offspring map, do stuff
@@ -208,13 +229,8 @@ function winnaiec(backbone, globalConfig, localConfig)
 					self.allCount++;
 		 			self.generatedIndividuals[key] = offspringMap[key];
 		 			self.population[key] = (offspringMap[key]);
-				}
-
-				//saved the objects, let it know we're done
-		 		self.noveltyThread.sendMessage("finishSetupNovelty", {count: self.allCount});
-			})
-
-		
+				}				
+			});		
 	}
 
 	function runGeneration()
@@ -441,7 +457,11 @@ function winnaiec(backbone, globalConfig, localConfig)
 
 
 		//without providing an array, we default to selected parents 
-		if(typeof parents == "number" || !Array.isArray(parents))
+		if(!parents)
+		{
+			parents = self.getSelectedParents();
+		}
+		else if(typeof parents == "number" || !Array.isArray(parents))
 		{
 			count = parents;
 			parents = self.getSelectedParents();
@@ -574,8 +594,23 @@ function winnaiec(backbone, globalConfig, localConfig)
 			self.parentCount++;
 		}
 	
-		//send back the evolutionary object that is linked to this parentID
-		finished(undefined, selectedObjects);
+		if(self.noveltyInitialized)
+		{
+			//reset novelty if it's been created already
+			internalResetNoveltySearch()
+				.then(function()
+				{
+					//reset novelty with new parent selections!
+					finished(undefined, selectedObjects);
+				})
+				.catch(function(err)
+				{
+					finished(err);
+				});
+		}
+		else
+			//send back the evolutionary object that is linked to this parentID
+			finished(undefined, selectedObjects);
 	}
 
 	self.unselectParents = function(eIDList, finished)

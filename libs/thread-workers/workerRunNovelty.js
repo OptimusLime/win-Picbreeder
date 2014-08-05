@@ -88,7 +88,7 @@ function messageProcessingObject()
         {
             console.log("Run Novelty error! ", err);
              // Send back the error to the parent page
-            self.threadPostMessage({event: "error", data: {error: err.message, stack: err.stack}});
+            self.threadPostMessage.apply(this, [{event: "error", data: {error: err.message, stack: err.stack}}]);
         }
     };
 
@@ -111,7 +111,7 @@ function messageProcessingObject()
                 currentState = NoveltyStates.initializing;
 
                 //send a message saying we want novelty all setup/
-                self.threadPostMessage({event: NoveltyEvents.setupNovelty, data : {}});
+                self.threadPostMessage.apply(this, [{event: NoveltyEvents.setupNovelty, data : {}}]);
                 break;
             case NoveltyStates.initializing:
             //nothing to be done, we're initializing, and when it finishes, we'll take care of the request
@@ -138,7 +138,7 @@ function messageProcessingObject()
     function runGeneration()
     {
         //we make a request to get the next genreation of objects evaluated
-        self.threadPostMessage({event: NoveltyEvents.runGeneration, data: {}});
+        self.threadPostMessage.apply(this, [{event: NoveltyEvents.runGeneration, data: {}}]);
     }
     //here we've finished running our generation
     function finishRunGeneration(generationData)
@@ -169,7 +169,7 @@ function messageProcessingObject()
         currentState = NoveltyStates.paused;
 
         //send out info that we're pausing
-        self.threadPostMessage({event: NoveltyEvents.pauseNovelty, data : {}});
+        self.threadPostMessage.apply(this, [{event: NoveltyEvents.pauseNovelty, data : {}}]);
     }
 
     function unpauseNovelty()

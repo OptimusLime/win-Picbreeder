@@ -30,6 +30,8 @@ function winflex(backbone, globalConfig, localConfig)
 
 	self.htmlEvoObjects = {};
 
+	self.eIDToParentWID = {};
+
 	//what events do we need?
 	self.requiredEvents = function()
 	{
@@ -125,11 +127,12 @@ function winflex(backbone, globalConfig, localConfig)
 				//a parent was selected by flex
 				nf.on('parentSelected', function(eID, eDiv, finished)
 				{
+					var parentID = self.eIDToParentWID[eID];
 					//now a parent has been selected -- let's get that parent selection to evolution!
-					 self.backEmit("evolution:selectParents", [eID], function(err, parents)
+					 self.backEmit("evolution:selectParents", [parentID], function(err, parents)
 					 {
 					 	//index into parent object, grab our single object
-					 	var parent = parents[eID];
+					 	var parent = parents[parentID];
 
 					 	//now we use this info and pass it along for other ui business we don't care about
 					 	//emit for further behavior -- must be satisfied or loading never ends hehehe
@@ -231,6 +234,8 @@ function winflex(backbone, globalConfig, localConfig)
 			//we got the juice!
 		 	self.log("Create ind. create returned: ", individual);
 
+		 	self.eIDToParentWID[eID] = individual.wid;
+
 		 	//now we use this info and pass it along for other ui business we don't care about
 		 	//emit for further behavior -- must be satisfied or loading never ends hehehe
 		 	uiEmitter.emit('individualCreated', eID, eDiv, individual, finished);
@@ -254,8 +259,12 @@ function winflex(backbone, globalConfig, localConfig)
 		
 		var parentSeedID = self.chooseRandomSeed(uio.seeds);
 
+		//seed maps to itself
+		self.eIDToParentWID[parentSeedID] = parentSeedID;
+
 		//auto select parent -- this will cause changes to evolution
 		nf.createParent(parentSeedID);
+
 
 		//start up the display inside of the div passed in
 		nf.ready();

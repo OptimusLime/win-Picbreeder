@@ -32,6 +32,8 @@ function messageProcessingObject()
         messageProcess({data: data});
     });
 
+    console.log("Inside real thread? " + (realThread ? "yes!" : "no!"));
+
     self.threadPostMessage = (realThread ? postMessage : function(data){
         self.emit('message', data);
     });
@@ -76,18 +78,16 @@ function messageProcessingObject()
         		//cppn outputs to RGB Bitmap -- huzzah!
         		var fileOutput = generateBitmap.generateBitmapDataURL(cppnOutputs);
 
-        		//send back our data, we'll have to loop through it and convert to bytes, but this is the raw data
-        		self.threadPostMessage({wid: wid, dataURL: fileOutput, width: funData.width, height: funData.height});
+                //send back our data, we'll have to loop through it and convert to bytes, but this is the raw data
+        		self.threadPostMessage.apply(this, [{wid: wid, dataURL: fileOutput, width: funData.width, height: funData.height}]);
         	}
         	catch(err)
         	{
-                console.log("CPPN Worker error: ", err);
-                console.log(err.toString());
-                console.log(err.message);
+                console.log("CPPN Worker error: ");
                 console.log(err.stack);
                 console.log("end cppnworker error");
         		 // Send back the error to the parent page
-          		self.threadPostMessage({error: err.message, stack: err.stack});
+          		self.threadPostMessage.apply(this, [{error: err.message, stack: err.stack}]);
         	}
         }
 
@@ -189,7 +189,7 @@ function FloatToByte(arr)
 
     arr.forEach(function(col)
     {
-        conv.push(Math.floor(col*255.0));
+        conv.push(Math.floor(clampZeroOne(col)*255.0));
     });
 
     return conv;

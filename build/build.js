@@ -18773,49 +18773,6 @@ require.modules["optimuslime~win-phylogeny"] = require.modules["optimuslime~win-
 require.modules["win-phylogeny"] = require.modules["optimuslime~win-phylogeny@0.0.1-1"];
 
 
-require.register("component~event@0.1.4", function (exports, module) {
-var bind = window.addEventListener ? 'addEventListener' : 'attachEvent',
-    unbind = window.removeEventListener ? 'removeEventListener' : 'detachEvent',
-    prefix = bind !== 'addEventListener' ? 'on' : '';
-
-/**
- * Bind `el` event `type` to `fn`.
- *
- * @param {Element} el
- * @param {String} type
- * @param {Function} fn
- * @param {Boolean} capture
- * @return {Function}
- * @api public
- */
-
-exports.bind = function(el, type, fn, capture){
-  el[bind](prefix + type, fn, capture || false);
-  return fn;
-};
-
-/**
- * Unbind `el` event `type`'s callback `fn`.
- *
- * @param {Element} el
- * @param {String} type
- * @param {Function} fn
- * @param {Boolean} capture
- * @return {Function}
- * @api public
- */
-
-exports.unbind = function(el, type, fn, capture){
-  el[unbind](prefix + type, fn, capture || false);
-  return fn;
-};
-});
-
-require.modules["component-event"] = require.modules["component~event@0.1.4"];
-require.modules["component~event"] = require.modules["component~event@0.1.4"];
-require.modules["event"] = require.modules["component~event@0.1.4"];
-
-
 require.register("component~query@0.0.3", function (exports, module) {
 function one(selector, el) {
   return el.querySelector(selector);
@@ -18926,6 +18883,49 @@ module.exports = function (element, selector, checkYoSelf, root) {
 require.modules["discore-closest"] = require.modules["discore~closest@0.1.3"];
 require.modules["discore~closest"] = require.modules["discore~closest@0.1.3"];
 require.modules["closest"] = require.modules["discore~closest@0.1.3"];
+
+
+require.register("component~event@0.1.4", function (exports, module) {
+var bind = window.addEventListener ? 'addEventListener' : 'attachEvent',
+    unbind = window.removeEventListener ? 'removeEventListener' : 'detachEvent',
+    prefix = bind !== 'addEventListener' ? 'on' : '';
+
+/**
+ * Bind `el` event `type` to `fn`.
+ *
+ * @param {Element} el
+ * @param {String} type
+ * @param {Function} fn
+ * @param {Boolean} capture
+ * @return {Function}
+ * @api public
+ */
+
+exports.bind = function(el, type, fn, capture){
+  el[bind](prefix + type, fn, capture || false);
+  return fn;
+};
+
+/**
+ * Unbind `el` event `type`'s callback `fn`.
+ *
+ * @param {Element} el
+ * @param {String} type
+ * @param {Function} fn
+ * @param {Boolean} capture
+ * @return {Function}
+ * @api public
+ */
+
+exports.unbind = function(el, type, fn, capture){
+  el[unbind](prefix + type, fn, capture || false);
+  return fn;
+};
+});
+
+require.modules["component-event"] = require.modules["component~event@0.1.4"];
+require.modules["component~event"] = require.modules["component~event@0.1.4"];
+require.modules["event"] = require.modules["component~event@0.1.4"];
 
 
 require.register("component~delegate@0.2.2", function (exports, module) {
@@ -21820,12 +21820,33 @@ function winnaiec(backbone, globalConfig, localConfig)
 
 	function setupNovelty(){
 
+		self.noveltyInitialized = true;
+		//send to internal reset without any arugments -- will create from selected parents
+		internalResetNoveltySearch()
+		.then(function()
+		{
+			//saved the objects, let it know we're done
+	 		self.noveltyThread.sendMessage("finishSetupNovelty", {count: self.allCount});
+		})
+		.catch(function(err)
+		{
+			throw err;
+		});
+	}
+
+	function internalResetNoveltySearch(parents){
+
 		//grab a number of unique ids
 		self.population = {};
+		self.allCount = 0;
 
 		//grab our selected parents to initialize offspring with self.popsize number of individuals 
 		//gets the intial population for win-novelty 
-		self.createOffspring(self.populationSize)
+		return self.backEmit.qCall("novelty:clearArchive")
+			.then(function()
+			{
+				return self.createOffspring(parents, self.populationSize)
+			})
 			.then(function(offspringMap)
 			{
 				//for each wid in the offspring map, do stuff
@@ -21834,13 +21855,8 @@ function winnaiec(backbone, globalConfig, localConfig)
 					self.allCount++;
 		 			self.generatedIndividuals[key] = offspringMap[key];
 		 			self.population[key] = (offspringMap[key]);
-				}
-
-				//saved the objects, let it know we're done
-		 		self.noveltyThread.sendMessage("finishSetupNovelty", {count: self.allCount});
-			})
-
-		
+				}				
+			});		
 	}
 
 	function runGeneration()
@@ -22067,7 +22083,11 @@ function winnaiec(backbone, globalConfig, localConfig)
 
 
 		//without providing an array, we default to selected parents 
-		if(typeof parents == "number" || !Array.isArray(parents))
+		if(!parents)
+		{
+			parents = self.getSelectedParents();
+		}
+		else if(typeof parents == "number" || !Array.isArray(parents))
 		{
 			count = parents;
 			parents = self.getSelectedParents();
@@ -22200,8 +22220,23 @@ function winnaiec(backbone, globalConfig, localConfig)
 			self.parentCount++;
 		}
 	
-		//send back the evolutionary object that is linked to this parentID
-		finished(undefined, selectedObjects);
+		if(self.noveltyInitialized)
+		{
+			//reset novelty if it's been created already
+			internalResetNoveltySearch()
+				.then(function()
+				{
+					//reset novelty with new parent selections!
+					finished(undefined, selectedObjects);
+				})
+				.catch(function(err)
+				{
+					finished(err);
+				});
+		}
+		else
+			//send back the evolutionary object that is linked to this parentID
+			finished(undefined, selectedObjects);
 	}
 
 	self.unselectParents = function(eIDList, finished)
@@ -22336,17 +22371,18 @@ module.exports = {
 
 require.register("./libs/thread-workers/cppnWorkerActivation.js", function (exports, module) {
 
+//globals that need to exist
 var emitter; 
-var module;
+var messageHandler;
+
 if(typeof require != "undefined")
     emitter = require("emitter");
-else
-    module = {};
 
 var base64 = {};
 var generateBitmap = {};
 
-module.exports = messageProcessingObject;
+if(typeof module != "undefined")
+    module.exports = messageProcessingObject;
 
 function messageProcessingObject()
 {
@@ -22367,6 +22403,8 @@ function messageProcessingObject()
         //have to wrap the object when it's a fake thread for debugging purposes
         messageProcess({data: data});
     });
+
+    console.log("Inside real thread? " + (realThread ? "yes!" : "no!"));
 
     self.threadPostMessage = (realThread ? postMessage : function(data){
         self.emit('message', data);
@@ -22412,13 +22450,16 @@ function messageProcessingObject()
         		//cppn outputs to RGB Bitmap -- huzzah!
         		var fileOutput = generateBitmap.generateBitmapDataURL(cppnOutputs);
 
-        		//send back our data, we'll have to loop through it and convert to bytes, but this is the raw data
-        		self.threadPostMessage({wid: wid, dataURL: fileOutput, width: funData.width, height: funData.height});
+                //send back our data, we'll have to loop through it and convert to bytes, but this is the raw data
+        		self.threadPostMessage.apply(this, [{wid: wid, dataURL: fileOutput, width: funData.width, height: funData.height}]);
         	}
         	catch(err)
         	{
+                console.log("CPPN Worker error: ");
+                console.log(err.stack);
+                console.log("end cppnworker error");
         		 // Send back the error to the parent page
-          		self.threadPostMessage({error: err.message, stack: err.stack});
+          		self.threadPostMessage.apply(this, [{error: err.message, stack: err.stack}]);
         	}
         }
 
@@ -22430,7 +22471,7 @@ function messageProcessingObject()
 //otherwise, we're creating on a single thread
 if(typeof require == "undefined")
 {
-    var messageHandler = new messageProcessingObject();
+    messageHandler = new messageProcessingObject();
 
     onmessage = messageHandler.send;
     messageHandler.threadPostMessage = postMessage;
@@ -22520,7 +22561,7 @@ function FloatToByte(arr)
 
     arr.forEach(function(col)
     {
-        conv.push(Math.floor(col*255.0));
+        conv.push(Math.floor(clampZeroOne(col)*255.0));
     });
 
     return conv;
@@ -22876,11 +22917,10 @@ generateBitmap.generateBitmapDataURL = function(rows, scale) {
 
 require.register("./libs/thread-workers/workerRunNovelty.js", function (exports, module) {
 var emitter; 
-var module;
+var messageHandler;
+
 if(typeof require != "undefined")
     emitter = require("emitter");
-else
-    module = {};
 
 var NoveltyEvents = 
 {
@@ -22904,7 +22944,8 @@ var NoveltyStates =
     restarting: 6
 }
 
-module.exports = messageProcessingObject;
+if(typeof module != "undefined")
+    module.exports = messageProcessingObject;
 
 function messageProcessingObject()
 {
@@ -22965,7 +23006,7 @@ function messageProcessingObject()
         {
             console.log("Run Novelty error! ", err);
              // Send back the error to the parent page
-            self.threadPostMessage({event: "error", data: {error: err.message, stack: err.stack}});
+            self.threadPostMessage.apply(this, [{event: "error", data: {error: err.message, stack: err.stack}}]);
         }
     };
 
@@ -22988,7 +23029,7 @@ function messageProcessingObject()
                 currentState = NoveltyStates.initializing;
 
                 //send a message saying we want novelty all setup/
-                self.threadPostMessage({event: NoveltyEvents.setupNovelty, data : {}});
+                self.threadPostMessage.apply(this, [{event: NoveltyEvents.setupNovelty, data : {}}]);
                 break;
             case NoveltyStates.initializing:
             //nothing to be done, we're initializing, and when it finishes, we'll take care of the request
@@ -23015,7 +23056,7 @@ function messageProcessingObject()
     function runGeneration()
     {
         //we make a request to get the next genreation of objects evaluated
-        self.threadPostMessage({event: NoveltyEvents.runGeneration, data: {}});
+        self.threadPostMessage.apply(this, [{event: NoveltyEvents.runGeneration, data: {}}]);
     }
     //here we've finished running our generation
     function finishRunGeneration(generationData)
@@ -23046,7 +23087,7 @@ function messageProcessingObject()
         currentState = NoveltyStates.paused;
 
         //send out info that we're pausing
-        self.threadPostMessage({event: NoveltyEvents.pauseNovelty, data : {}});
+        self.threadPostMessage.apply(this, [{event: NoveltyEvents.pauseNovelty, data : {}}]);
     }
 
     function unpauseNovelty()
@@ -23061,7 +23102,7 @@ function messageProcessingObject()
 //otherwise, we're creating on a single thread
 if(typeof require == "undefined")
 {
-    var messageHandler = new messageProcessingObject();
+    messageHandler = new messageProcessingObject();
 
     onmessage = messageHandler.send;
     messageHandler.threadPostMessage = postMessage;
@@ -23072,16 +23113,16 @@ if(typeof require == "undefined")
 
 require.register("./libs/thread-workers/workerCPPNNovelAct.js", function (exports, module) {
 var emitter; 
-var module;
+var messageHandler;
+
 if(typeof require != "undefined")
     emitter = require("emitter");
-else
-    module = {};
 
 var base64 = {};
 var generateBitmap = {};
 
-module.exports = messageProcessingObject;
+if(typeof module != "undefined")
+    module.exports = messageProcessingObject;
 
 function messageProcessingObject()
 {
@@ -23145,27 +23186,59 @@ function messageProcessingObject()
             var cppnOutputs = runCPPNAcrossFixedSize(cppnFunction, {width: funData.width, height: funData.height});
 
             var allActivations = [];
+
+            var avg = 0;
             for(var i=0; i < cppnOutputs.length; i++)
             {
                 var row  = cppnOutputs[i];
                 for(var r=0; r < row.length; r++)
                 {
                     var rgb = row[r];
-                    for(var c=0; c < rgb.length; c++)
-                        allActivations.push(rgb[c]);
+                    //convert to grayscale
+                    var grayScale = .21*rgb[0] + .72*rgb[1] + .07*rgb[2];
+                    allActivations.push(grayScale);
+                    avg += grayScale;
+                    // for(var c=0; c < rgb.length; c++)
+                        // allActivations.push(rgb[c]);
                 }
             }
+
+            //divide sum by activaiton length for avg! 
+            avg /= allActivations.length;
+            
+            // var stdDev = 0;
+            // var delta;
+            // for(var i=0; i < allActivations.length; i++)
+            // {
+            //     delta = (allActivations[i] - avg);
+            //     stdDev += delta*delta;
+            // }
+            // //divide standard deviation by activaiton length
+            // stdDev /= allActivations.length;
+
+            // //if we have 0 std dev -- then we're all the same number -- just set 1 so we don't divide by zero 
+            // if(stdDev == 0)
+            //     stdDev = 1;
+
+            // var rep;
+
+            // //now we zscore noralize the results
+            // for(var i=0; i < allActivations.length; i++)
+            // {
+            //     rep = (allActivations[i] - avg)/stdDev;
+            //     allActivations[i] = rep;
+            // }
 
             //cppn outputs to RGB Bitmap -- huzzah!
             // var fileOutput = generateBitmap.generateBitmapDataURL(cppnOutputs);
 
             //send back our data, we'll have to loop through it and convert to bytes, but this is the raw data
-            self.threadPostMessage({wid: wid, allOutputs: allActivations, width: funData.width, height: funData.height});
+            self.threadPostMessage.apply(this, [{wid: wid, allOutputs: allActivations, width: funData.width, height: funData.height}])
         }
         catch(err)
         {
              // Send back the error to the parent page
-            self.threadPostMessage({error: err.message, stack: err.stack});
+            self.threadPostMessage.apply(this, [{error: err.message, stack: err.stack}]);
         }
     }
 
@@ -23177,7 +23250,7 @@ function messageProcessingObject()
 //otherwise, we're creating on a single thread
 if(typeof require == "undefined")
 {
-    var messageHandler = new messageProcessingObject();
+    messageHandler = new messageProcessingObject();
 
     onmessage = messageHandler.send;
     messageHandler.threadPostMessage = postMessage;
@@ -25750,6 +25823,8 @@ function winflex(backbone, globalConfig, localConfig)
 
 	self.htmlEvoObjects = {};
 
+	self.eIDToParentWID = {};
+
 	//what events do we need?
 	self.requiredEvents = function()
 	{
@@ -25845,11 +25920,12 @@ function winflex(backbone, globalConfig, localConfig)
 				//a parent was selected by flex
 				nf.on('parentSelected', function(eID, eDiv, finished)
 				{
+					var parentID = self.eIDToParentWID[eID];
 					//now a parent has been selected -- let's get that parent selection to evolution!
-					 self.backEmit("evolution:selectParents", [eID], function(err, parents)
+					 self.backEmit("evolution:selectParents", [parentID], function(err, parents)
 					 {
 					 	//index into parent object, grab our single object
-					 	var parent = parents[eID];
+					 	var parent = parents[parentID];
 
 					 	//now we use this info and pass it along for other ui business we don't care about
 					 	//emit for further behavior -- must be satisfied or loading never ends hehehe
@@ -25951,6 +26027,8 @@ function winflex(backbone, globalConfig, localConfig)
 			//we got the juice!
 		 	self.log("Create ind. create returned: ", individual);
 
+		 	self.eIDToParentWID[eID] = individual.wid;
+
 		 	//now we use this info and pass it along for other ui business we don't care about
 		 	//emit for further behavior -- must be satisfied or loading never ends hehehe
 		 	uiEmitter.emit('individualCreated', eID, eDiv, individual, finished);
@@ -25974,8 +26052,12 @@ function winflex(backbone, globalConfig, localConfig)
 		
 		var parentSeedID = self.chooseRandomSeed(uio.seeds);
 
+		//seed maps to itself
+		self.eIDToParentWID[parentSeedID] = parentSeedID;
+
 		//auto select parent -- this will cause changes to evolution
 		nf.createParent(parentSeedID);
+
 
 		//start up the display inside of the div passed in
 		nf.ready();
