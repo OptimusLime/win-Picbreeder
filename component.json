@@ -11,10 +11,8 @@
     "component/worker": "master",
     "optimuslime/traverse": "0.6.6-1",
     "optimuslime/el.js": "master",
-    "optimuslime/win-iec": "0.0.2-6",
     "optimuslime/win-query": "0.0.1-4",
     "optimuslime/win-publish": "0.0.1-4",
-    "optimuslime/win-neat": "0.0.1-9",
     "optimuslime/win-backbone": "0.0.4-5",
     "optimuslime/win-schema": "0.0.5-4",
     "optimuslime/win-gen": "0.0.2-6",
@@ -28,19 +26,27 @@
   ],
   "styles" : ["css/main.css"],
   "local": [
+    "win-neat",
+    "win-iec",
     "win-home-ui",
-    "webworker-queue",
-    "geno-to-picture",
-    "cppn-additions",
-    "win-setup",
-    "pbEncoding",
     "win-flexIEC",
     "flexstatic",
     "flexparents",
-    "flexiec"
+    "flexiec",
+    "webworker-queue",
+    "geno-to-picture",
+    "cppn-additions",
+    "pbEncoding",
+    "win-setup"
   ],
   "paths": [
-    "libs"
+    "libs",
+    "libs/initialization",
+    "libs/encoding",
+    "libs/evolution",
+    "libs/ui/home",
+    "libs/ui/iec",
+    "libs/webworkers"
   ],
   "license": "MIT"
 }

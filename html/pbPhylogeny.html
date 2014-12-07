@@ -14,8 +14,8 @@
     <!-- // <script type="text/javascript" src="d3/d3.geom.js"></script> -->
     <!-- // <script type="text/javascript" src="d3/d3.layout.js"></script> -->
 
-	<script src="./js/prettify.js"></script>
-	<script src="./js/vkbeautify.beta.js"></script>
+	<script src="./js/libs/prettify.js"></script>
+	<script src="./js/libs/vkbeautify.beta.js"></script>
 
     <!-- <link type="text/css" rel="stylesheet" href="http://mbostock.github.io/d3/talk/20110921/style.css"/> -->
     <style>
@@ -83,9 +83,9 @@
   		<g transform="translate(20, 20)"/>
 	</svg>
 
-	<script src="./js/d3.v3.min.js"></script>
-	<script src="./js/dagre-d3.min.js"></script>
-	<script src="./js/graphlib-dot.min.js"></script>
+	<script src="./js/libs/d3.v3.min.js"></script>
+	<script src="./js/libs/dagre-d3.min.js"></script>
+	<script src="./js/libs/graphlib-dot.min.js"></script>
 	<!-- // <script type="text/javascript" src="http://cpettitt.github.io/project/dagre-d3/latest/dagre-d3.min.js"></script> -->
 
 	<!-- Now we start messing with the flex object -->
@@ -226,7 +226,7 @@
 
 		    oldInputGraphValue = inputGraph.value;
 		    try {
-		      result = graphlibDot.parse(inputGraph.value);
+		      result = graphlibDot.read(inputGraph.value);
 		    } catch (e) {
 		      // inputGraph.setAttribute("class", "error");
 		      console.error("Graph error: ",e);
@@ -240,10 +240,10 @@
 		      // Cleanup old graph
 		      var svg = d3.select("svg");
 
-		      var renderer = new dagreD3.Renderer();
+		      var renderer = new dagreD3.render();
 
 		      // Handle debugAlignment
-		      renderer.postLayout(function(graph) {
+		      renderer.postProcessGraph = function(graph) {
 		        if (debugAlignment) {
 		          // First find necessary delta...
 		          var minX = Math.min.apply(null, graph.nodes().map(function(u) {
@@ -263,7 +263,7 @@
 		            });
 		          });
 		        }
-		      });
+		      };
 
 		      // Uncomment the following line to get straight edges
 		      //renderer.edgeInterpolate('linear');
@@ -273,12 +273,22 @@
 		        return selection.transition().duration(500);
 		      }
 
-		      renderer.transition(transition);
+		      // result.graph().transition = transition;
+		      // renderer.transition(transition);
 
-		      var layout = renderer.run(result, svg.select("g"));
-		      transition(d3.select("svg"))
-		        .attr("width", layout.graph().width + 40)
-		        .attr("height", layout.graph().height + 40)
+		      // var layout = renderer.run(result, svg.select("g"));
+		      
+		      transition(d3.select("svg g").call(renderer, result))
+		      	.attr("width", result.graph().width + 40)
+		        .attr("height", result.graph().height + 40)
+
+	        renderer.postProcessGraph(result.graph());
+
+
+		      // transition(d3.select("svg"))
+		      //   .attr("width", layout.graph().width + 40)
+		      //   .attr("height", layout.graph().height + 40)
+
 		      d3.select("svg")
 		        .call(d3.behavior.zoom().on("zoom", function() {
 		          var ev = d3.event;
@@ -300,7 +310,7 @@
 			var WorkerQueue = require('webworker-queue');
 
 			var totalWorkers = 8;
-			var queue = new WorkerQueue("/js/cppnWorkerActivation.js", totalWorkers);
+			var queue = new WorkerQueue("/js/webworkers/cppnWorkerActivation.js", totalWorkers);
 			var winneat = require('win-neat');
 
 
@@ -480,7 +490,7 @@
 	        					var graphID = gID++;
 
 	        					graphNames[name] = {wid: wid, graphID: graphID};
-	        					var line = (graphID + ' [label=\"<div id=\'' + wid + '\' class=\'normal'  +  '\' style=\'' + elementStyle + " margin: 10px;" + '\' />\"];');
+	        					var line = (graphID + ' [labelType=\"html\" label=\"<div id=\'' + wid + '\' class=\'normal'  +  '\' style=\'' + elementStyle + " margin: 10px;" + '\' />\"];');
 	        					console.log("Line: ", line)
 	        					buildGraph += line;
 	        				}

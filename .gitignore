@@ -4,6 +4,7 @@ components
 #Configuration file built by picbreeder
 pbConfig.json
 
+.DS_Store
 
 # Logs
 logs

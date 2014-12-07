@@ -1,0 +1,12 @@
+{
+  "name": "win-iec",
+  "version": "0.0.2-6",
+  "main": "lib/win-iec.js",
+  "scripts": [
+    "lib/win-iec.js"
+  ],
+  "dependencies": {
+    "optimuslime/win-utils": "master"
+  },
+  "repository": "optimuslime/win-iec"
+}

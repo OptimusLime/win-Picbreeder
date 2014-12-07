@@ -20,6 +20,89 @@ function require(name) {
 }
 
 /**
+ * Meta info, accessible in the global scope unless you use AMD option.
+ */
+
+require.loader = 'component';
+
+/**
+ * Internal helper object, contains a sorting function for semantiv versioning
+ */
+require.helper = {};
+require.helper.semVerSort = function(a, b) {
+  var aArray = a.version.split('.');
+  var bArray = b.version.split('.');
+  for (var i=0; i<aArray.length; ++i) {
+    var aInt = parseInt(aArray[i], 10);
+    var bInt = parseInt(bArray[i], 10);
+    if (aInt === bInt) {
+      var aLex = aArray[i].substr((""+aInt).length);
+      var bLex = bArray[i].substr((""+bInt).length);
+      if (aLex === '' && bLex !== '') return 1;
+      if (aLex !== '' && bLex === '') return -1;
+      if (aLex !== '' && bLex !== '') return aLex > bLex ? 1 : -1;
+      continue;
+    } else if (aInt > bInt) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Find and require a module which name starts with the provided name.
+ * If multiple modules exists, the highest semver is used. 
+ * This function can only be used for remote dependencies.
+
+ * @param {String} name - module name: `user~repo`
+ * @param {Boolean} returnPath - returns the canonical require path if true, 
+ *                               otherwise it returns the epxorted module
+ */
+require.latest = function (name, returnPath) {
+  function showError(name) {
+    throw new Error('failed to find latest module of "' + name + '"');
+  }
+  // only remotes with semvers, ignore local files conataining a '/'
+  var versionRegexp = /(.*)~(.*)@v?(\d+\.\d+\.\d+[^\/]*)$/;
+  var remoteRegexp = /(.*)~(.*)/;
+  if (!remoteRegexp.test(name)) showError(name);
+  var moduleNames = Object.keys(require.modules);
+  var semVerCandidates = [];
+  var otherCandidates = []; // for instance: name of the git branch
+  for (var i=0; i<moduleNames.length; i++) {
+    var moduleName = moduleNames[i];
+    if (new RegExp(name + '@').test(moduleName)) {
+        var version = moduleName.substr(name.length+1);
+        var semVerMatch = versionRegexp.exec(moduleName);
+        if (semVerMatch != null) {
+          semVerCandidates.push({version: version, name: moduleName});
+        } else {
+          otherCandidates.push({version: version, name: moduleName});
+        } 
+    }
+  }
+  if (semVerCandidates.concat(otherCandidates).length === 0) {
+    showError(name);
+  }
+  if (semVerCandidates.length > 0) {
+    var module = semVerCandidates.sort(require.helper.semVerSort).pop().name;
+    if (returnPath === true) {
+      return module;
+    }
+    return require(module);
+  }
+  // if the build contains more than one branch of the same module
+  // you should not use this funciton
+  var module = otherCandidates.sort(function(a, b) {return a.name > b.name})[0].name;
+  if (returnPath === true) {
+    return module;
+  }
+  return require(module);
+}
+
+/**
  * Registered modules.
  */
 
@@ -52,1386 +135,290 @@ require.define = function (name, exports) {
     exports: exports
   };
 };
-require.register("optimuslime~win-utils@master", function (exports, module) {
+require.register("component~emitter@master", function (exports, module) {
 
-var winutils = {};
-
-module.exports = winutils;
-
-//right now, it's all we have setup -- later there will be more utilities
-winutils.cuid = require("optimuslime~win-utils@master/uuid/cuid.js");
-
-winutils.math = require("optimuslime~win-utils@master/math/winmath.js");
-
-
-});
-
-require.register("optimuslime~win-utils@master/uuid/cuid.js", function (exports, module) {
 /**
- * cuid.js
- * Collision-resistant UID generator for browsers and node.
- * Sequential for fast db lookups and recency sorting.
- * Safe for element IDs and server-side lookups.
- *
- * Extracted from CLCTR
- * 
- * Copyright (c) Eric Elliott 2012
- * MIT License
+ * Expose `Emitter`.
  */
-//From: https://github.com/dilvie/cuid
 
-//note that module.exports is at the end -- it exports the api variable
+module.exports = Emitter;
 
-/*global window, navigator, document, require, process, module */
-var c = 0,
-    blockSize = 4,
-    base = 36,
-    discreteValues = Math.pow(base, blockSize),
-
-    pad = function pad(num, size) {
-      var s = "000000000" + num;
-      return s.substr(s.length-size);
-    },
-
-    randomBlock = function randomBlock() {
-      return pad((Math.random() *
-            discreteValues << 0)
-            .toString(base), blockSize);
-    },
-
-    api = function cuid() {
-      // Starting with a lowercase letter makes
-      // it HTML element ID friendly.
-      var letter = 'c', // hard-coded allows for sequential access
-
-        // timestamp
-        // warning: this exposes the exact date and time
-        // that the uid was created.
-        timestamp = (new Date().getTime()).toString(base),
-
-        // Prevent same-machine collisions.
-        counter,
-
-        // A few chars to generate distinct ids for different
-        // clients (so different computers are far less
-        // likely to generate the same id)
-        fingerprint = api.fingerprint(),
-
-        // Grab some more chars from Math.random()
-        random = randomBlock() + randomBlock() + randomBlock() + randomBlock();
-
-        c = (c < discreteValues) ? c : 0;
-        counter = pad(c.toString(base), blockSize);
-
-      c++; // this is not subliminal
-
-      return  (letter + timestamp + counter + fingerprint + random);
-    };
-
-api.slug = function slug() {
-  var date = new Date().getTime().toString(36),
-    counter = c.toString(36).slice(-1),
-    print = api.fingerprint().slice(0,1) +
-      api.fingerprint().slice(-1),
-    random = randomBlock().slice(-1);
-
-  c++;
-
-  return date.slice(2,4) + date.slice(-2) + 
-    counter + print + random;
-};
-
-//fingerprint changes based on nodejs or component setup
-var isBrowser = (typeof process == 'undefined');
-
-api.fingerprint = isBrowser ?
-  function browserPrint() {
-      return pad((navigator.mimeTypes.length +
-          navigator.userAgent.length).toString(36) +
-          api.globalCount().toString(36), 4);
-  }
-: function nodePrint() {
-  var os = require("os"),
-
-  padding = 2,
-  pid = pad((process.pid).toString(36), padding),
-  hostname = os.hostname(),
-  length = hostname.length,
-  hostId = pad((hostname)
-    .split('')
-    .reduce(function (prev, char) {
-      return +prev + char.charCodeAt(0);
-    }, +length + 36)
-    .toString(36),
-  padding);
-return pid + hostId;
-};
-
-api.globalCount = function globalCount() {
-    // We want to cache the results of this
-    var cache = (function calc() {
-        var i,
-            count = 0;
-
-            //global count only ever called inside browser environment
-            //lets loop through and count the keys in window -- then cahce that as part of our fingerprint
-        for (i in window) {
-            count++;
-        }
-
-        return count;
-    }());
-
-    api.globalCount = function () { return cache; };
-    return cache;
-};
-
-api.isLessThan = function(first, second)
-{
-  var fParse= parseInt(first);
-  var sParse = parseInt(second);
-  if(isNaN(fParse) && isNaN(sParse))
-  {
-     //tease apart first, second to determine which ID came first
-    //counter + fingerprint + random = 6 blocks of 4 = 24
-    var dateEnd = 6*blockSize;
-    var counterEnd = 5*blockSize;
-    var charStart = 1;
-
-    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
-    var firstTime = parseInt(first.slice(charStart, first.length - dateEnd), base);
-    //ditto for counter
-    var firstCounter = parseInt(first.slice(first.length - dateEnd, first.length - counterEnd),base);
-
-    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
-    var secondTime =  parseInt(second.slice(charStart, second.length - dateEnd), base);
-    
-    //ditto for counter 
-    var secondCounter = parseInt(second.slice(second.length - dateEnd, second.length - counterEnd), base);
-
-    //either the first time is less than the second time, and we answer this question immediately
-    //or the times are equal -- then we pull the lower counter
-    //techincially counters can wrap, but this won't happen very often AND this is all for measuring disjoint/excess behavior
-    //the time should be enough of an ordering principal for this not to matter
-    return firstTime < secondTime || (firstTime == secondTime && firstCounter < secondCounter);
-
-  }
-  else if(isNaN(sParse))
-  {
-    //if sParse is a string, then the first is a number and the second is a string UUID
-    //to maintain backwards compat -- number come before strings in neatjs ordering
-    return true;
-  }//both are not NaN -- we have two numbers to compare
-  else
-  {
-    return fParse < sParse;
-  }
-}
-
-//we send out API
-module.exports = api;
-
-
-
-
-});
-
-require.register("optimuslime~win-utils@master/math/winmath.js", function (exports, module) {
-
-var mathHelper = {};
-
-module.exports = mathHelper;
-
-mathHelper.next = function(max)
-{
-    return Math.floor(Math.random()*max);
-};
-
-});
-
-require.modules["optimuslime-win-utils"] = require.modules["optimuslime~win-utils@master"];
-require.modules["optimuslime~win-utils"] = require.modules["optimuslime~win-utils@master"];
-require.modules["win-utils"] = require.modules["optimuslime~win-utils@master"];
-
-
-require.register("optimuslime~win-utils@0.1.1", function (exports, module) {
-
-var winutils = {};
-
-module.exports = winutils;
-
-//right now, it's all we have setup -- later there will be more utilities
-winutils.cuid = require("optimuslime~win-utils@0.1.1/uuid/cuid.js");
-
-winutils.math = require("optimuslime~win-utils@0.1.1/math/winmath.js");
-
-
-});
-
-require.register("optimuslime~win-utils@0.1.1/uuid/cuid.js", function (exports, module) {
 /**
- * cuid.js
- * Collision-resistant UID generator for browsers and node.
- * Sequential for fast db lookups and recency sorting.
- * Safe for element IDs and server-side lookups.
+ * Initialize a new `Emitter`.
  *
- * Extracted from CLCTR
- * 
- * Copyright (c) Eric Elliott 2012
- * MIT License
+ * @api public
  */
-//From: https://github.com/dilvie/cuid
 
-//note that module.exports is at the end -- it exports the api variable
-
-/*global window, navigator, document, require, process, module */
-var c = 0,
-    blockSize = 4,
-    base = 36,
-    discreteValues = Math.pow(base, blockSize),
-
-    pad = function pad(num, size) {
-      var s = "000000000" + num;
-      return s.substr(s.length-size);
-    },
-
-    randomBlock = function randomBlock() {
-      return pad((Math.random() *
-            discreteValues << 0)
-            .toString(base), blockSize);
-    },
-
-    api = function cuid() {
-      // Starting with a lowercase letter makes
-      // it HTML element ID friendly.
-      var letter = 'c', // hard-coded allows for sequential access
-
-        // timestamp
-        // warning: this exposes the exact date and time
-        // that the uid was created.
-        timestamp = (new Date().getTime()).toString(base),
-
-        // Prevent same-machine collisions.
-        counter,
-
-        // A few chars to generate distinct ids for different
-        // clients (so different computers are far less
-        // likely to generate the same id)
-        fingerprint = api.fingerprint(),
-
-        // Grab some more chars from Math.random()
-        random = randomBlock() + randomBlock() + randomBlock() + randomBlock();
-
-        c = (c < discreteValues) ? c : 0;
-        counter = pad(c.toString(base), blockSize);
-
-      c++; // this is not subliminal
-
-      return  (letter + timestamp + counter + fingerprint + random);
-    };
-
-api.slug = function slug() {
-  var date = new Date().getTime().toString(36),
-    counter = c.toString(36).slice(-1),
-    print = api.fingerprint().slice(0,1) +
-      api.fingerprint().slice(-1),
-    random = randomBlock().slice(-1);
-
-  c++;
-
-  return date.slice(2,4) + date.slice(-2) + 
-    counter + print + random;
+function Emitter(obj) {
+  if (obj) return mixin(obj);
 };
 
-//fingerprint changes based on nodejs or component setup
-var isBrowser = (typeof process == 'undefined');
+/**
+ * Mixin the emitter properties.
+ *
+ * @param {Object} obj
+ * @return {Object}
+ * @api private
+ */
 
-api.fingerprint = isBrowser ?
-  function browserPrint() {
-      return pad((navigator.mimeTypes.length +
-          navigator.userAgent.length).toString(36) +
-          api.globalCount().toString(36), 4);
+function mixin(obj) {
+  for (var key in Emitter.prototype) {
+    obj[key] = Emitter.prototype[key];
   }
-: function nodePrint() {
-  var os = require("os"),
-
-  padding = 2,
-  pid = pad((process.pid).toString(36), padding),
-  hostname = os.hostname(),
-  length = hostname.length,
-  hostId = pad((hostname)
-    .split('')
-    .reduce(function (prev, char) {
-      return +prev + char.charCodeAt(0);
-    }, +length + 36)
-    .toString(36),
-  padding);
-return pid + hostId;
-};
-
-api.globalCount = function globalCount() {
-    // We want to cache the results of this
-    var cache = (function calc() {
-        var i,
-            count = 0;
-
-            //global count only ever called inside browser environment
-            //lets loop through and count the keys in window -- then cahce that as part of our fingerprint
-        for (i in window) {
-            count++;
-        }
-
-        return count;
-    }());
-
-    api.globalCount = function () { return cache; };
-    return cache;
-};
-
-api.isLessThan = function(first, second)
-{
-  var fParse= parseInt(first);
-  var sParse = parseInt(second);
-  if(isNaN(fParse) && isNaN(sParse))
-  {
-     //tease apart first, second to determine which ID came first
-    //counter + fingerprint + random = 6 blocks of 4 = 24
-    var dateEnd = 6*blockSize;
-    var counterEnd = 5*blockSize;
-    var charStart = 1;
-
-    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
-    var firstTime = parseInt(first.slice(charStart, first.length - dateEnd), base);
-    //ditto for counter
-    var firstCounter = parseInt(first.slice(first.length - dateEnd, first.length - counterEnd),base);
-
-    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
-    var secondTime =  parseInt(second.slice(charStart, second.length - dateEnd), base);
-    
-    //ditto for counter 
-    var secondCounter = parseInt(second.slice(second.length - dateEnd, second.length - counterEnd), base);
-
-    //either the first time is less than the second time, and we answer this question immediately
-    //or the times are equal -- then we pull the lower counter
-    //techincially counters can wrap, but this won't happen very often AND this is all for measuring disjoint/excess behavior
-    //the time should be enough of an ordering principal for this not to matter
-    return firstTime < secondTime || (firstTime == secondTime && firstCounter < secondCounter);
-
-  }
-  else if(isNaN(sParse))
-  {
-    //if sParse is a string, then the first is a number and the second is a string UUID
-    //to maintain backwards compat -- number come before strings in neatjs ordering
-    return true;
-  }//both are not NaN -- we have two numbers to compare
-  else
-  {
-    return fParse < sParse;
-  }
+  return obj;
 }
 
-//we send out API
-module.exports = api;
+/**
+ * Listen on the given `event` with `fn`.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
 
+Emitter.prototype.on =
+Emitter.prototype.addEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+  (this._callbacks[event] = this._callbacks[event] || [])
+    .push(fn);
+  return this;
+};
 
+/**
+ * Adds an `event` listener that will be invoked a single
+ * time then automatically removed.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
 
+Emitter.prototype.once = function(event, fn){
+  var self = this;
+  this._callbacks = this._callbacks || {};
 
-});
+  function on() {
+    self.off(event, on);
+    fn.apply(this, arguments);
+  }
 
-require.register("optimuslime~win-utils@0.1.1/math/winmath.js", function (exports, module) {
+  on.fn = fn;
+  this.on(event, on);
+  return this;
+};
 
-var mathHelper = {};
+/**
+ * Remove the given callback for `event` or all
+ * registered callbacks.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
 
-module.exports = mathHelper;
+Emitter.prototype.off =
+Emitter.prototype.removeListener =
+Emitter.prototype.removeAllListeners =
+Emitter.prototype.removeEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
 
-mathHelper.next = function(max)
-{
-    return Math.floor(Math.random()*max);
+  // all
+  if (0 == arguments.length) {
+    this._callbacks = {};
+    return this;
+  }
+
+  // specific event
+  var callbacks = this._callbacks[event];
+  if (!callbacks) return this;
+
+  // remove all handlers
+  if (1 == arguments.length) {
+    delete this._callbacks[event];
+    return this;
+  }
+
+  // remove specific handler
+  var cb;
+  for (var i = 0; i < callbacks.length; i++) {
+    cb = callbacks[i];
+    if (cb === fn || cb.fn === fn) {
+      callbacks.splice(i, 1);
+      break;
+    }
+  }
+  return this;
+};
+
+/**
+ * Emit `event` with the given args.
+ *
+ * @param {String} event
+ * @param {Mixed} ...
+ * @return {Emitter}
+ */
+
+Emitter.prototype.emit = function(event){
+  this._callbacks = this._callbacks || {};
+  var args = [].slice.call(arguments, 1)
+    , callbacks = this._callbacks[event];
+
+  if (callbacks) {
+    callbacks = callbacks.slice(0);
+    for (var i = 0, len = callbacks.length; i < len; ++i) {
+      callbacks[i].apply(this, args);
+    }
+  }
+
+  return this;
+};
+
+/**
+ * Return array of callbacks for `event`.
+ *
+ * @param {String} event
+ * @return {Array}
+ * @api public
+ */
+
+Emitter.prototype.listeners = function(event){
+  this._callbacks = this._callbacks || {};
+  return this._callbacks[event] || [];
+};
+
+/**
+ * Check if this emitter has `event` handlers.
+ *
+ * @param {String} event
+ * @return {Boolean}
+ * @api public
+ */
+
+Emitter.prototype.hasListeners = function(event){
+  return !! this.listeners(event).length;
 };
 
 });
 
-require.modules["optimuslime-win-utils"] = require.modules["optimuslime~win-utils@0.1.1"];
-require.modules["optimuslime~win-utils"] = require.modules["optimuslime~win-utils@0.1.1"];
-require.modules["win-utils"] = require.modules["optimuslime~win-utils@0.1.1"];
-
-
-require.register("optimuslime~win-iec@master", function (exports, module) {
-//generating session info
-var uuid = require("optimuslime~win-utils@master").cuid;
-
-module.exports = winiec;
-
-function winiec(backbone, globalConfig, localConfig)
-{
-	//pull in backbone info, we gotta set our logger/emitter up
-	var self = this;
-
-	self.winFunction = "evolution";
-
-	if(!localConfig.genomeType)
-		throw new Error("win-IEC needs a genome type specified."); 
-
-	//this is how we talk to win-backbone
-	self.backEmit = backbone.getEmitter(self);
-
-	//grab our logger
-	self.log = backbone.getLogger(self);
-
-	//only vital stuff goes out for normal logs
-	self.log.logLevel = localConfig.logLevel || self.log.normal;
-
-	//we have logger and emitter, set up some of our functions
-
-	function clearEvolution(genomeType)
-	{
-		//optionally, we can change types if we need to 
-		if(genomeType)
-			self.genomeType = genomeType;
-
-		self.log("clear evo to type: ", self.genomeType)
-		self.selectedParents = {};
-		//all the evo objects we ceated -- parents are a subset
-		self.evolutionObjects = {};
-
-		//count it up
-		self.parentCount = 0;
-
-		//session information -- new nodes and connections yo! that's all we care about after all-- new innovative stuff
-		//i rambled just then. For no reason. Still doing it. Sucks that you're reading this. trolololol
-		self.sessionObject = {};
-
-		//everything we publish is linked by this session information
-		self.evolutionSessionID = uuid();
-
-		//save our seeds!
-		self.seeds = {};
-
-		//map children to parents for all objects
-		self.childrenToParents = {};
-
-		self.seedParents = {};
-	}
-
-	//we setup all our basic 
-	clearEvolution(localConfig.genomeType);
-
-	//what events do we need?
-	self.requiredEvents = function()
-	{
-		return [
-		//need to be able to create artifacts
-			"generator:createArtifacts",
-			"schema:replaceParentReferences",
-			"schema:getReferencesAndParents",
-			"publish:publishArtifacts",
-			//in the future we will also need to save objects according to our save tendencies
-			//for now, we'll offload that to UI decisions
-		];
-	}
-
-	//what events do we respond to?
-	self.eventCallbacks = function()
-	{ 
-		return {
-			"evolution:selectParents" : self.selectParents,
-			"evolution:unselectParents" : self.unselectParents,
-			"evolution:publishArtifact" : self.publishArtifact,
-			//we fetch a list of objects based on IDs, if they don't exist we create them
-			"evolution:getOrCreateOffspring" : self.getOrCreateOffspring,
-			"evolution:loadSeeds" : self.loadSeeds,
-			"evolution:resetEvolution" : clearEvolution
-
-		};
-	}
-
-	
-
-	// self.findSeedOrigins = function(eID)
-	// {
-	// 	//let's look through parents until we find the seed you originated from -- then you are considered a decendant
-	// 	var alreadyChecked = {};
-
-	// 	var originObjects = {};
-	// 	var startingParents = self.childrenToParents[eID];
-
-	// 	while(startingParents.length)
-	// 	{
-	// 		var nextCheck = [];
-	// 		for(var i=0; i < startingParents.length; i++)
-	// 		{
-	// 			var parentWID = startingParents[i];
-
-	// 			if(!alreadyChecked[parentWID])
-	// 			{
-	// 				//mark it as checked
-	// 				alreadyChecked[parentWID] = true;
-
-	// 				if(self.seeds[parentWID])
-	// 				{
-	// 					//this is a seed!
-	// 					originObjects[parentWID] = self.seeds[parentWID];
-	// 				}
-
-	// 				//otherwise, it's not of interested, but perhaps it's parents are!
-
-	// 				//let's look at the parents parents
-	// 				var grandparents = self.childrenToParents[parentWID];
-
-	// 				if(grandparents)
-	// 				{
-	// 					nextCheck = nextCheck.concat(grandparents);
-	// 				}
-	// 			}
-	// 		}
-
-	// 		//continue the process - don't worry about loops, we're checking!
-	// 		startingParents = nextCheck;
-	// 	}
-
-	// 	//send back all the seed objects
-	// 	return originObjects
-	// }
-
-	self.publishArtifact = function(id, meta, finished)
-	{
-		//don't always have to send meta info -- since we don't know what to do with it anyways
-		if(typeof meta == "function")
-		{
-			finished = meta;
-			meta = {};
-		}
-		//we fetch the object from the id
-
-		var evoObject = self.evolutionObjects[id];
-
-		if(!evoObject)
-		{
-			finished("Evolutionary artifactID to publish is invalid: " + id);
-			return;
-		}
-		//we also want to store some meta info -- don't do anything about that for now 
-
-		// var seedParents = self.findSeedOrigins(id);
-
-		//
-		var seedList = [];
-
-		//here is what needs to happen, the incoming evo object has the "wrong" parents
-		//the right parents are the published parents -- the other parents 
-
-		//this will need to be fixed in the future -- we need to know private vs public parents
-		//but for now, we simply send in the public parents -- good enough for picbreeder iec applications
-		//other types of applications might need more info.
-
-		var widObject = {};
-		widObject[evoObject.wid] = evoObject;
-		self.backEmit("schema:getReferencesAndParents", self.genomeType, widObject, function(err, refsAndParents){
-
-			//now we know our references
-			var refParents = refsAndParents[evoObject.wid];
-
-			//so we simply fetch our appropraite seed parents 
-			var evoSeedParents = self.noDuplicatSeedParents(refParents);
-
-			//now we have all the info we need to replace all our parent refs
-			self.backEmit("schema:replaceParentReferences", self.genomeType, evoObject, evoSeedParents, function(err, cloned)
-			{
-				//now we have a cloned version for publishing, where it has public seeds
-
-				 //just publish everything public for now!
-		        var session = {sessionID: self.evolutionSessionID, publish: true};
-
-		        //we can also save private info
-		        //this is where we would grab all the parents of the individual
-		        var privateObjects = [];
-
-				self.backEmit("publish:publishArtifacts", self.genomeType, session, [cloned], [], function(err)
-				{
-					if(err)
-					{
-						finished(err);
-					}
-					else //no error publishing, hooray!
-						finished(undefined, cloned);
-
-				})
-
-			})
-
-		});
-       
-	}
-
-	//no need for a callback here -- nuffin to do but load
-	self.loadSeeds = function(idAndSeeds, finished)
-	{
-		//we have all the seeds and their ids, we just absorb them immediately
-		for(var eID in idAndSeeds)
-		{
-			var seed = idAndSeeds[eID];
-			//grab the objects and save them
-			self.evolutionObjects[eID] = seed;
-
-			//save our seeds
-			self.seeds[seed.wid] = seed;
-		}
-
-		self.log("seed objects: ", self.seeds);
-
-		self.backEmit("schema:getReferencesAndParents", self.genomeType, self.seeds, function(err, refsAndParents)
-		{
-			if(err)
-			{
-				//pass on the error if it happened
-				if(finished)
-					finished(err);
-				else
-					throw err;
-				return;
-			}
-			//there are no parent refs for seeds, just the refs themselves which are important
-			for(var wid in self.seeds)
-			{
-				var refs = Object.keys(refsAndParents[wid]);
-				for(var i=0; i < refs.length; i++)
-				{
-					//who is the parent seed of a particular wid? why itself duh!
-					self.seedParents[refs[i]] = [refs[i]];
-				}
-			}
-
-			// self.log("Seed parents: ", self.seedParents);
-
-			//note, there is no default behavior with seeds -- as usual, you must still tell iec to select parents
-			//there is no subsitute for parent selection
-			if(finished)
-				finished();
-
-		});
-
-
-	}
-
-	//just grab from evo objects -- throw error if issue
-	self.selectParents = function(eIDList, finished)
-	{
-		if(typeof eIDList == "string")
-			eIDList = [eIDList];
-
-		var selectedObjects = {};
-
-		for(var i=0; i < eIDList.length; i++)
-		{	
-			var eID = eIDList[i];
-
-			//grab from evo
-			var evoObject = self.evolutionObjects[eID];
-
-			if(!evoObject){
-				//wrong id 
-				finished("Invalid parent selection: " + eID);
-				return;
-			}
-
-			selectedObjects[eID] = evoObject;
-
-			//save as a selected parent
-			self.selectedParents[eID] = evoObject;
-			self.parentCount++;
-		}
-	
-		//send back the evolutionary object that is linked to this parentID
-		finished(undefined, selectedObjects);
-	}
-
-	self.unselectParents = function(eIDList, finished)
-	{
-		if(typeof eIDList == "string")
-			eIDList = [eIDList];
-
-		for(var i=0; i < eIDList.length; i++)
-		{	
-			var eID = eIDList[i];
-
-			//remove this parent from the selected parents -- doesn't delete from all the individuals
-			if(self.selectedParents[eID])
-				self.parentCount--;
-
-			delete self.selectedParents[eID];
-		}
-
-		//callback optional really, here for backwards compat 
-		if(finished)
-			finished();
-
-	}
-
-	self.noDuplicatSeedParents = function(refsAndParents)
-	{
-		var allSeedNoDup = {};
-
-		//this is a map from the wid to the associated parent wids
-		for(var refWID in refsAndParents)
-		{
-			var parents = refsAndParents[refWID];
-
-			var mergeParents = [];
-
-			for(var i=0; i < parents.length; i++)
-			{
-				var seedsForEachParent = self.seedParents[parents[i]];
-
-				//now we just merge all these together
-				mergeParents = mergeParents.concat(seedsForEachParent);
-			}
-
-			//then we get rid of any duplicates
-			var nodups = {};
-			for(var i=0; i < mergeParents.length; i++)
-				nodups[mergeParents[i]] = true;
-
-			//by induction, each wid generated knows it's seed parents (where each seed reference wid references itself in array form)
-			//therefore, you just look at your reference's parents to see who they believe is their seed 
-			//and concat those results together -- pretty simple, just remove duplicates
-			allSeedNoDup[refWID] = Object.keys(nodups);
-		}	
-
-		return allSeedNoDup;	
-	}
-
-	self.callGenerator = function(allObjects, toCreate, finished)
-	{
-		var parents = self.getOffspringParents();
-
-		//we need to go fetch some stuff
-		self.backEmit("generator:createArtifacts", self.genomeType, toCreate.length, parents, self.sessionObject, function(err, artifacts)
-		{
-			if(err)
-			{
-				//pass on the error if it happened
-				finished(err);
-				return;
-			}
-
-			// self.log("iec generated " + toCreate.length + " individuals: ", artifacts);
-
-			//otherwise, let's do this thang! match artifacts to offspring -- arbitrary don't worry
-			var off = artifacts.offspring;
-
-			var widOffspring = {};
-
-			for(var i=0; i < off.length; i++)
-			{
-				var oObject = off[i];
-				var eID = toCreate[i];
-				//save our evolution object internally -- no more fetches required
-				self.evolutionObjects[eID] = oObject;
-
-				//store objects relateive to their requested ids for return
-				allObjects[eID] = (oObject);
-
-
-				//clone the parent objects for the child!
-				widOffspring[oObject.wid] = oObject;
-
-				// var util = require('util')
-				// self.log("off returned: ".magenta, util.inspect(oObject, false, 3));
-			}
-
-			self.backEmit("schema:getReferencesAndParents", self.genomeType, widOffspring, function(err, refsAndParents)
-			{
-				if(err)
-				{
-					finished(err);
-					return;
-				}
-
-				//check the refs for each object
-				for(var wid in widOffspring)
-				{
-					//here we are with refs and parents
-					var rAndP = refsAndParents[wid];
-
-					var widSeedParents = self.noDuplicatSeedParents(rAndP);
-
-					// self.log("\n\nwid seed parents: ".magenta, rAndP);
-
-
-					//for each key, we set our seed parents appropriately	
-					for(var key in widSeedParents)
-					{
-						self.seedParents[key] = widSeedParents[key];
-					}
-				}
-
-				// self.log("\n\nSeed parents: ".magenta, self.seedParents);
-
-				//mark the offspring as the list objects
-				finished(undefined, allObjects);
-
-			});
-
-
-
-		});
-	}
-
-	//generator yo face!
-	self.getOrCreateOffspring = function(eIDList, finished)
-	{
-		//don't bother doing anything if you havne't selected parents
-		if(self.parentCount ==0){
-			finished("Cannot generate offspring without parents");
-			return;
-		}
-
-		//we need to make a bunch, as many as requested
-		var toCreate = [];
-
-		var allObjects = {};
-
-		//first we check to see which ids we already know
-		for(var i=0; i < eIDList.length; i++)
-		{
-			var eID = eIDList[i];
-			var evoObject = self.evolutionObjects[eID];
-			if(!evoObject)
-			{
-				toCreate.push(eID);
-			}
-			else
-			{
-				//otherwise add to objects that will be sent back
-				allObjects[eID] = evoObject;
-			}
-		}
-
-		//now we have a list of objects that must be created
-		if(toCreate.length)
-		{
-			//this will handle the finished call for us -- after it gets artifacts from the generator
-			self.callGenerator(allObjects, toCreate, finished);	
-		}
-		else
-		{
-			//all ready to go -- send back our objects
-			finished(undefined, allObjects)
-		}
-
-	}
-
-	self.getOffspringParents = function()
-	{
-		var parents = [];
-
-		for(var key in self.selectedParents)
-			parents.push(self.selectedParents[key]);
-
-		return parents;
-	}
-
-	return self;
+require.modules["component-emitter"] = require.modules["component~emitter@master"];
+require.modules["component~emitter"] = require.modules["component~emitter@master"];
+require.modules["emitter"] = require.modules["component~emitter@master"];
+
+
+require.register("component~worker@master", function (exports, module) {
+
+/**
+ * Module dependencies.
+ */
+
+var Emitter = require('component~emitter@master');
+var WebWorker = window.Worker;
+
+/**
+ * Expose `Worker`.
+ */
+
+module.exports = Worker;
+
+/**
+ * Initialize a new `Worker` with `script`.
+ *
+ * @param {String} script
+ * @api public
+ */
+
+function Worker(script) {
+  var self = this;
+  this.ids = 0;
+  this.script = script;
+  this.worker = new WebWorker(script);
+  this.worker.addEventListener('message', this.onmessage.bind(this));
+  this.worker.addEventListener('error', this.onerror.bind(this));
 }
 
+/**
+ * Mixin emitter.
+ */
 
+Emitter(Worker.prototype);
 
+/**
+ * Handle messages.
+ */
 
+Worker.prototype.onmessage = function(e){
+  this.emit('message', e.data, e);
+};
+
+/**
+ * Handle errors.
+ */
+
+Worker.prototype.onerror = function(e){
+  var err = new Error(e.message);
+  err.event = e;
+  this.emit('error', err);
+};
+
+/**
+ * Terminate the worker.
+ */
+
+Worker.prototype.close = function(){
+  this.worker.terminate();
+};
+
+/**
+ * Send a `msg` with optional callback `fn`.
+ *
+ * TODO: allow passing of transferrables
+ *
+ * @param {Mixed} msg
+ * @param {Function} [fn]
+ * @api public
+ */
+
+Worker.prototype.send = function(msg, fn){
+  if (fn) this.request(msg, fn);
+  this.worker.postMessage(msg);
+};
+
+/**
+ * Send a `msg` as a request with `fn`.
+ *
+ * @param {Mixed} msg
+ * @param {Function} fn
+ * @param {Array} [transferables]
+ * @api public
+ */
+
+Worker.prototype.request = function(msg, fn, transferables){
+  var self = this;
+  var id = ++this.ids;
+
+  // req
+  msg.id = id;
+  this.worker.postMessage(msg, transferables);
+
+  // rep
+  this.on('message', onmessage);
+
+  function onmessage(msg) {
+    if (id != msg.id) return;
+    self.off('message', onmessage);
+    delete msg.id;
+    fn(msg);
+  }
+};
 
 });
 
-require.modules["optimuslime-win-iec"] = require.modules["optimuslime~win-iec@master"];
-require.modules["optimuslime~win-iec"] = require.modules["optimuslime~win-iec@master"];
-require.modules["win-iec"] = require.modules["optimuslime~win-iec@master"];
-
-
-require.register("optimuslime~win-iec@0.0.2-6", function (exports, module) {
-//generating session info
-var uuid = require("optimuslime~win-utils@master").cuid;
-
-module.exports = winiec;
-
-function winiec(backbone, globalConfig, localConfig)
-{
-	//pull in backbone info, we gotta set our logger/emitter up
-	var self = this;
-
-	self.winFunction = "evolution";
-
-	if(!localConfig.genomeType)
-		throw new Error("win-IEC needs a genome type specified."); 
-
-	//this is how we talk to win-backbone
-	self.backEmit = backbone.getEmitter(self);
-
-	//grab our logger
-	self.log = backbone.getLogger(self);
-
-	//only vital stuff goes out for normal logs
-	self.log.logLevel = localConfig.logLevel || self.log.normal;
-
-	//we have logger and emitter, set up some of our functions
-
-	function clearEvolution(genomeType)
-	{
-		//optionally, we can change types if we need to 
-		if(genomeType)
-			self.genomeType = genomeType;
-
-		self.log("clear evo to type: ", self.genomeType)
-		self.selectedParents = {};
-		//all the evo objects we ceated -- parents are a subset
-		self.evolutionObjects = {};
-
-		//count it up
-		self.parentCount = 0;
-
-		//session information -- new nodes and connections yo! that's all we care about after all-- new innovative stuff
-		//i rambled just then. For no reason. Still doing it. Sucks that you're reading this. trolololol
-		self.sessionObject = {};
-
-		//everything we publish is linked by this session information
-		self.evolutionSessionID = uuid();
-
-		//save our seeds!
-		self.seeds = {};
-
-		//map children to parents for all objects
-		self.childrenToParents = {};
-
-		self.seedParents = {};
-	}
-
-	//we setup all our basic 
-	clearEvolution(localConfig.genomeType);
-
-	//what events do we need?
-	self.requiredEvents = function()
-	{
-		return [
-		//need to be able to create artifacts
-			"generator:createArtifacts",
-			"schema:replaceParentReferences",
-			"schema:getReferencesAndParents",
-			"publish:publishArtifacts",
-			//in the future we will also need to save objects according to our save tendencies
-			//for now, we'll offload that to UI decisions
-		];
-	}
-
-	//what events do we respond to?
-	self.eventCallbacks = function()
-	{ 
-		return {
-			"evolution:selectParents" : self.selectParents,
-			"evolution:unselectParents" : self.unselectParents,
-			"evolution:publishArtifact" : self.publishArtifact,
-			//we fetch a list of objects based on IDs, if they don't exist we create them
-			"evolution:getOrCreateOffspring" : self.getOrCreateOffspring,
-			"evolution:loadSeeds" : self.loadSeeds,
-			"evolution:resetEvolution" : clearEvolution
-
-		};
-	}
-
-	
-
-	// self.findSeedOrigins = function(eID)
-	// {
-	// 	//let's look through parents until we find the seed you originated from -- then you are considered a decendant
-	// 	var alreadyChecked = {};
-
-	// 	var originObjects = {};
-	// 	var startingParents = self.childrenToParents[eID];
-
-	// 	while(startingParents.length)
-	// 	{
-	// 		var nextCheck = [];
-	// 		for(var i=0; i < startingParents.length; i++)
-	// 		{
-	// 			var parentWID = startingParents[i];
-
-	// 			if(!alreadyChecked[parentWID])
-	// 			{
-	// 				//mark it as checked
-	// 				alreadyChecked[parentWID] = true;
-
-	// 				if(self.seeds[parentWID])
-	// 				{
-	// 					//this is a seed!
-	// 					originObjects[parentWID] = self.seeds[parentWID];
-	// 				}
-
-	// 				//otherwise, it's not of interested, but perhaps it's parents are!
-
-	// 				//let's look at the parents parents
-	// 				var grandparents = self.childrenToParents[parentWID];
-
-	// 				if(grandparents)
-	// 				{
-	// 					nextCheck = nextCheck.concat(grandparents);
-	// 				}
-	// 			}
-	// 		}
-
-	// 		//continue the process - don't worry about loops, we're checking!
-	// 		startingParents = nextCheck;
-	// 	}
-
-	// 	//send back all the seed objects
-	// 	return originObjects
-	// }
-
-	self.publishArtifact = function(id, meta, finished)
-	{
-		//don't always have to send meta info -- since we don't know what to do with it anyways
-		if(typeof meta == "function")
-		{
-			finished = meta;
-			meta = {};
-		}
-		//we fetch the object from the id
-
-		var evoObject = self.evolutionObjects[id];
-
-		if(!evoObject)
-		{
-			finished("Evolutionary artifactID to publish is invalid: " + id);
-			return;
-		}
-		//we also want to store some meta info -- don't do anything about that for now 
-
-		// var seedParents = self.findSeedOrigins(id);
-
-		//
-		var seedList = [];
-
-		//here is what needs to happen, the incoming evo object has the "wrong" parents
-		//the right parents are the published parents -- the other parents 
-
-		//this will need to be fixed in the future -- we need to know private vs public parents
-		//but for now, we simply send in the public parents -- good enough for picbreeder iec applications
-		//other types of applications might need more info.
-
-		var widObject = {};
-		widObject[evoObject.wid] = evoObject;
-		self.backEmit("schema:getReferencesAndParents", self.genomeType, widObject, function(err, refsAndParents){
-
-			//now we know our references
-			var refParents = refsAndParents[evoObject.wid];
-
-			//so we simply fetch our appropraite seed parents 
-			var evoSeedParents = self.noDuplicatSeedParents(refParents);
-
-			//now we have all the info we need to replace all our parent refs
-			self.backEmit("schema:replaceParentReferences", self.genomeType, evoObject, evoSeedParents, function(err, cloned)
-			{
-				//now we have a cloned version for publishing, where it has public seeds
-
-				 //just publish everything public for now!
-		        var session = {sessionID: self.evolutionSessionID, publish: true};
-
-		        //we can also save private info
-		        //this is where we would grab all the parents of the individual
-		        var privateObjects = [];
-
-				self.backEmit("publish:publishArtifacts", self.genomeType, session, [cloned], [], function(err)
-				{
-					if(err)
-					{
-						finished(err);
-					}
-					else //no error publishing, hooray!
-						finished(undefined, cloned);
-
-				})
-
-			})
-
-		});
-       
-	}
-
-	//no need for a callback here -- nuffin to do but load
-	self.loadSeeds = function(idAndSeeds, finished)
-	{
-		//we have all the seeds and their ids, we just absorb them immediately
-		for(var eID in idAndSeeds)
-		{
-			var seed = idAndSeeds[eID];
-			//grab the objects and save them
-			self.evolutionObjects[eID] = seed;
-
-			//save our seeds
-			self.seeds[seed.wid] = seed;
-		}
-
-		self.log("seed objects: ", self.seeds);
-
-		self.backEmit("schema:getReferencesAndParents", self.genomeType, self.seeds, function(err, refsAndParents)
-		{
-			if(err)
-			{
-				//pass on the error if it happened
-				if(finished)
-					finished(err);
-				else
-					throw err;
-				return;
-			}
-			//there are no parent refs for seeds, just the refs themselves which are important
-			for(var wid in self.seeds)
-			{
-				var refs = Object.keys(refsAndParents[wid]);
-				for(var i=0; i < refs.length; i++)
-				{
-					//who is the parent seed of a particular wid? why itself duh!
-					self.seedParents[refs[i]] = [refs[i]];
-				}
-			}
-
-			// self.log("Seed parents: ", self.seedParents);
-
-			//note, there is no default behavior with seeds -- as usual, you must still tell iec to select parents
-			//there is no subsitute for parent selection
-			if(finished)
-				finished();
-
-		});
-
-
-	}
-
-	//just grab from evo objects -- throw error if issue
-	self.selectParents = function(eIDList, finished)
-	{
-		if(typeof eIDList == "string")
-			eIDList = [eIDList];
-
-		var selectedObjects = {};
-
-		for(var i=0; i < eIDList.length; i++)
-		{	
-			var eID = eIDList[i];
-
-			//grab from evo
-			var evoObject = self.evolutionObjects[eID];
-
-			if(!evoObject){
-				//wrong id 
-				finished("Invalid parent selection: " + eID);
-				return;
-			}
-
-			selectedObjects[eID] = evoObject;
-
-			//save as a selected parent
-			self.selectedParents[eID] = evoObject;
-			self.parentCount++;
-		}
-	
-		//send back the evolutionary object that is linked to this parentID
-		finished(undefined, selectedObjects);
-	}
-
-	self.unselectParents = function(eIDList, finished)
-	{
-		if(typeof eIDList == "string")
-			eIDList = [eIDList];
-
-		for(var i=0; i < eIDList.length; i++)
-		{	
-			var eID = eIDList[i];
-
-			//remove this parent from the selected parents -- doesn't delete from all the individuals
-			if(self.selectedParents[eID])
-				self.parentCount--;
-
-			delete self.selectedParents[eID];
-		}
-
-		//callback optional really, here for backwards compat 
-		if(finished)
-			finished();
-
-	}
-
-	self.noDuplicatSeedParents = function(refsAndParents)
-	{
-		var allSeedNoDup = {};
-
-		//this is a map from the wid to the associated parent wids
-		for(var refWID in refsAndParents)
-		{
-			var parents = refsAndParents[refWID];
-
-			var mergeParents = [];
-
-			for(var i=0; i < parents.length; i++)
-			{
-				var seedsForEachParent = self.seedParents[parents[i]];
-
-				//now we just merge all these together
-				mergeParents = mergeParents.concat(seedsForEachParent);
-			}
-
-			//then we get rid of any duplicates
-			var nodups = {};
-			for(var i=0; i < mergeParents.length; i++)
-				nodups[mergeParents[i]] = true;
-
-			//by induction, each wid generated knows it's seed parents (where each seed reference wid references itself in array form)
-			//therefore, you just look at your reference's parents to see who they believe is their seed 
-			//and concat those results together -- pretty simple, just remove duplicates
-			allSeedNoDup[refWID] = Object.keys(nodups);
-		}	
-
-		return allSeedNoDup;	
-	}
-
-	self.callGenerator = function(allObjects, toCreate, finished)
-	{
-		var parents = self.getOffspringParents();
-
-		//we need to go fetch some stuff
-		self.backEmit("generator:createArtifacts", self.genomeType, toCreate.length, parents, self.sessionObject, function(err, artifacts)
-		{
-			if(err)
-			{
-				//pass on the error if it happened
-				finished(err);
-				return;
-			}
-
-			// self.log("iec generated " + toCreate.length + " individuals: ", artifacts);
-
-			//otherwise, let's do this thang! match artifacts to offspring -- arbitrary don't worry
-			var off = artifacts.offspring;
-
-			var widOffspring = {};
-
-			for(var i=0; i < off.length; i++)
-			{
-				var oObject = off[i];
-				var eID = toCreate[i];
-				//save our evolution object internally -- no more fetches required
-				self.evolutionObjects[eID] = oObject;
-
-				//store objects relateive to their requested ids for return
-				allObjects[eID] = (oObject);
-
-
-				//clone the parent objects for the child!
-				widOffspring[oObject.wid] = oObject;
-
-				// var util = require('util')
-				// self.log("off returned: ".magenta, util.inspect(oObject, false, 3));
-			}
-
-			self.backEmit("schema:getReferencesAndParents", self.genomeType, widOffspring, function(err, refsAndParents)
-			{
-				if(err)
-				{
-					finished(err);
-					return;
-				}
-
-				//check the refs for each object
-				for(var wid in widOffspring)
-				{
-					//here we are with refs and parents
-					var rAndP = refsAndParents[wid];
-
-					var widSeedParents = self.noDuplicatSeedParents(rAndP);
-
-					// self.log("\n\nwid seed parents: ".magenta, rAndP);
-
-
-					//for each key, we set our seed parents appropriately	
-					for(var key in widSeedParents)
-					{
-						self.seedParents[key] = widSeedParents[key];
-					}
-				}
-
-				// self.log("\n\nSeed parents: ".magenta, self.seedParents);
-
-				//mark the offspring as the list objects
-				finished(undefined, allObjects);
-
-			});
-
-
-
-		});
-	}
-
-	//generator yo face!
-	self.getOrCreateOffspring = function(eIDList, finished)
-	{
-		//don't bother doing anything if you havne't selected parents
-		if(self.parentCount ==0){
-			finished("Cannot generate offspring without parents");
-			return;
-		}
-
-		//we need to make a bunch, as many as requested
-		var toCreate = [];
-
-		var allObjects = {};
-
-		//first we check to see which ids we already know
-		for(var i=0; i < eIDList.length; i++)
-		{
-			var eID = eIDList[i];
-			var evoObject = self.evolutionObjects[eID];
-			if(!evoObject)
-			{
-				toCreate.push(eID);
-			}
-			else
-			{
-				//otherwise add to objects that will be sent back
-				allObjects[eID] = evoObject;
-			}
-		}
-
-		//now we have a list of objects that must be created
-		if(toCreate.length)
-		{
-			//this will handle the finished call for us -- after it gets artifacts from the generator
-			self.callGenerator(allObjects, toCreate, finished);	
-		}
-		else
-		{
-			//all ready to go -- send back our objects
-			finished(undefined, allObjects)
-		}
-
-	}
-
-	self.getOffspringParents = function()
-	{
-		var parents = [];
-
-		for(var key in self.selectedParents)
-			parents.push(self.selectedParents[key]);
-
-		return parents;
-	}
-
-	return self;
-}
-
-
-
-
-
-});
-
-require.modules["optimuslime-win-iec"] = require.modules["optimuslime~win-iec@0.0.2-6"];
-require.modules["optimuslime~win-iec"] = require.modules["optimuslime~win-iec@0.0.2-6"];
-require.modules["win-iec"] = require.modules["optimuslime~win-iec@0.0.2-6"];
+require.modules["component-worker"] = require.modules["component~worker@master"];
+require.modules["component~worker"] = require.modules["component~worker@master"];
+require.modules["worker"] = require.modules["component~worker@master"];
 
 
 require.register("optimuslime~traverse@master", function (exports, module) {
@@ -2080,292 +1067,6 @@ require.modules["optimuslime~traverse"] = require.modules["optimuslime~traverse@
 require.modules["traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
 
 
-require.register("component~emitter@master", function (exports, module) {
-
-/**
- * Expose `Emitter`.
- */
-
-module.exports = Emitter;
-
-/**
- * Initialize a new `Emitter`.
- *
- * @api public
- */
-
-function Emitter(obj) {
-  if (obj) return mixin(obj);
-};
-
-/**
- * Mixin the emitter properties.
- *
- * @param {Object} obj
- * @return {Object}
- * @api private
- */
-
-function mixin(obj) {
-  for (var key in Emitter.prototype) {
-    obj[key] = Emitter.prototype[key];
-  }
-  return obj;
-}
-
-/**
- * Listen on the given `event` with `fn`.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.on =
-Emitter.prototype.addEventListener = function(event, fn){
-  this._callbacks = this._callbacks || {};
-  (this._callbacks[event] = this._callbacks[event] || [])
-    .push(fn);
-  return this;
-};
-
-/**
- * Adds an `event` listener that will be invoked a single
- * time then automatically removed.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.once = function(event, fn){
-  var self = this;
-  this._callbacks = this._callbacks || {};
-
-  function on() {
-    self.off(event, on);
-    fn.apply(this, arguments);
-  }
-
-  on.fn = fn;
-  this.on(event, on);
-  return this;
-};
-
-/**
- * Remove the given callback for `event` or all
- * registered callbacks.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.off =
-Emitter.prototype.removeListener =
-Emitter.prototype.removeAllListeners =
-Emitter.prototype.removeEventListener = function(event, fn){
-  this._callbacks = this._callbacks || {};
-
-  // all
-  if (0 == arguments.length) {
-    this._callbacks = {};
-    return this;
-  }
-
-  // specific event
-  var callbacks = this._callbacks[event];
-  if (!callbacks) return this;
-
-  // remove all handlers
-  if (1 == arguments.length) {
-    delete this._callbacks[event];
-    return this;
-  }
-
-  // remove specific handler
-  var cb;
-  for (var i = 0; i < callbacks.length; i++) {
-    cb = callbacks[i];
-    if (cb === fn || cb.fn === fn) {
-      callbacks.splice(i, 1);
-      break;
-    }
-  }
-  return this;
-};
-
-/**
- * Emit `event` with the given args.
- *
- * @param {String} event
- * @param {Mixed} ...
- * @return {Emitter}
- */
-
-Emitter.prototype.emit = function(event){
-  this._callbacks = this._callbacks || {};
-  var args = [].slice.call(arguments, 1)
-    , callbacks = this._callbacks[event];
-
-  if (callbacks) {
-    callbacks = callbacks.slice(0);
-    for (var i = 0, len = callbacks.length; i < len; ++i) {
-      callbacks[i].apply(this, args);
-    }
-  }
-
-  return this;
-};
-
-/**
- * Return array of callbacks for `event`.
- *
- * @param {String} event
- * @return {Array}
- * @api public
- */
-
-Emitter.prototype.listeners = function(event){
-  this._callbacks = this._callbacks || {};
-  return this._callbacks[event] || [];
-};
-
-/**
- * Check if this emitter has `event` handlers.
- *
- * @param {String} event
- * @return {Boolean}
- * @api public
- */
-
-Emitter.prototype.hasListeners = function(event){
-  return !! this.listeners(event).length;
-};
-
-});
-
-require.modules["component-emitter"] = require.modules["component~emitter@master"];
-require.modules["component~emitter"] = require.modules["component~emitter@master"];
-require.modules["emitter"] = require.modules["component~emitter@master"];
-
-
-require.register("component~worker@master", function (exports, module) {
-
-/**
- * Module dependencies.
- */
-
-var Emitter = require("component~emitter@master");
-var WebWorker = window.Worker;
-
-/**
- * Expose `Worker`.
- */
-
-module.exports = Worker;
-
-/**
- * Initialize a new `Worker` with `script`.
- *
- * @param {String} script
- * @api public
- */
-
-function Worker(script) {
-  var self = this;
-  this.ids = 0;
-  this.script = script;
-  this.worker = new WebWorker(script);
-  this.worker.addEventListener('message', this.onmessage.bind(this));
-  this.worker.addEventListener('error', this.onerror.bind(this));
-}
-
-/**
- * Mixin emitter.
- */
-
-Emitter(Worker.prototype);
-
-/**
- * Handle messages.
- */
-
-Worker.prototype.onmessage = function(e){
-  this.emit('message', e.data, e);
-};
-
-/**
- * Handle errors.
- */
-
-Worker.prototype.onerror = function(e){
-  var err = new Error(e.message);
-  err.event = e;
-  this.emit('error', err);
-};
-
-/**
- * Terminate the worker.
- */
-
-Worker.prototype.close = function(){
-  this.worker.terminate();
-};
-
-/**
- * Send a `msg` with optional callback `fn`.
- *
- * TODO: allow passing of transferrables
- *
- * @param {Mixed} msg
- * @param {Function} [fn]
- * @api public
- */
-
-Worker.prototype.send = function(msg, fn){
-  if (fn) this.request(msg, fn);
-  this.worker.postMessage(msg);
-};
-
-/**
- * Send a `msg` as a request with `fn`.
- *
- * @param {Mixed} msg
- * @param {Function} fn
- * @param {Array} [transferables]
- * @api public
- */
-
-Worker.prototype.request = function(msg, fn, transferables){
-  var self = this;
-  var id = ++this.ids;
-
-  // req
-  msg.id = id;
-  this.worker.postMessage(msg, transferables);
-
-  // rep
-  this.on('message', onmessage);
-
-  function onmessage(msg) {
-    if (id != msg.id) return;
-    self.off('message', onmessage);
-    delete msg.id;
-    fn(msg);
-  }
-};
-
-});
-
-require.modules["component-worker"] = require.modules["component~worker@master"];
-require.modules["component~worker"] = require.modules["component~worker@master"];
-require.modules["worker"] = require.modules["component~worker@master"];
-
-
 require.register("optimuslime~el.js@master", function (exports, module) {
 /**
 * el.js v0.3 - A JavaScript Node Creation Tool
@@ -2422,6 +1123,24 @@ function el(tagName, attrs, child) {
       }
     }
   }
+
+  //A little helper: if your attrs includes style object
+  //we turn the style object into a style string for direct application
+  if(typeof attrs["style"] != "string" && typeof attrs["style"] == "object")
+  {
+    var styleObj = attrs["style"];
+    //we build the string
+    var concat = "";
+
+    //for each style object
+    for(var key in styleObj) 
+      //concat the key + value with : inbetween (e.g. width: 100px;)
+      concat += (key + ": " + styleObj[key] + "; ");
+
+    //grab the concatenated style string
+    attrs["style"] = concat; 
+  }
+
 
   // create the element
   var element = document.createElement(tagName);
@@ -2530,8 +1249,8 @@ require.register("visionmedia~superagent@master", function (exports, module) {
  * Module dependencies.
  */
 
-var Emitter = require("component~emitter@master");
-var reduce = require("component~reduce@1.0.1");
+var Emitter = require('component~emitter@master');
+var reduce = require('component~reduce@1.0.1');
 
 /**
  * Root reference for iframes.
@@ -2575,33 +1294,16 @@ function isHost(obj) {
  * Determine XHR.
  */
 
-function getXHR(isXDomainRequest) {
-  if (isXDomainRequest === true) {
-    if (typeof new XMLHttpRequest().withCredentials !== 'undefined') {
-      // Check if the XMLHttpRequest object has a "withCredentials" property.
-      // "withCredentials" only exists on XMLHTTPRequest2 objects.
-      
-      return new XMLHttpRequest();
-    } else if (typeof XDomainRequest !== "undefined") {
-      // Otherwise, check if XDomainRequest.
-      // XDomainRequest only exists in IE, and is IE's way of making CORS requests.
-      
-      return new XDomainRequest();
-    } else {
-      return false;
-    }
+function getXHR() {
+  if (root.XMLHttpRequest
+    && ('file:' != root.location.protocol || !root.ActiveXObject)) {
+    return new XMLHttpRequest;
   } else {
-    if (root.XMLHttpRequest
-      && ('file:' !== root.location.protocol || !root.ActiveXObject)) {
-      return new XMLHttpRequest();
-    } else {
-      try { return new ActiveXObject('Microsoft.XMLHTTP'); } catch(e) {}
-      try { return new ActiveXObject('Msxml2.XMLHTTP.6.0'); } catch(e) {}
-      try { return new ActiveXObject('Msxml2.XMLHTTP.3.0'); } catch(e) {}
-      try { return new ActiveXObject('Msxml2.XMLHTTP'); } catch(e) {}
-    }
+    try { return new ActiveXObject('Microsoft.XMLHTTP'); } catch(e) {}
+    try { return new ActiveXObject('Msxml2.XMLHTTP.6.0'); } catch(e) {}
+    try { return new ActiveXObject('Msxml2.XMLHTTP.3.0'); } catch(e) {}
+    try { return new ActiveXObject('Msxml2.XMLHTTP'); } catch(e) {}
   }
-
   return false;
 }
 
@@ -2839,21 +1541,16 @@ function Response(req, options) {
   options = options || {};
   this.req = req;
   this.xhr = this.req.xhr;
-  this.text = this.xhr.responseText;
-  this.setStatusProperties(typeof this.xhr.status !== 'undefined' ? this.xhr.status : 0);
-  if (typeof this.xhr.getAllResponseHeaders !== 'undefined' &&
-      typeof this.xhr.getResponseHeader !== 'undefined') {
+  this.text = this.req.method !='HEAD' 
+     ? this.xhr.responseText 
+     : null;
+  this.setStatusProperties(this.xhr.status);
   this.header = this.headers = parseHeader(this.xhr.getAllResponseHeaders());
   // getAllResponseHeaders sometimes falsely returns "" for CORS requests, but
   // getResponseHeader still works. so we get content-type even if getting
   // other headers fails.
   this.header['content-type'] = this.xhr.getResponseHeader('content-type');
   this.setHeaderProperties(this.header);
-  } else if (typeof this.xhr.contentType !== 'undefined') {
-    this.header = this.headers = {};
-    this.header['content-type'] = this.xhr.contentType;
-    this.setHeaderProperties(this.header);
-  }
   this.body = this.req.method != 'HEAD'
     ? this.parseBody(this.text)
     : null;
@@ -3002,9 +1699,18 @@ function Request(method, url) {
   this.header = {};
   this._header = {};
   this.on('end', function(){
-    var res = new Response(self);
-    if ('HEAD' == method) res.text = null;
-    self.callback(null, res);
+    var err = null;
+    var res = null;
+
+    try {
+      res = new Response(self); 
+    } catch(e) {
+      err = new Error('Parser is unable to parse the response');
+      err.parse = true;
+      err.original = e;
+    }
+
+    self.callback(err, res);
   });
 }
 
@@ -3094,6 +1800,26 @@ Request.prototype.set = function(field, val){
   }
   this._header[field.toLowerCase()] = val;
   this.header[field] = val;
+  return this;
+};
+
+/**
+ * Remove header `field`.
+ *
+ * Example:
+ *
+ *      req.get('/')
+ *        .unset('User-Agent')
+ *        .end(callback);
+ *
+ * @param {String} field
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.unset = function(field){
+  delete this._header[field.toLowerCase()];
+  delete this.header[field];
   return this;
 };
 
@@ -3331,6 +2057,7 @@ Request.prototype.send = function(data){
 
 Request.prototype.callback = function(err, res){
   var fn = this._callback;
+  this.clearTimeout();
   if (2 == fn.length) return fn(err, res);
   if (err) return this.emit('error', err);
   fn(res);
@@ -3388,18 +2115,7 @@ Request.prototype.withCredentials = function(){
 
 Request.prototype.end = function(fn){
   var self = this;
-  
-  var isXDomainRequest = false;
-
-  if (typeof root.location !== 'undefined') {
-    var hostnameMatch = this.url.match(/http[s]?:\/\/([^\/]*)/);
-
-    if (hostnameMatch && hostnameMatch[1] !== root.location.hostname) {
-      isXDomainRequest = true;
-    }
-  }
-
-  var xhr = this.xhr = getXHR(isXDomainRequest);
+  var xhr = this.xhr = getXHR();
   var query = this._query.join('&');
   var timeout = this._timeout;
   var data = this._formData || this._data;
@@ -3408,7 +2124,6 @@ Request.prototype.end = function(fn){
   this._callback = fn || noop;
 
   // state change
-  if (typeof xhr.onreadystatechange !== 'undefined') {
   xhr.onreadystatechange = function(){
     if (4 != xhr.readyState) return;
     if (0 == xhr.status) {
@@ -3417,20 +2132,6 @@ Request.prototype.end = function(fn){
     }
     self.emit('end');
   };
-  } else {
-    xhr.onload = function () {
-      if (self.aborted) return self.timeoutError();
-      self.emit('end');
-    }
-
-    xhr.onerror = function () {
-      self.emit('end');
-    }
-
-    xhr.ontimeout = function () {
-      return self.timeoutError();
-    }
-  }
 
   // progress
   if (xhr.upload) {
@@ -3471,9 +2172,7 @@ Request.prototype.end = function(fn){
   // set header fields
   for (var field in this.header) {
     if (null == this.header[field]) continue;
-    if (typeof xhr.setRequestHeader !== 'undefined') {
     xhr.setRequestHeader(field, this.header[field]);
-  }
   }
 
   // send stuff
@@ -3636,7 +2335,7 @@ require.modules["superagent"] = require.modules["visionmedia~superagent@master"]
 
 
 require.register("optimuslime~win-query@0.0.1-4", function (exports, module) {
-var request = require("visionmedia~superagent@master");
+var request = require('visionmedia~superagent@master');
 
 module.exports = winquery;
 
@@ -3835,7 +2534,7 @@ require.modules["win-query"] = require.modules["optimuslime~win-query@0.0.1-4"];
 require.register("optimuslime~win-publish@0.0.1-4", function (exports, module) {
 //superagent handles browser or node.js requests
 //thank you tjholowaychuk
-var request = require("visionmedia~superagent@master");
+var request = require('visionmedia~superagent@master');
 
 //now we're ready to get into this module
 module.exports = winpublish;
@@ -3967,5785 +2666,3184 @@ require.modules["optimuslime~win-publish"] = require.modules["optimuslime~win-pu
 require.modules["win-publish"] = require.modules["optimuslime~win-publish@0.0.1-4"];
 
 
-require.register("optimuslime~cppnjs@master", function (exports, module) {
-var cppnjs = {};
+require.register("optimuslime~win-data@0.0.1-3", function (exports, module) {
+var request = require('visionmedia~superagent@master');
 
-//export the cppn library
-module.exports = cppnjs;
+module.exports = windata;
 
-//CPPNs
-cppnjs.cppn = require("optimuslime~cppnjs@master/networks/cppn.js");
 
-cppnjs.addAdaptable = function()
+function windata(backbone, globalConfig, localConfig)
 {
-    require("optimuslime~cppnjs@master/extras/adaptableAdditions.js");
-};
+	var self= this;
 
-cppnjs.addPureCPPN = function()
-{
-    require("optimuslime~cppnjs@master/extras/pureCPPNAdditions.js");
-};
-
-cppnjs.addGPUExtras = function()
-{
-    //requires pureCPPN activations
-    cppnjs.addPureCPPN();
-    require("optimuslime~cppnjs@master/extras/gpuAdditions.js");
-};
-
-//add GPU extras by default
-cppnjs.addGPUExtras();
-
-
-
-
-
-//nodes and connections!
-cppnjs.cppnNode = require("optimuslime~cppnjs@master/networks/cppnNode.js");
-cppnjs.cppnConnection = require("optimuslime~cppnjs@master/networks/cppnConnection.js");
-
-//all the activations your heart could ever hope for
-cppnjs.cppnActivationFunctions = require("optimuslime~cppnjs@master/activationFunctions/cppnactivationfunctions.js");
-cppnjs.cppnActivationFactory = require("optimuslime~cppnjs@master/activationFunctions/cppnActivationFactory.js");
-
-//and the utilities to round it out!
-cppnjs.utilities = require("optimuslime~cppnjs@master/utility/utilities.js");
-
-//exporting the node type
-cppnjs.NodeType = require("optimuslime~cppnjs@master/types/nodeType.js");
-
-
-
-});
-
-require.register("optimuslime~cppnjs@master/activationFunctions/cppnActivationFactory.js", function (exports, module) {
-var utils = require("optimuslime~cppnjs@master/utility/utilities.js");
-var cppnActivationFunctions = require("optimuslime~cppnjs@master/activationFunctions/cppnactivationfunctions.js");
-
-var Factory = {};
-
-module.exports = Factory;
-
-Factory.probabilities = [];
-Factory.functions = [];
-Factory.functionTable= {};
-
-Factory.createActivationFunction = function(functionID)
-{
-    if(!cppnActivationFunctions[functionID])
-        throw new Error("Activation Function doesn't exist!");
-    // For now the function ID is the name of a class that implements IActivationFunction.
-    return new cppnActivationFunctions[functionID]();
-
-};
-
-Factory.getActivationFunction = function(functionID)
-{
-    var activationFunction = Factory.functionTable[functionID];
-    if(!activationFunction)
-    {
-//            console.log('Creating: ' + functionID);
-//            console.log('ActivationFunctions: ');
-//            console.log(cppnActivationFunctions);
-
-        activationFunction = Factory.createActivationFunction(functionID);
-        Factory.functionTable[functionID] = activationFunction;
-    }
-    return activationFunction;
-
-};
-
-Factory.setProbabilities = function(oProbs)
-{
-    Factory.probabilities = [];//new double[probs.Count];
-    Factory.functions = [];//new IActivationFunction[probs.Count];
-    var counter = 0;
-
-    for(var key in oProbs)
-    {
-        Factory.probabilities.push(oProbs[key]);
-        Factory.functions.push(Factory.getActivationFunction(key));
-        counter++;
-    }
-
-};
-
-Factory.defaultProbabilities = function()
-{
-    var oProbs = {'BipolarSigmoid' :.25, 'Sine':.25, 'Gaussian':.25, 'Linear':.25};
-    Factory.setProbabilities(oProbs);
-};
-Factory.getRandomActivationFunction = function()
-{
-    if(Factory.probabilities.length == 0)
-        Factory.defaultProbabilities();
-
-    return Factory.functions[utils.RouletteWheel.singleThrowArray(Factory.probabilities)];
-};
-
-
-});
-
-require.register("optimuslime~cppnjs@master/activationFunctions/cppnactivationfunctions.js", function (exports, module) {
-var cppnActivationFunctions = {};
-
-module.exports = cppnActivationFunctions;
-
-//implemented the following:
-//BipolarSigmoid
-//PlainSigmoid
-//Gaussian
-//Linear
-//NullFn
-//Sine
-//StepFunction
-
-cppnActivationFunctions.ActivationFunction = function(functionObj)
-{
-    var self = this;
-    self.functionID = functionObj.functionID;
-    self.functionString = functionObj.functionString;
-    self.functionDescription = functionObj.functionDescription;
-    self.calculate = functionObj.functionCalculate;
-    self.enclose = functionObj.functionEnclose;
-//        console.log('self.calc');
-//        console.log(self.calculate);
-//        console.log(self.calculate(0));
-};
-
-//this makes it easy to overwrite an activation function from the outside
-//cppnActivationFunctions.AddActivationFunction("BiplorSigmoid", {NEW IMPLEMENTATION});
-//this can be useful for customizing certain functions for your domain while maintaining the same names
-
-cppnActivationFunctions.AddActivationFunction = function(functionName, description)
-{
-    cppnActivationFunctions[functionName] = function()
-    {
-        return new cppnActivationFunctions.ActivationFunction(description);
-    }
-};
-
-cppnActivationFunctions.AddActivationFunction(
-    "BipolarSigmoid",
-    {
-        functionID: 'BipolarSigmoid' ,
-        functionString: "2.0/(1.0 + exp(-4.9*inputSignal)) - 1.0",
-        functionDescription: "bipolar steepend sigmoid",
-        functionCalculate: function(inputSignal)
-        {
-            return (2.0 / (1.0 + Math.exp(-4.9 * inputSignal))) - 1.0;
-        },
-        functionEnclose: function(stringToEnclose)
-        {
-            return "((2.0 / (1.0 + Math.exp(-4.9 *(" + stringToEnclose + ")))) - 1.0)";
-        }
-    });
-
-cppnActivationFunctions.AddActivationFunction(
-    "PlainSigmoid",
-    {
-        functionID: 'PlainSigmoid' ,
-        functionString: "1.0/(1.0+(exp(-inputSignal)))",
-        functionDescription: "Plain sigmoid [xrange -5.0,5.0][yrange, 0.0,1.0]",
-        functionCalculate: function(inputSignal)
-        {
-            return 1.0/(1.0+(Math.exp(-inputSignal)));
-        },
-        functionEnclose: function(stringToEnclose)
-        {
-            return "(1.0/(1.0+(Math.exp(-1.0*(" + stringToEnclose + ")))))";
-        }
-    });
-
-cppnActivationFunctions.AddActivationFunction(
-    "Gaussian",
-    {
-        functionID:  'Gaussian',
-        functionString: "2*e^(-(input*2.5)^2) - 1",
-        functionDescription:"bimodal gaussian",
-        functionCalculate: function(inputSignal)
-        {
-            return 2 * Math.exp(-Math.pow(inputSignal * 2.5, 2)) - 1;
-        },
-        functionEnclose: function(stringToEnclose)
-        {
-            return "(2.0 * Math.exp(-Math.pow(" + stringToEnclose + "* 2.5, 2.0)) - 1.0)";
-        }
-    });
-
-cppnActivationFunctions.AddActivationFunction(
-    "Linear",
-    {
-        functionID:   'Linear',
-        functionString: "Math.abs(x)",
-        functionDescription:"Linear",
-        functionCalculate: function(inputSignal)
-        {
-            return Math.abs(inputSignal);
-        },
-        functionEnclose: function(stringToEnclose)
-        {
-            return "(Math.abs(" + stringToEnclose + "))";
-        }
-    });
-
-cppnActivationFunctions.AddActivationFunction(
-    "NullFn",
-    {
-        functionID:   'NullFn',
-        functionString: "0",
-        functionDescription: "returns 0",
-        functionCalculate: function(inputSignal)
-        {
-            return 0.0;
-        },
-        functionEnclose: function(stringToEnclose)
-        {
-            return "(0.0)";
-        }
-    });
-
-cppnActivationFunctions.AddActivationFunction(
-    "Sine2",
-    {
-        functionID:   'Sine2',
-        functionString: "Sin(2*inputSignal)",
-        functionDescription: "Sine function with doubled period",
-        functionCalculate: function(inputSignal)
-        {
-            return Math.sin(2*inputSignal);
-        },
-        functionEnclose: function(stringToEnclose)
-        {
-            return "(Math.sin(2.0*(" + stringToEnclose + ")))";
-        }
-    });
-
-
-cppnActivationFunctions.AddActivationFunction(
-    "Sine",
-    {
-        functionID:   'Sine',
-        functionString: "Sin(inputSignal)",
-        functionDescription: "Sine function with normal period",
-        functionCalculate: function(inputSignal)
-        {
-            return Math.sin(inputSignal);
-        },
-        functionEnclose: function(stringToEnclose)
-        {
-            return "(Math.sin(" + stringToEnclose + "))";
-        }
-    });
-
-cppnActivationFunctions.AddActivationFunction(
-    "StepFunction",
-    {
-        functionID:    'StepFunction',
-        functionString: "x<=0 ? 0.0 : 1.0",
-        functionDescription: "Step function [xrange -5.0,5.0][yrange, 0.0,1.0]",
-        functionCalculate: function(inputSignal)
-        {
-            if(inputSignal<=0.0)
-                return 0.0;
-            else
-                return 1.0;
-        },
-        functionEnclose: function(stringToEnclose)
-        {
-            return "(((" + stringToEnclose + ') <= 0.0) ? 0.0 : 1.0)';
-        }
-    });
-
-});
-
-require.register("optimuslime~cppnjs@master/networks/cppnConnection.js", function (exports, module) {
-/**
- * Module dependencies.
- */
-//none
-
-/**
- * Expose `cppnConnection`.
- */
-
-module.exports = cppnConnection;
-
-/**
- * Initialize a new cppnConnection.
- *
- * @param {Number} sourceIdx
- * @param {Number} targetIdx
- * @param {Number} cWeight
- * @api public
- */
-//simple connection type -- from FloatFastConnection.cs
-function cppnConnection(
-    sourceIdx,
-    targetIdx,
-    cWeight
-    ){
-
-    var self = this;
-    self.sourceIdx =    sourceIdx;
-    self.targetIdx =    targetIdx;
-    self.weight = cWeight;
-    self.signal =0;
-
-}
-});
-
-require.register("optimuslime~cppnjs@master/networks/cppnNode.js", function (exports, module) {
-/**
- * Module dependencies.
- */
-var NodeType = require("optimuslime~cppnjs@master/types/nodeType.js");
-
-/**
- * Expose `cppnNode`.
- */
-
-module.exports = cppnNode;
-
-/**
- * Initialize a new cppnNode.
- *
- * @param {String} actFn
- * @param {String} neurType
- * @param {String} nid
- * @api public
- */
-
-function cppnNode(actFn, neurType, nid){
-
-    var self = this;
-
-    self.neuronType = neurType;
-    self.id = nid;
-    self.outputValue = (self.neuronType == NodeType.bias ? 1.0 : 0.0);
-    self.activationFunction = actFn;
-
-}
-});
-
-require.register("optimuslime~cppnjs@master/networks/cppn.js", function (exports, module) {
-/**
- * Module dependencies.
- */
-
-var utilities = require("optimuslime~cppnjs@master/utility/utilities.js");
-
-/**
- * Expose `CPPN`.
- */
-
-module.exports = CPPN;
-
-/**
- * Initialize a new error view.
- *
- * @param {Number} biasNeuronCount
- * @param {Number} inputNeuronCount
- * @param {Number} outputNeuronCount
- * @param {Number} totalNeuronCount
- * @param {Array} connections
- * @param {Array} biasList
- * @param {Array} activationFunctions
- * @api public
- */
-function CPPN(
-    biasNeuronCount,
-    inputNeuronCount,
-    outputNeuronCount,
-    totalNeuronCount,
-    connections,
-    biasList,
-    activationFunctions
-    )
-{
-    var self = this;
-
-    // must be in the same order as neuronSignals. Has null entries for neurons that are inputs or outputs of a module.
-    self.activationFunctions = activationFunctions;
-
-    // The modules and connections are in no particular order; only the order of the neuronSignals is used for input and output methods.
-    //floatfastconnections
-    self.connections = connections;
-
-    /// The number of bias neurons, usually one but sometimes zero. This is also the index of the first input neuron in the neuron signals.
-    self.biasNeuronCount = biasNeuronCount;
-    /// The number of input neurons.
-    self.inputNeuronCount = inputNeuronCount;
-    /// The number of input neurons including any bias neurons. This is also the index of the first output neuron in the neuron signals.
-    self.totalInputNeuronCount = self.biasNeuronCount + self.inputNeuronCount;
-    /// The number of output neurons.
-    self.outputNeuronCount = outputNeuronCount;
-
-    //save the total neuron count for us
-    self.totalNeuronCount = totalNeuronCount;
-
-    // For the following array, neurons are ordered with bias nodes at the head of the list,
-    // then input nodes, then output nodes, and then hidden nodes in the array's tail.
-    self.neuronSignals = [];
-    self.modSignals = [];
-
-    // This array is a parallel of neuronSignals, and only has values during SingleStepInternal().
-    // It is declared here to avoid having to reallocate it for every network activation.
-    self.neuronSignalsBeingProcessed = [];
-
-    //initialize the neuron,mod, and processing signals
-    for(var i=0; i < totalNeuronCount; i++){
-        //either you are 1 for bias, or 0 otherwise
-        self.neuronSignals.push(i < self.biasNeuronCount ? 1 : 0);
-        self.modSignals.push(0);
-        self.neuronSignalsBeingProcessed.push(0);
-    }
-
-    self.biasList = biasList;
-
-    // For recursive activation, marks whether we have finished this node yet
-    self.activated = [];
-    // For recursive activation, makes whether a node is currently being calculated. For recurrant connections
-    self.inActivation = [];
-    // For recursive activation, the previous activation for recurrent connections
-    self.lastActivation = [];
-
-
-    self.adjacentList = [];
-    self.reverseAdjacentList = [];
-    self.adjacentMatrix = [];
-
-
-    //initialize the activated, in activation, previous activation
-    for(var i=0; i < totalNeuronCount; i++){
-        self.activated.push(false);
-        self.inActivation.push(false);
-        self.lastActivation.push(0);
-
-        //then we initialize our list of lists!
-        self.adjacentList.push([]);
-        self.reverseAdjacentList.push([]);
-
-        self.adjacentMatrix.push([]);
-        for(var j=0; j < totalNeuronCount; j++)
-        {
-            self.adjacentMatrix[i].push(0);
-        }
-    }
-
-//        console.log(self.adjacentList.length);
-
-    //finally
-    // Set up adjacency list and matrix
-    for (var i = 0; i < self.connections.length; i++)
-    {
-        var crs = self.connections[i].sourceIdx;
-        var crt = self.connections[i].targetIdx;
-
-        // Holds outgoing nodes
-        self.adjacentList[crs].push(crt);
-
-        // Holds incoming nodes
-        self.reverseAdjacentList[crt].push(crs);
-
-        self.adjacentMatrix[crs][crt] = connections[i].weight;
-    }
-}
-
-
-/// <summary>
-/// Using RelaxNetwork erodes some of the perofrmance gain of FastConcurrentNetwork because of the slightly
-/// more complex implemementation of the third loop - whe compared to SingleStep().
-/// </summary>
-/// <param name="maxSteps"></param>
-/// <param name="maxAllowedSignalDelta"></param>
-/// <returns></returns>
-CPPN.prototype.relaxNetwork = function(maxSteps, maxAllowedSignalDelta)
-{
-    var self = this;
-    var isRelaxed = false;
-    for (var j = 0; j < maxSteps && !isRelaxed; j++) {
-        isRelaxed = self.singleStepInternal(maxAllowedSignalDelta);
-    }
-    return isRelaxed;
-};
-
-CPPN.prototype.setInputSignal = function(index, signalValue)
-{
-    var self = this;
-    // For speed we don't bother with bounds checks.
-    self.neuronSignals[self.biasNeuronCount + index] = signalValue;
-};
-
-CPPN.prototype.setInputSignals = function(signalArray)
-{
-    var self = this;
-    // For speed we don't bother with bounds checks.
-    for (var i = 0; i < signalArray.length; i++)
-        self.neuronSignals[self.biasNeuronCount + i] = signalArray[i];
-};
-
-//we can dispense of this by accessing neuron signals directly
-CPPN.prototype.getOutputSignal = function(index)
-{
-    // For speed we don't bother with bounds checks.
-    return this.neuronSignals[this.totalInputNeuronCount + index];
-};
-
-//we can dispense of this by accessing neuron signals directly
-CPPN.prototype.clearSignals = function()
-{
-    var self = this;
-    // Clear signals for input, hidden and output nodes. Only the bias node is untouched.
-    for (var i = self.biasNeuronCount; i < self.neuronSignals.length; i++)
-        self.neuronSignals[i] = 0.0;
-};
-
-//    cppn.CPPN.prototype.TotalNeuronCount = function(){ return this.neuronSignals.length;};
-
-CPPN.prototype.recursiveActivation = function(){
-
-    var self = this;
-    // Initialize boolean arrays and set the last activation signal, but only if it isn't an input (these have already been set when the input is activated)
-    for (var i = 0; i < self.neuronSignals.length; i++)
-    {
-        // Set as activated if i is an input node, otherwise ensure it is unactivated (false)
-        self.activated[i] = (i < self.totalInputNeuronCount) ? true : false;
-        self.inActivation[i] = false;
-        if (i >= self.totalInputNeuronCount)
-            self.lastActivation[i] = self.neuronSignals[i];
-    }
-
-    // Get each output node activation recursively
-    // NOTE: This is an assumption that genomes have started minimally, and the output nodes lie sequentially after the input nodes
-    for (var i = 0; i < self.outputNeuronCount; i++)
-        self.recursiveActivateNode(self.totalInputNeuronCount + i);
-
-};
-
-
-CPPN.prototype.recursiveActivateNode = function(currentNode)
-{
-    var self = this;
-    // If we've reached an input node we return since the signal is already set
-    if (self.activated[currentNode])
-    {
-        self.inActivation[currentNode] = false;
-        return;
-    }
-
-    // Mark that the node is currently being calculated
-    self.inActivation[currentNode] = true;
-
-    // Set the presignal to 0
-    self.neuronSignalsBeingProcessed[currentNode] = 0;
-
-    // Adjacency list in reverse holds incoming connections, go through each one and activate it
-    for (var i = 0; i < self.reverseAdjacentList[currentNode].length; i++)
-    {
-        var crntAdjNode = self.reverseAdjacentList[currentNode][i];
-
-        //{ Region recurrant connection handling - not applicable in our implementation
-        // If this node is currently being activated then we have reached a cycle, or recurrant connection. Use the previous activation in this case
-        if (self.inActivation[crntAdjNode])
-        {
-            //console.log('using last activation!');
-            self.neuronSignalsBeingProcessed[currentNode] += self.lastActivation[crntAdjNode]*self.adjacentMatrix[crntAdjNode][currentNode];
-//                    parseFloat(
-//                    parseFloat(self.lastActivation[crntAdjNode].toFixed(9)) * parseFloat(self.adjacentMatrix[crntAdjNode][currentNode].toFixed(9)).toFixed(9));
-        }
-
-        // Otherwise proceed as normal
-        else
-        {
-            // Recurse if this neuron has not been activated yet
-            if (!self.activated[crntAdjNode])
-                self.recursiveActivateNode(crntAdjNode);
-
-            // Add it to the new activation
-            self.neuronSignalsBeingProcessed[currentNode] +=  self.neuronSignals[crntAdjNode] *self.adjacentMatrix[crntAdjNode][currentNode];
-//                    parseFloat(
-//                    parseFloat(self.neuronSignals[crntAdjNode].toFixed(9)) * parseFloat(self.adjacentMatrix[crntAdjNode][currentNode].toFixed(9)).toFixed(9));
-        }
-        //} endregion
-    }
-
-    // Mark this neuron as completed
-    self.activated[currentNode] = true;
-
-    // This is no longer being calculated (for cycle detection)
-    self.inActivation[currentNode] = false;
-
-//        console.log('Current node: ' + currentNode);
-//        console.log('ActivationFunctions: ');
-//        console.log(self.activationFunctions);
-//
-//        console.log('neuronSignals: ');
-//        console.log(self.neuronSignals);
-//
-//        console.log('neuronSignalsBeingProcessed: ');
-//        console.log(self.neuronSignalsBeingProcessed);
-    // Set this signal after running it through the activation function
-    self.neuronSignals[currentNode] = self.activationFunctions[currentNode].calculate(self.neuronSignalsBeingProcessed[currentNode]);
-//            parseFloat((self.activationFunctions[currentNode].calculate(parseFloat(self.neuronSignalsBeingProcessed[currentNode].toFixed(9)))).toFixed(9));
-
-};
-
-
-CPPN.prototype.isRecursive = function()
-{
-    var self = this;
-
-    //if we're a hidden/output node (nodeid >= totalInputcount), and we connect to an input node (nodeid <= self.totalInputcount) -- it's recurrent!
-    //if we are a self connection, duh we are recurrent
-    for(var c=0; c< self.connections.length; c++)
-        if((self.connections[c].sourceIdx >= self.totalInputNeuronCount
-            && self.connections[c].targetIdx < self.totalInputNeuronCount)
-            || self.connections[c].sourceIdx == self.connections[c].targetIdx
-            )
-            return true;
-
-    self.recursed = [];
-    self.inRecursiveCheck = [];
-
-
-    for(var i=0; i < self.neuronSignals.length; i++)
-    {
-
-        self.recursed.push((i < self.totalInputNeuronCount) ? true : false);
-        self.inRecursiveCheck.push(false);
-    }
-
-    // Get each output node activation recursively
-    // NOTE: This is an assumption that genomes have started minimally, and the output nodes lie sequentially after the input nodes
-    for (var i = 0; i < self.outputNeuronCount; i++){
-        if(self.recursiveCheckRecursive(self.totalInputNeuronCount + i))
-        {
-//                console.log('Returned one!');
-            return true;
-
-        }
-    }
-
-    return false;
-
-};
-
-CPPN.prototype.recursiveCheckRecursive = function(currentNode)
-{
-    var self = this;
-
-
-//        console.log('Self recursed : '+ currentNode + ' ? ' +  self.recursed[currentNode]);
-
-//        console.log('Checking: ' + currentNode)
-    //  If we've reached an input node we return since the signal is already set
-    if (self.recursed[currentNode])
-    {
-        self.inRecursiveCheck[currentNode] = false;
-        return false;
-    }
-
-    // Mark that the node is currently being calculated
-    self.inRecursiveCheck[currentNode] = true;
-
-    // Adjacency list in reverse holds incoming connections, go through each one and activate it
-    for (var i = 0; i < self.reverseAdjacentList[currentNode].length; i++)
-    {
-        var crntAdjNode = self.reverseAdjacentList[currentNode][i];
-
-        //{ Region recurrant connection handling - not applicable in our implementation
-        // If this node is currently being activated then we have reached a cycle, or recurrant connection. Use the previous activation in this case
-        if (self.inRecursiveCheck[crntAdjNode])
-        {
-            self.inRecursiveCheck[currentNode] = false;
-            return true;
-        }
-
-        // Otherwise proceed as normal
-        else
-        {
-            var verifiedRecursive;
-            // Recurse if this neuron has not been activated yet
-            if (!self.recursed[crntAdjNode])
-                verifiedRecursive = self.recursiveCheckRecursive(crntAdjNode);
-
-            if(verifiedRecursive)
-                return true;
-        }
-        //} endregion
-    }
-
-    // Mark this neuron as completed
-    self.recursed[currentNode] = true;
-
-    // This is no longer being calculated (for cycle detection)
-    self.inRecursiveCheck[currentNode] = false;
-
-    return false;
-};
-
-
-
-
-
-(function(exports, selfBrowser, isBrowser){
-
-    var cppn = {CPPN: {}};
-
-
-
-
-
-
-
-    //send in the object, and also whetehr or not this is nodejs
-})(typeof exports === 'undefined'? this['cppnjs']['cppn']={}: exports, this, typeof exports === 'undefined'? true : false);
-
-});
-
-require.register("optimuslime~cppnjs@master/types/nodeType.js", function (exports, module) {
-var NodeType =
-{
-    bias : "Bias",
-    input: "Input",
-    output: "Output",
-    hidden: "Hidden",
-    other : "Other"
-};
-
-module.exports = NodeType;
-
-});
-
-require.register("optimuslime~cppnjs@master/utility/utilities.js", function (exports, module) {
-var utils = {};
-
-module.exports = utils;
-
-utils.stringToFunction = function(str) {
-    var arr = str.split(".");
-
-    var fn = (window || this);
-    for (var i = 0, len = arr.length; i < len; i++) {
-        fn = fn[arr[i]];
-    }
-
-    if (typeof fn !== "function") {
-        throw new Error("function not found");
-    }
-
-    return  fn;
-};
-
-utils.nextDouble = function()
-{
-    return Math.random();
-};
-
-utils.next = function(range)
-{
-    return Math.floor((Math.random()*range));
-};
-
-utils.tanh = function(arg) {
-    // sinh(number)/cosh(number)
-    return (Math.exp(arg) - Math.exp(-arg)) / (Math.exp(arg) + Math.exp(-arg));
-};
-
-utils.sign = function(input)
-{
-    if (input < 0) {return -1;}
-    if (input > 0) {return 1;}
-    return 0;
-};
-
-//ROULETTE WHEEL class
-
-
-//if we need a node object, this is how we would do it
-//    var neatNode = isNodejs ? self['neatNode'] : require('./neatNode.js');
-utils.RouletteWheel =
-{
-
-};
-
-/// <summary>
-/// A simple single throw routine.
-/// </summary>
-/// <param name="probability">A probability between 0..1 that the throw will result in a true result.</param>
-/// <returns></returns>
-utils.RouletteWheel.singleThrow = function(probability)
-{
-    return (utils.nextDouble() <= probability);
-};
-
-
-
-/// <summary>
-/// Performs a single throw for a given number of outcomes with equal probabilities.
-/// </summary>
-/// <param name="numberOfOutcomes"></param>
-/// <returns>An integer between 0..numberOfOutcomes-1. In effect this routine selects one of the possible outcomes.</returns>
-
-utils.RouletteWheel.singleThrowEven = function(numberOfOutcomes)
-{
-    var probability= 1.0 / numberOfOutcomes;
-    var accumulator=0;
-    var throwValue = utils.nextDouble();
-
-    for(var i=0; i<numberOfOutcomes; i++)
-    {
-        accumulator+=probability;
-        if(throwValue<=accumulator)
-            return i;
-    }
-    //throw exception in javascript
-    throw "PeannutLib.Maths.SingleThrowEven() - invalid outcome.";
-};
-
-/// <summary>
-/// Performs a single thrown onto a roulette wheel where the wheel's space is unevenly divided.
-/// The probabilty that a segment will be selected is given by that segment's value in the 'probabilities'
-/// array. The probabilities are normalised before tossing the ball so that their total is always equal to 1.0.
-/// </summary>
-/// <param name="probabilities"></param>
-/// <returns></returns>
-utils.RouletteWheel.singleThrowArray = function(aProbabilities)
-{
-    if(typeof aProbabilities === 'number')
-        throw new Error("Send Array to singleThrowArray!");
-    var pTotal=0;	// Total probability
-
-    //-----
-    for(var i=0; i<aProbabilities.length; i++)
-        pTotal+= aProbabilities[i];
-
-    //----- Now throw the ball and return an integer indicating the outcome.
-    var throwValue = utils.nextDouble() * pTotal;
-    var accumulator=0;
-
-    for(var j=0; j< aProbabilities.length; j++)
-    {
-        accumulator+= aProbabilities[j];
-
-        if(throwValue<=accumulator)
-            return j;
-    }
-
-    throw "PeannutLib.Maths.singleThrowArray() - invalid outcome.";
-};
-
-/// <summary>
-/// Similar in functionality to SingleThrow(double[] probabilities). However the 'probabilities' array is
-/// not normalised. Therefore if the total goes beyond 1 then we allow extra throws, thus if the total is 10
-/// then we perform 10 throws.
-/// </summary>
-/// <param name="probabilities"></param>
-/// <returns></returns>
-utils.RouletteWheel.multipleThrows = function(aProbabilities)
-{
-    var pTotal=0;	// Total probability
-    var numberOfThrows;
-
-    //----- Determine how many throws of the ball onto the wheel.
-    for(var i=0; i<aProbabilities.length; i++)
-        pTotal+=aProbabilities[i];
-
-    // If total probabilty is > 1 then we take this as meaning more than one throw of the ball.
-    var pTotalInteger = Math.floor(pTotal);
-    var pTotalRemainder = pTotal - pTotalInteger;
-    numberOfThrows = Math.floor(pTotalInteger);
-
-    if(utils.nextDouble() <= pTotalRemainder)
-        numberOfThrows++;
-
-    //----- Now throw the ball the determined number of times. For each throw store an integer indicating the outcome.
-    var outcomes = [];//new int[numberOfThrows];
-    for(var a=0; a < numberOfThrows; a++)
-        outcomes.push(0);
-
-    for(var i=0; i<numberOfThrows; i++)
-    {
-        var throwValue = utils.nextDouble() * pTotal;
-        var accumulator=0;
-
-        for(var j=0; j<aProbabilities.length; j++)
-        {
-            accumulator+=aProbabilities[j];
-
-            if(throwValue<=accumulator)
-            {
-                outcomes[i] = j;
-                break;
-            }
-        }
-    }
-
-    return outcomes;
-};
-utils.RouletteWheel.selectXFromSmallObject = function(x, objects){
-    var ixs = [];
-    //works with objects with count or arrays with length
-    var gCount = objects.count === undefined ? objects.length : objects.count;
-
-    for(var i=0; i<gCount;i++)
-        ixs.push(i);
-
-    //how many do we need back? we need x back. So we must remove (# of objects - x) leaving ... x objects
-    for(var i=0; i < gCount -x; i++)
-    {
-        //remove random index
-        ixs.splice(utils.next(ixs.length),1);
-    }
-
-    return ixs;
-};
-utils.RouletteWheel.selectXFromLargeObject = function(x, objects)
-{
-    var ixs = [];
-    var guesses = {};
-    var gCount = objects.count === undefined ? objects.length : objects.count;
-
-    //we make sure the number of requested objects is less than the object indices
-    x = Math.min(x, gCount);
-
-    for(var i=0; i<x; i++)
-    {
-        var guessIx = utils.next(gCount);
-        while(guesses[guessIx])
-            guessIx = utils.next(gCount);
-
-        guesses[guessIx] = true;
-        ixs.push(guessIx);
-    }
-
-    return ixs;
-};
-
-});
-
-require.register("optimuslime~cppnjs@master/extras/adaptableAdditions.js", function (exports, module) {
-//The purpose of this file is to only extend CPPNs to have additional activation capabilities involving mod connections
-
-var cppnConnection = require("optimuslime~cppnjs@master/networks/cppnConnection.js");
-//default all the variables that need to be added to handle adaptable activation
-var connectionPrototype = cppnConnection.prototype;
-connectionPrototype.a = 0;
-connectionPrototype.b = 0;
-connectionPrototype.c = 0;
-connectionPrototype.d = 0;
-connectionPrototype.modConnection = 0;
-connectionPrototype.learningRate = 0;
-
-
-var CPPN = require("optimuslime~cppnjs@master/networks/cppn.js");
-//default all the variables that need to be added to handle adaptable activation
-var cppnPrototype = CPPN.prototype;
-
-cppnPrototype.a = 0;
-cppnPrototype.b = 0;
-cppnPrototype.c = 0;
-cppnPrototype.d = 0;
-cppnPrototype.learningRate = 0;
-cppnPrototype.pre = 0;
-cppnPrototype.post = 0;
-
-cppnPrototype.adaptable = false;
-cppnPrototype.modulatory = false;
-
-
-/// <summary>
-/// This function carries out a single network activation.
-/// It is called by all those methods that require network activations.
-/// </summary>
-/// <param name="maxAllowedSignalDelta">
-/// The network is not relaxed as long as the absolute value of the change in signals at any given point is greater than this value.
-/// Only positive values are used. If the value is less than or equal to 0, the method will return true without checking for relaxation.
-/// </param>
-/// <returns>True if the network is relaxed, or false if not.</returns>
-cppnPrototype.singleStepInternal = function(maxAllowedSignalDelta)
-{
-    var isRelaxed = true;	// Assume true.
-    var self = this;
-    // Calculate each connection's output signal, and add the signals to the target neurons.
-    for (var i = 0; i < self.connections.length; i++) {
-
-        if (self.adaptable)
-        {
-            if (self.connections[i].modConnection <= 0.0)   //Normal connection
-            {
-                self.neuronSignalsBeingProcessed[self.connections[i].targetIdx] += self.neuronSignals[self.connections[i].sourceIdx] * self.connections[i].weight;
-            }
-            else //modulatory connection
-            {
-                self.modSignals[self.connections[i].targetIdx] += self.neuronSignals[self.connections[i].sourceIdx] * self.connections[i].weight;
-
-            }
-        }
-        else
-        {
-            self.neuronSignalsBeingProcessed[self.connections[i].targetIdx] += self.neuronSignals[self.connections[i].sourceIdx] * self.connections[i].weight;
-
-        }
-    }
-
-    // Pass the signals through the single-valued activation functions.
-    // Do not change the values of input neurons or neurons that have no activation function because they are part of a module.
-    for (var i = self.totalInputNeuronCount; i < self.neuronSignalsBeingProcessed.length; i++) {
-        self.neuronSignalsBeingProcessed[i] = self.activationFunctions[i].calculate(self.neuronSignalsBeingProcessed[i]+self.biasList[i]);
-        if (self.modulatory)
-        {
-            //Make sure it's between 0 and 1
-            self.modSignals[i] += 1.0;
-            if (self.modSignals[i]!=0.0)
-                self.modSignals[i] = utilities.tanh(self.modSignals[i]);//Tanh(modSignals[i]);//(Math.Exp(2 * modSignals[i]) - 1) / (Math.Exp(2 * modSignals[i]) + 1));
-        }
-    }
-    //TODO Modules not supported in this implementation - don't care
-
-
-    /*foreach (float f in neuronSignals)
-     HyperNEATParameters.distOutput.Write(f.ToString("R") + " ");
-     HyperNEATParameters.distOutput.WriteLine();
-     HyperNEATParameters.distOutput.Flush();*/
-
-    // Move all the neuron signals we changed while processing this network activation into storage.
-    if (maxAllowedSignalDelta > 0) {
-        for (var i = self.totalInputNeuronCount; i < self.neuronSignalsBeingProcessed.length; i++) {
-
-            // First check whether any location in the network has changed by more than a small amount.
-            isRelaxed &= (Math.abs(self.neuronSignals[i] - self.neuronSignalsBeingProcessed[i]) > maxAllowedSignalDelta);
-
-            self.neuronSignals[i] = self.neuronSignalsBeingProcessed[i];
-            self.neuronSignalsBeingProcessed[i] = 0.0;
-        }
-    } else {
-        for (var i = self.totalInputNeuronCount; i < self.neuronSignalsBeingProcessed.length; i++) {
-            self.neuronSignals[i] = self.neuronSignalsBeingProcessed[i];
-            self.neuronSignalsBeingProcessed[i] = 0.0;
-        }
-    }
-
-    // Console.WriteLine(inputNeuronCount);
-
-    if (self.adaptable)//CPPN != null)
-    {
-        var coordinates = [0,0,0,0];
-        var modValue;
-        var weightDelta;
-        for (var i = 0; i < self.connections.length; i++)
-        {
-            if (self.modulatory)
-            {
-                self.pre = self.neuronSignals[self.connections[i].sourceIdx];
-                self.post = self.neuronSignals[self.connections[i].targetIdx];
-                modValue = self.modSignals[self.connections[i].targetIdx];
-
-                self.a = self.connections[i].a;
-                self.b = self.connections[i].b;
-                self.c = self.connections[i].c;
-                self.d = self.connections[i].d;
-
-                self.learningRate = self.connections[i].learningRate;
-                if (modValue != 0.0 && (self.connections[i].modConnection <= 0.0))        //modulate target neuron if its a normal connection
-                {
-                    self.connections[i].weight += modValue*self.learningRate * (self.a * self.pre * self.post + self.b * self.pre + self.c * self.post + self.d);
-                }
-
-                if (Math.abs(self.connections[i].weight) > 5.0)
-                {
-                    self.connections[i].weight = 5.0 * Math.sign(self.connections[i].weight);
-                }
-            }
-            else
-            {
-                self.pre = self.neuronSignals[self.connections[i].sourceIdx];
-                self.post = self.neuronSignals[self.connections[i].targetIdx];
-                self.a = self.connections[i].a;
-                self.b = self.connections[i].b;
-                self.c = self.connections[i].c;
-
-                self.learningRate = self.connections[i].learningRate;
-
-                weightDelta = self.learningRate * (self.a * self.pre * self.post + self.b * self.pre + self.c * self.post);
-                connections[i].weight += weightDelta;
-
-                //   Console.WriteLine(pre + " " + post + " " + learningRate + " " + A + " " + B + " " + C + " " + weightDelta);
-
-                if (Math.abs(self.connections[i].weight) > 5.0)
-                {
-                    self.connections[i].weight = 5.0 * Math.sign(self.connections[i].weight);
-                }
-            }
-        }
-    }
-
-    for (var i = self.totalInputNeuronCount; i < self.neuronSignalsBeingProcessed.length; i++)
-    {
-        self.modSignals[i] = 0.0;
-    }
-
-    return isRelaxed;
-
-};
-
-
-cppnPrototype.singleStep = function(finished)
-{
-    var self = this;
-    self.singleStepInternal(0.0); // we will ignore the value of this function, so the "allowedDelta" argument doesn't matter.
-    if (finished)
-    {
-        finished(null);
-    }
-};
-
-cppnPrototype.multipleSteps = function(numberOfSteps)
-{
-    var self = this;
-    for (var i = 0; i < numberOfSteps; i++) {
-        self.singleStep();
-    }
-};
-
-});
-
-require.register("optimuslime~cppnjs@master/extras/pureCPPNAdditions.js", function (exports, module) {
-//The purpose of this file is to only extend CPPNs to have additional activation capabilities involving turning
-//cppns into a string!
-
-var CPPN = require("optimuslime~cppnjs@master/networks/cppn.js");
-
-//for convenience, you can require pureCPPNAdditions
-module.exports = CPPN;
-
-var CPPNPrototype = CPPN.prototype;
-
-CPPNPrototype.createPureCPPNFunctions = function()
-{
-
-    var self = this;
-
-    //create our enclosed object for each node! (this way we actually have subnetworks functions setup too
-    self.nEnclosed = new Array(self.neuronSignals.length);
-
-    self.bAlreadyEnclosed = new Array(self.neuronSignals.length);
-    self.inEnclosure = new Array(self.neuronSignals.length);
-
-    // Initialize boolean arrays and set the last activation signal, but only if it isn't an input (these have already been set when the input is activated)
-    for (var i = 0; i < self.nEnclosed.length; i++)
-    {
-        // Set as activated if i is an input node, otherwise ensure it is unactivated (false)
-        self.bAlreadyEnclosed[i] = (i < self.totalInputNeuronCount) ? true : false;
-        self.nEnclosed[i] = (i < self.totalInputNeuronCount ? "x" + i : "");
-
-        self.inEnclosure[i] = false;
-
-    }
-
-    // Get each output node activation recursively
-    // NOTE: This is an assumption that genomes have started minimally, and the output nodes lie sequentially after the input nodes
-    for (var i = 0; i < self.outputNeuronCount; i++){
-
-//            for (var m = 0; m < self.nEnclosed.length; m++)
-//            {
-//                // Set as activated if i is an input node, otherwise ensure it is unactivated (false)
-//                self.bAlreadyEnclosed[m] = (m < self.totalInputNeuronCount) ? true : false;
-//                self.inEnclosure[m] = false;
-//            }
-
-
-        self.nrEncloseNode(self.totalInputNeuronCount + i);
-
-    }
-
-//        console.log(self.nEnclosed);
-
-    //now grab our ordered objects
-    var orderedObjects = self.recursiveCountThings();
-
-//        console.log(orderedObjects);
-
-    //now let's build our functions
-    var nodeFunctions = {};
-
-    var stringFunctions = {};
-
-    var emptyNodes = {};
-
-    for(var i= self.totalInputNeuronCount; i < self.totalNeuronCount; i++)
-    {
-        //skip functions that aren't defined
-        if(!self.bAlreadyEnclosed[i]){
-            emptyNodes[i] = true;
-            continue;
-        }
-
-        var fnString = "return " + self.nEnclosed[i] + ';';
-        nodeFunctions[i] = new Function([], fnString);
-        stringFunctions[i] = fnString;
-    }
-
-    var inOrderAct = [];
-    //go through and grab the indices -- no need for rank and things
-    orderedObjects.forEach(function(oNode)
-    {
-        if(!emptyNodes[oNode.node])
-            inOrderAct.push(oNode.node);
-    });
-
-
-    var containedFunction = function(nodesInOrder, functionsForNodes, biasCount, outputCount)
-    {
-        return function(inputs)
-        {
-            var bias = 1.0;
-            var context = {};
-            context.rf = new Array(nodesInOrder.length);
-            var totalIn = inputs.length + biasCount;
-
-            for(var i=0; i < biasCount; i++)
-                context.rf[i] = bias;
-
-            for(var i=0; i < inputs.length; i++)
-                context.rf[i+biasCount] = inputs[i];
-
-
-            for(var i=0; i < nodesInOrder.length; i++)
-            {
-                var fIx = nodesInOrder[i];
-//                console.log('Ix to hit: ' fIx + );
-                context.rf[fIx] = (fIx < totalIn ? context.rf[fIx] : functionsForNodes[fIx].call(context));
-            }
-
-            return context.rf.slice(totalIn, totalIn + outputCount);
-        }
-    };
-
-    //this will return a function that can be run by calling var outputs = functionName(inputs);
-    var contained =  containedFunction(inOrderAct, nodeFunctions, self.biasNeuronCount, self.outputNeuronCount);
-
-    return {contained: contained, stringFunctions: stringFunctions, arrayIdentifier: "this.rf", nodeOrder: inOrderAct};
-
-
-//        console.log(self.nEnclosed[self.totalInputNeuronCount + 0].length);
-//        console.log('Enclosed nodes: ');
-//        console.log(self.nEnclosed);
-
-//        console.log('Ordered: ');
-//        console.log(orderedActivation);
-
-};
-
-
-
-CPPNPrototype.nrEncloseNode = function(currentNode)
-{
-    var self = this;
-
-    // If we've reached an input node we return since the signal is already set
-
-//        console.log('Checking: ' + currentNode);
-//        console.log('Total: ');
-//        console.log(self.totalInputNeuronCount);
-
-
-    if (currentNode < self.totalInputNeuronCount)
-    {
-        self.inEnclosure[currentNode] = false;
-        self[currentNode] = 'this.rf[' + currentNode + ']';
-        return;
-    }
-    if (self.bAlreadyEnclosed[currentNode])
-    {
-        self.inEnclosure[currentNode] = false;
-        return;
-    }
-
-    // Mark that the node is currently being calculated
-    self.inEnclosure[currentNode] = true;
-
-    // Adjacency list in reverse holds incoming connections, go through each one and activate it
-    for (var i = 0; i < self.reverseAdjacentList[currentNode].length; i++)
-    {
-        var crntAdjNode = self.reverseAdjacentList[currentNode][i];
-
-        //{ Region recurrant connection handling - not applicable in our implementation
-        // If this node is currently being activated then we have reached a cycle, or recurrant connection. Use the previous activation in this case
-        if (self.inEnclosure[crntAdjNode])
-        {
-            //easy fix, this isn't meant for recurrent networks -- just throw an error!
-            throw new Error("Method not built for recurrent networks!");
-        }
-
-        // Otherwise proceed as normal
-        else
-        {
-
-            // Recurse if this neuron has not been activated yet
-            if (!self.bAlreadyEnclosed[crntAdjNode])
-                self.nrEncloseNode(crntAdjNode);
-
-//                console.log('Next: ');
-//                console.log(crntAdjNode);
-//                console.log(self.nEnclosed[crntAdjNode]);
-
-            var add = (self.nEnclosed[currentNode] == "" ? "(" : "+");
-
-            //get our weight from adjacency matrix
-            var weight = self.adjacentMatrix[crntAdjNode][currentNode];
-
-            //we have a whole number weight!
-            if(Math.round(weight) === weight)
-                weight = '' + weight + '.0';
-            else
-                weight = '' + weight;
-
-
-            // Add it to the new activation
-            self.nEnclosed[currentNode] += add + weight + "*" + "this.rf[" + crntAdjNode + "]";
-
-        }
-        //} endregion
-//            nodeCount++;
-    }
-
-    //if we're empty, we're empty! We don't go no where, derrrr
-    if(self.nEnclosed[currentNode] === '')
-        self.nEnclosed[currentNode] = '0.0';
-    else
-        self.nEnclosed[currentNode] += ')';
-
-    // Mark this neuron as completed
-    self.bAlreadyEnclosed[currentNode] = true;
-
-    // This is no longer being calculated (for cycle detection)
-    self.inEnclosure[currentNode] = false;
-
-
-//        console.log('Enclosed legnth: ' + self.activationFunctions[currentNode].enclose(self.nEnclosed[currentNode]).length);
-
-    self.nEnclosed[currentNode] = self.activationFunctions[currentNode].enclose(self.nEnclosed[currentNode]);
-
-};
-
-CPPNPrototype.recursiveCountThings = function()
-{
-    var self= this;
-
-    var orderedActivation = {};
-
-    var higherLevelRecurse = function(neuron)
-    {
-        var inNode = new Array(self.totalNeuronCount);
-        var nodeCount = new Array(self.totalNeuronCount);
-        var interactCount = new Array(self.totalNeuronCount);
-
-        for(var s=0; s < self.totalNeuronCount; s++) {
-            inNode[s] = false;
-            nodeCount[s] = 0;
-            interactCount[s] = 0;
-        }
-
-        var recurseNode = function(currentNode)
-        {
-            // Mark that the node is currently being calculated
-            inNode[currentNode] = true;
-
-            var recurse = {};
-
-            // Adjacency list in reverse holds incoming connections, go through each one and activate it
-            for (var i = 0; i < self.reverseAdjacentList[currentNode].length; i++)
-            {
-                var crntAdjNode = self.reverseAdjacentList[currentNode][i];
-
-
-                recurse[i] = (nodeCount[crntAdjNode] < nodeCount[currentNode] + 1);
-
-                nodeCount[crntAdjNode] = Math.max(nodeCount[crntAdjNode], nodeCount[currentNode] + 1);
-
-            }
-            //all nodes are marked with correct count, let's continue backwards for each one!
-            for (var i = 0; i < self.reverseAdjacentList[currentNode].length; i++)
-            {
-                var crntAdjNode = self.reverseAdjacentList[currentNode][i];
-
-                if(recurse[i])
-                // Recurse on it! -- already marked above
-                    recurseNode(crntAdjNode);
-
-            }
-
-            //            nodeCount[currentNode] = nodeCount[currentNode] + 1;
-            inNode[currentNode] = false;
-
-        };
-
-        recurseNode(neuron);
-
-        return nodeCount;
-    };
-
-
-    var orderedObjects = new Array(self.totalNeuronCount);
-
-    // Get each output node activation recursively
-    // NOTE: This is an assumption that genomes have started minimally, and the output nodes lie sequentially after the input nodes
-    for (var m = 0; m < self.outputNeuronCount; m++){
-        //we have ordered count for this output!
-
-        var olist = higherLevelRecurse(self.totalInputNeuronCount + m);
-
-        var nodeSpecificOrdering  = [];
-
-        for(var n=0; n< olist.length; n++)
-        {
-            //we take the maximum depending on whether or not it's been seen before
-            if(orderedObjects[n])
-                orderedObjects[n] = {node: n, rank: Math.max(orderedObjects[n].rank, olist[n])};
-            else
-                orderedObjects[n] = {node: n, rank: olist[n]};
-
-            nodeSpecificOrdering.push({node: n, rank: olist[n]});
-        }
-
-        nodeSpecificOrdering.sort(function(a,b){return b.rank - a.rank;});
-
-        orderedActivation[self.totalInputNeuronCount + m] = nodeSpecificOrdering;
-    }
-
-
-    orderedObjects.sort(function(a,b){return b.rank - a.rank;});
-//        console.log(orderedObjects);
-
-
-    return orderedObjects;
-
-};
-});
-
-require.register("optimuslime~cppnjs@master/extras/gpuAdditions.js", function (exports, module) {
-//this takes in cppn functions, and outputs a shader....
-//radical!
-//needs to be tested more! How large can CPPNs get? inputs/outputs/hiddens?
-//we'll extend a CPPN to produce a GPU shader
-var CPPN = require("optimuslime~cppnjs@master/networks/cppn.js");
-
-var CPPNPrototype = CPPN.prototype;
-
-var cppnToGPU = {};
-cppnToGPU.ShaderFragments = {};
-
-cppnToGPU.ShaderFragments.passThroughVariables =
-    [
-        "uniform float texelWidth;",
-        "uniform float texelHeight;"
-
-    ].join('\n');
-
-//simple, doesn't do anything but pass on uv coords to the frag shaders
-cppnToGPU.ShaderFragments.passThroughVS =
-    [
-        cppnToGPU.ShaderFragments.passThroughVariables,
-        "varying vec2 passCoord;",
-
-        "void main()	{",
-        "passCoord = uv;",
-        "gl_Position = vec4( position, 1.0 );",
-        "}",
-        "\n"
-    ].join('\n');
-
-cppnToGPU.ShaderFragments.passThroughVS3x3 =
-    [
-        cppnToGPU.ShaderFragments.passThroughVariables,
-        "varying vec2 sampleCoords[9];",
-
-        "void main()	{",
-
-        "gl_Position = vec4( position, 1.0 );",
-
-        "vec2 widthStep = vec2(texelWidth, 0.0);",
-        "vec2 heightStep = vec2(0.0, texelHeight);",
-        "vec2 widthHeightStep = vec2(texelWidth, texelHeight);",
-        "vec2 widthNegativeHeightStep = vec2(texelWidth, -texelHeight);",
-
-        "vec2 inputTextureCoordinate = uv;",
-
-        "sampleCoords[0] = inputTextureCoordinate.xy;",
-        "sampleCoords[1] = inputTextureCoordinate.xy - widthStep;",
-        "sampleCoords[2] = inputTextureCoordinate.xy + widthStep;",
-
-        "sampleCoords[3] = inputTextureCoordinate.xy - heightStep;",
-        "sampleCoords[4] = inputTextureCoordinate.xy - widthHeightStep;",
-        "sampleCoords[5] = inputTextureCoordinate.xy + widthNegativeHeightStep;",
-
-        "sampleCoords[6] = inputTextureCoordinate.xy + heightStep;",
-        "sampleCoords[7] = inputTextureCoordinate.xy - widthNegativeHeightStep;",
-        "sampleCoords[8] = inputTextureCoordinate.xy + widthHeightStep;",
-
-        "}",
-        "\n"
-    ].join('\n');
-
-
-cppnToGPU.ShaderFragments.variables =
-    [
-        "varying vec2 passCoord; ",
-        "uniform sampler2D inputTexture; "
-    ].join('\n');
-
-cppnToGPU.ShaderFragments.variables3x3 =
-    [
-        "varying vec2 sampleCoords[9];",
-        "uniform sampler2D inputTexture; "
-    ].join('\n');
-
-
-//this is a generic conversion from cppn to shader
-//Extends the CPPN object to have fullShaderFromCPPN function (and a callback to add any extras)
-//the extras will actually dictate how the final output is created and used
-CPPNPrototype.fullShaderFromCPPN = function(specificAddFunction)
-{
-    var cppn = this;
-
-//        console.log('Decoded!');
-//        console.log('Start enclose :)');
-    var functionObject = cppn.createPureCPPNFunctions();
-//        console.log('End enclose!');
-    //functionobject of the form
-//        {contained: contained, stringFunctions: stringFunctions, arrayIdentifier: "this.rf", nodeOrder: inOrderAct};
-
-    var multiInput = cppn.inputNeuronCount >= 27;
-
-
-    var totalNeurons = cppn.totalNeuronCount;
-
-    var inorderString = "";
-
-    var lastIx = functionObject.nodeOrder[totalNeurons-1];
-    functionObject.nodeOrder.forEach(function(ix)
-    {
-        inorderString += ix +  (ix !== lastIx ? "," : "");
-    });
-
-    var defaultVariables = multiInput ? cppnToGPU.ShaderFragments.variables3x3 : cppnToGPU.ShaderFragments.variables;
-
-    //create a float array the size of the neurons
-//        var fixedArrayDec = "int order[" + totalNeurons + "](" + inorderString + ");";
-    var arrayDeclaration = "float register[" + totalNeurons + "];";
-
-
-    var beforeFunctionIx = "void f";
-    var functionWrap = "(){";
-
-    var postFunctionWrap = "}";
-
-    var repString = functionObject.arrayIdentifier;
-    var fns = functionObject.stringFunctions;
-    var wrappedFunctions = [];
-    for(var key in fns)
-    {
-        if(key < cppn.totalInputNeuronCount)
-            continue;
-
-        //do this as 3 separate lines
-        var wrap = beforeFunctionIx + key + functionWrap;
-        wrappedFunctions.push(wrap);
-        var setRegister = "register[" + key + "] = ";
-
-        var repFn =  fns[key].replace(new RegExp(repString, 'g'), "register");
-        //remove all Math. references -- e.g. Math.sin == sin in gpu code
-        repFn = repFn.replace(new RegExp("Math.", 'g'), "");
-        //we don't want a return function, fs are void
-        repFn = repFn.replace(new RegExp("return ", 'g'), "");
-        //anytime you see a +-, this actually means -
-        //same goes for -- this is a +
-        repFn = repFn.replace(new RegExp("\\+\\-", 'g'), "-");
-        repFn = repFn.replace(new RegExp("\\-\\-", 'g'), "+");
-
-        wrappedFunctions.push(setRegister + repFn);
-        wrappedFunctions.push(postFunctionWrap);
-    }
-
-    var activation = [];
-
-    var actBefore, additionalParameters;
-
-    if(cppn.outputNeuronCount == 1)
-    {
-        actBefore = "float";
-        additionalParameters = "";
-    }
-    else
-    {
-//            actBefore = "float[" + ng.outputNodeCount + "]";
-        actBefore = "void";
-        additionalParameters = ", out float[" + cppn.outputNeuronCount + "] outputs";
-    }
-
-    actBefore += " activate(float[" +cppn.inputNeuronCount + "] fnInputs" + additionalParameters+ "){";
-    activation.push(actBefore);
-
-    var bCount = cppn.biasNeuronCount;
-
-    for(var i=0; i < bCount; i++)
-    {
-        activation.push('register[' + i + '] = 1.0;');
-    }
-    for(var i=0; i < cppn.inputNeuronCount; i++)
-    {
-        activation.push('register[' + (i + bCount) + '] = fnInputs[' + i + '];');
-    }
-
-    functionObject.nodeOrder.forEach(function(ix)
-    {
-        if(ix >= cppn.totalInputNeuronCount)
-            activation.push("f"+ix +"();");
-    });
-
-    var outputs;
-
-    //if you're just one output, return a simple float
-    //otherwise, you need to return an array
-    if(cppn.outputNeuronCount == 1)
-    {
-        outputs = "return register[" + cppn.totalInputNeuronCount + "];";
-    }
-    else
-    {
-        var multiOut = [];
-
-//            multiOut.push("float o[" + ng.outputNodeCount + "];");
-        for(var i=0; i < cppn.outputNeuronCount; i++)
-            multiOut.push("outputs[" + i + "] = register[" + (i + cppn.totalInputNeuronCount) + "];");
-//            multiOut.push("return o;");
-
-        outputs = multiOut.join('\n');
-    }
-
-    activation.push(outputs);
-    activation.push("}");
-
-    var additional = specificAddFunction(cppn);
-
-
-    return {vertex: multiInput ?
-        cppnToGPU.ShaderFragments.passThroughVS3x3 :
-        cppnToGPU.ShaderFragments.passThroughVS,
-        fragment: [defaultVariables,arrayDeclaration].concat(wrappedFunctions).concat(activation).concat(additional).join('\n')};
-
-};
-
-
-});
-
-require.modules["optimuslime-cppnjs"] = require.modules["optimuslime~cppnjs@master"];
-require.modules["optimuslime~cppnjs"] = require.modules["optimuslime~cppnjs@master"];
-require.modules["cppnjs"] = require.modules["optimuslime~cppnjs@master"];
-
-
-require.register("optimuslime~neatjs@master", function (exports, module) {
-var neatjs = {};
-
-//export the cppn library
-module.exports = neatjs;
-
-//nodes and connections!
-neatjs.neatNode = require("optimuslime~neatjs@master/genome/neatNode.js");
-neatjs.neatConnection = require("optimuslime~neatjs@master/genome/neatConnection.js");
-neatjs.neatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
-
-//all the activations your heart could ever hope for
-neatjs.iec = require("optimuslime~neatjs@master/evolution/iec.js");
-neatjs.multiobjective = require("optimuslime~neatjs@master/evolution/multiobjective.js");
-neatjs.novelty = require("optimuslime~neatjs@master/evolution/novelty.js");
-
-//neatHelp
-neatjs.neatDecoder = require("optimuslime~neatjs@master/neatHelp/neatDecoder.js");
-neatjs.neatHelp = require("optimuslime~neatjs@master/neatHelp/neatHelp.js");
-neatjs.neatParameters = require("optimuslime~neatjs@master/neatHelp/neatParameters.js");
-
-//and the utilities to round it out!
-neatjs.genomeSharpToJS = require("optimuslime~neatjs@master/utility/genomeSharpToJS.js");
-
-//exporting the node type
-neatjs.NodeType = require("optimuslime~neatjs@master/types/nodeType.js");
-
-
-
-});
-
-require.register("optimuslime~neatjs@master/evolution/iec.js", function (exports, module) {
-/**
- * Module dependencies.
- */
-
-var NeatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
-
-//pull in variables from cppnjs
-var cppnjs = require("optimuslime~cppnjs@master");
-var utilities =  cppnjs.utilities;
-
-/**
- * Expose `iec objects`.
- */
-module.exports = GenericIEC;
-
-//seeds are required -- and are expected to be the correct neatGenome types
-function GenericIEC(np, seeds, iecOptions)
-{
-    var self = this;
-
-    self.options = iecOptions || {};
-    self.np = np;
-
-    //we keep track of new nodes and connections for the session
-    self.newNodes = {};
-    self.newConnections = {};
-
-    //we can send in a seed genome -- to create generic objects when necessary
-    self.seeds = seeds;
-
-    for(var s=0; s < seeds.length; s++)
-    {
-        var seed = seeds[s];
-        for(var c =0; c < seed.connections.length; c++)
-        {
-            var sConn = seed.connections[c];
-            var cid = '(' + sConn.sourceID + ',' + sConn.targetID + ')';
-            self.newConnections[cid] = sConn;
-        }
-    }
-
-    self.cloneSeed = function(){
-
-        var seedIx = utilities.next(self.seeds.length);
-
-        var seedCopy = NeatGenome.Copy(self.seeds[seedIx]);
-        if(self.options.seedMutationCount)
-        {
-            for(var i=0; i < self.options.seedMutationCount; i++)
-                seedCopy.mutate(self.newNodes, self.newConnections, self.np);
-        }
-        return seedCopy;
-    };
-
-    self.markParentConnections = function(parents){
-
-        for(var s=0; s < parents.length; s++)
-        {
-            var parent = parents[s];
-            for(var c =0; c < parent.connections.length; c++)
-            {
-                var sConn = parent.connections[c];
-                var cid = '(' + sConn.sourceID + ',' + sConn.targetID + ')';
-                self.newConnections[cid] = sConn;
-            }
-        }
-
-    };
-
-
-        //this function handles creating a genotype from sent in parents.
-    //it's pretty simple -- however many parents you have, select a random number of them, and attempt to mate them
-    self.createNextGenome = function(parents)
-    {
-        self.markParentConnections(parents);
-        //IF we have 0 parents, we create a genome with the default configurations
-        var ng;
-        var initialMutationCount = self.options.initialMutationCount || 0,
-            postXOMutationCount = self.options.postMutationCount || 0;
-
-        var responsibleParents = [];
-
-        switch(parents.length)
-        {
-            case 0:
-
-                //parents are empty -- start from scratch!
-                ng = self.cloneSeed();
-
-                for(var m=0; m < initialMutationCount; m++)
-                    ng.mutate(self.newNodes, self.newConnections, self.np);
-
-                //no responsible parents
-
-                break;
-            case 1:
-
-                //we have one parent
-                //asexual reproduction
-                ng = parents[0].createOffspringAsexual(self.newNodes, self.newConnections, self.np);
-
-                //parent at index 0 responsible
-                responsibleParents.push(0);
-
-                for(var m=0; m < postXOMutationCount; m++)
-                    ng.mutate(self.newNodes, self.newConnections, self.np);
-
-                break;
-            default:
-                //greater than 1 individual as a possible parent
-
-                //at least 1 parent, and at most self.activeParents.count # of parents
-                var parentCount = 1 + utilities.next(parents.length);
-
-                if(parentCount == 1)
-                {
-                    //select a single parent for offspring
-                    var rIx = utilities.next(parents.length);
-
-                    ng = parents[rIx].createOffspringAsexual(self.newNodes, self.newConnections, self.np);
-                    //1 responsible parent at index 0
-                    responsibleParents.push(rIx);
-                    break;
-                }
-
-                //we expect active parents to be small, so we grab parentCount number of parents from a small array of parents
-                var parentIxs = utilities.RouletteWheel.selectXFromSmallObject(parentCount, parents);
-
-                var p1 = parents[parentIxs[0]], p2;
-                //if I have 3 parents, go in order composing the objects
-
-                responsibleParents.push(parentIxs[0]);
-
-                //p1 mates with p2 to create o1, o1 mates with p3, to make o2 -- p1,p2,p3 are all combined now inside of o2
-                for(var i=1; i < parentIxs.length; i++)
-                {
-                    p2 = parents[parentIxs[i]];
-                    ng = p1.createOffspringSexual(p2, self.np);
-                    p1 = ng;
-                    responsibleParents.push(parentIxs[i]);
-                }
-
-                for(var m=0; m < postXOMutationCount; m++)
-                    ng.mutate(self.newNodes, self.newConnections, self.np);
-
-
-                break;
-        }
-
-        //we have our genome, let's send it back
-
-        //the reason we don't end it inisde the switch loop is that later, we might be interested in saving this genome from some other purpose
-        return {offspring: ng, parents: responsibleParents};
-    };
-
-};
-
-
-});
-
-require.register("optimuslime~neatjs@master/evolution/multiobjective.js", function (exports, module) {
-//here we have everything for NSGA-II mutliobjective search and neatjs
-/**
- * Module dependencies.
- */
-
-var NeatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
-var Novelty = require("optimuslime~neatjs@master/evolution/novelty.js");
-
-
-//pull in variables from cppnjs
-var cppnjs = require("optimuslime~cppnjs@master");
-var utilities =  cppnjs.utilities;
-
-
-/**
- * Expose `MultiobjectiveSearch`.
- */
-
-module.exports = MultiobjectiveSearch;
-
-
-//information to rank each genome
-MultiobjectiveSearch.RankInfo = function()
-{
-    var self = this;
-    //when iterating, we count how many genomes dominate other genomes
-    self.dominationCount = 0;
-    //who does this genome dominate
-    self.dominates = [];
-    //what is this genome's rank (i.e. what pareto front is it on)
-    self.rank = 0;
-    //has this genome been ranked
-    self.ranked = false;
-};
-MultiobjectiveSearch.RankInfo.prototype.reset = function(){
-
-    var self = this;
-    self.rank = 0;
-    self.ranked = false;
-    self.dominationCount = 0;
-    self.dominates = [];
-};
-
-MultiobjectiveSearch.Help = {};
-
-MultiobjectiveSearch.Help.SortPopulation = function(pop)
-{
-    //sort genomes by fitness / age -- as genomes are often sorted
-    pop.sort(function(x,y){
-
-        var fitnessDelta = y.fitness - x.fitness;
-        if (fitnessDelta < 0.0)
-            return -1;
-        else if (fitnessDelta > 0.0)
-            return 1;
-
-        var ageDelta = x.age - y.age;
-
-        // Convert result to an int.
-        if (ageDelta < 0)
-            return -1;
-        else if (ageDelta > 0)
-            return 1;
-
-        return 0;
-
-    });
-};
-
-//class to assign multiobjective fitness to individuals (fitness based on what pareto front they are on)
-MultiobjectiveSearch.multiobjectiveUtilities = function(np)
-{
-
-    var self = this;
-
-    self.np = np;
-    self.population = [];
-    self.populationIDs = {};
-    self.ranks = [];
-    self.nov = new Novelty(10.0);
-    self.doNovelty = false;
-    self.generation = 0;
-
-    self.localCompetition = false;
-
-    self.measureNovelty = function()
-    {
-        var count = self.population.length;
-
-        self.nov.initialize(self.population);
-
-        //reset locality and competition for each genome
-        for(var i=0; i < count; i++)
-        {
-            var genome = self.population[i];
-
-            genome.locality=0.0;
-            genome.competition=0.0;
-
-            //we measure all objectives locally -- just to make it simpler
-            for(var o=0; o < genome.objectives.length; o++)
-                genome.localObjectivesCompetition[o] = 0.0;
-        }
-
-       var ng;
-        var max = 0.0, min = 100000000000.0;
-
-        for (var i = 0; i< count; i++)
-        {
-            ng = self.population[i];
-            var fit = self.nov.measureNovelty(ng);
-
-            //reset our fitness value to be local, yeah boyee
-            //the first objective is fitness which is replaced with local fitness -- how many did you beat around you
-            // # won / total number of neighbors = % competitive
-            ng.objectives[0] = ng.competition / ng.nearestNeighbors;
-            ng.objectives[ng.objectives.length - 2] = fit + 0.01;
-
-            //the last local measure is the genome novelty measure
-            var localGenomeNovelty = ng.localObjectivesCompetition[ng.objectives.length-1];
-
-            //genomic novelty is measured locally as well
-            console.log("Genomic Novelty: " + ng.objectives[ng.objectives.length - 1] + " After: " + localGenomeNovelty / ng.nearestNeighbors);
-
-            //this makes genomic novelty into a local measure
-            ng.objectives[ng.objectives.length - 1] = localGenomeNovelty / ng.nearestNeighbors;
-
-            if(fit>max) max=fit;
-            if(fit<min) min=fit;
-
-        }
-
-        console.log("nov min: "+ min + " max:" + max);
-    };
-
-    //if genome x dominates y, increment y's dominated count, add y to x's dominated list
-    self.updateDomination = function( x,  y,  r1, r2)
-    {
-        if(self.dominates(x,y)) {
-            r1.dominates.push(r2);
-            r2.dominationCount++;
-        }
-    };
-
-
-    //function to check whether genome x dominates genome y, usually defined as being no worse on all
-    //objectives, and better at at least one
-    self.dominates = function( x,  y) {
-        var better=false;
-        var objx = x.objectives, objy = y.objectives;
-
-        var sz = objx.length;
-
-        //if x is ever worse than y, it cannot dominate y
-        //also check if x is better on at least one
-        for(var i=0;i<sz-1;i++) {
-            if(objx[i]<objy[i]) return false;
-            if(objx[i]>objy[i]) better=true;
-        }
-
-        //genomic novelty check, disabled for now
-        //threshold set to 0 -- Paul since genome is local
-        var thresh=0.0;
-        if((objx[sz-1]+thresh)<(objy[sz-1])) return false;
-        if((objx[sz-1]>(objy[sz-1]+thresh))) better=true;
-
-        return better;
-    };
-
-    //distance function between two lists of objectives, used to see if two individuals are unique
-    self.distance = function(x, y) {
-        var delta=0.0;
-        var len = x.length;
-        for(var i=0;i<len;i++) {
-            var d=x[i]-y[i];
-            delta+=d*d;
-        }
-        return delta;
-    };
-
-
-    //Todo: Print to file
-    self.printDistribution = function()
-    {
-        var filename="dist"+    self.generation+".txt";
-        var content="";
-
-        console.log("Print to file disabled for now, todo: write in save to file!");
-//            XmlDocument archiveout = new XmlDocument();
-//            XmlPopulationWriter.WriteGenomeList(archiveout, population);
-//            archiveout.Save(filename);
-    };
-
-    //currently not used, calculates genomic novelty objective for protecting innovation
-    //uses a rough characterization of topology, i.e. number of connections in the genome
-    self.calculateGenomicNovelty = function() {
-        var sum=0.0;
-        var max_conn = 0;
-
-        var xx, yy;
-
-        for(var g=0; g < self.population.length; g++) {
-            xx = self.population[g];
-            var minDist=10000000.0;
-
-            var difference=0.0;
-            var delta=0.0;
-            //double array
-            var distances= [];
-
-            if(xx.connections.length > max_conn)
-                max_conn = xx.connections.length;
-
-            //int ccount=xx.ConnectionGeneList.Count;
-            for(var g2=0; g2 < self.population.length; g2++) {
-                yy = self.population[g2];
-                if(g==g2)
-                    continue;
-
-                //measure genomic compatability using neatparams
-                var d = xx.compat(yy, np);
-                //if(d<minDist)
-                //	minDist=d;
-
-                distances.push(d);
-            }
-            //ascending order
-            //want the closest individuals
-            distances.Sort(function(a,b) {return a-b;});
-
-            //grab the 10 closest distances
-            var sz=Math.min(distances.length,10);
-
-            var diversity = 0.0;
-
-            for(var i=0;i<sz;i++)
-                diversity+=distances[i];
-
-            xx.objectives[xx.objectives.length-1] = diversity;
-            sum += diversity;
-        }
-        console.log("Diversity: " + sum/population.length + " " + max_conn);
-    };
-
-
-
-    //add an existing population from hypersharpNEAT to the multiobjective population maintained in
-    //this class, step taken before evaluating multiobjective population through the rank function
-    self.addPopulation = function(genomes)
-    {
-
-        for(var i=0;i< genomes.length;i++)
-        {
-            var blacklist=false;
-
-            //TODO: I'm not sure this is correct, since genomes coming in aren't measured locally yet
-            //so in some sense, we're comparing local measures to global measures and seeing how far
-            //if they are accidentally close, this could be bad news
-//                for(var j=0;j<self.population.length; j++)
-//                {
-//                    if(self.distance(genomes[i].behavior.objectives, self.population[j].objectives) < 0.01)
-//                        blacklist=true;  //reject a genome if it is very similar to existing genomes in pop
-//                }
-            //no duplicates please
-            if(self.populationIDs[genomes[i].gid])
-                blacklist = true;
-
-            //TODO: Test if copies are needed, or not?
-            if(!blacklist) {
-                //add genome if it is unique
-                //we might not need to make copies
-                //this will make a copy of the behavior
-//                    var copy = new neatGenome.NeatGenome.Copy(genomes[i], genomes[i].gid);
-//                    self.population.push(copy);
-
-                //push directly into population, don't use copy -- should test if this is a good idea?
-                self.population.push(genomes[i]);
-                self.populationIDs[genomes[i].gid] = genomes[i];
-
-            }
-
-        }
-
-    };
-
-
-
-    self.rankGenomes = function()
-    {
-        var size = self.population.length;
-
-        self.calculateGenomicNovelty();
-        if(self.doNovelty) {
-            self.measureNovelty();
-        }
-
-        //reset rank information
-        for(var i=0;i<size;i++) {
-            if(self.ranks.length<i+1)
-                self.ranks.push(new MultiobjectiveSearch.RankInfo());
-            else
-                self.ranks[i].reset();
-        }
-        //calculate domination by testing each genome against every other genome
-        for(var i=0;i<size;i++) {
-            for(var j=0;j<size;j++) {
-                self.updateDomination(self.population[i], self.population[j],self.ranks[i],self.ranks[j]);
-            }
-        }
-
-        //successively peel off non-dominated fronts (e.g. those genomes no longer dominated by any in
-        //the remaining population)
-        var front = [];
-        var ranked_count=0;
-        var current_rank=1;
-        while(ranked_count < size) {
-            //search for non-dominated front
-            for(var i=0;i<size;i++)
-            {
-                //continue if already ranked
-                if(self.ranks[i].ranked) continue;
-                //if not dominated, add to front
-                if(self.ranks[i].dominationCount==0) {
-                    front.push(i);
-                    self.ranks[i].ranked=true;
-                    self.ranks[i].rank = current_rank;
-                }
-            }
-
-            var front_size = front.length;
-            console.log("Front " + current_rank + " size: " + front_size);
-
-            //now take all the non-dominated individuals, see who they dominated, and decrease
-            //those genomes' domination counts, because we are removing this front from consideration
-            //to find the next front of individuals non-dominated by the remaining individuals in
-            //the population
-            for(var i=0;i<front_size;i++) {
-                var r = self.ranks[front[i]];
-                for (var dominated in r.dominates) {
-                    dominated.dominationCount--;
-                }
-            }
-
-            ranked_count+=front_size;
-            front = [];
-            current_rank++;
-        }
-
-        //we save the last objective for potential use as genomic novelty objective
-        var last_obj = self.population[0].objectives.length-1;
-
-        //fitness = popsize-rank (better way might be maxranks+1-rank), but doesn't matter
-        //because speciation is not used and tournament selection is employed
-        for(var i=0;i<size;i++) {
-            self.population[i].fitness = (size+1)-self.ranks[i].rank;//+population[i].objectives[last_obj]/100000.0;
-    }
-
-        //sorting based on fitness
-        MultiobjectiveSearch.Help.SortPopulation(self.population);
-
-        self.generation++;
-
-        if(self.generation%250==0)
-            self.printDistribution();
-    };
-
-    //when we merge populations together, often the population will overflow, and we need to cut
-    //it down. to do so, we just remove the last x individuals, which will be in the less significant
-    //pareto fronts
-    self.truncatePopulation = function(size)
-    {
-        var toRemove = self.population.length - size;
-        console.log("population size before: " + self.population.length);
-        console.log("removing " + toRemove);
-
-        //remove the tail after sorting
-        if(toRemove > 0)
-            self.population.splice(size, toRemove);
-
-        //changes to population, make sure to update our lookup
-        self.populationIDs = NeatGenome.Help.CreateGIDLookup(self.population);
-
-        console.log("population size after: " + self.population.length);
-
-        return self.population;
-    };
-
-};
-
-function MultiobjectiveSearch(seedGenomes, genomeEvaluationFunctions, neatParameters, searchParameters)
-{
-    var self=this;
-
-    //functions for evaluating genomes in a population
-    self.genomeEvaluationFunctions = genomeEvaluationFunctions;
-
-    self.generation = 0;
-    self.np = neatParameters;
-    self.searchParameters = searchParameters;
-
-    //for now, we just set seed genomes as population
-    //in reality, we should use seed genomes as seeds into population determined by search parameters
-    //i.e. 5 seed genomes -> 50 population size
-    //TODO: Turn seed genomes into full first population
-    self.population = seedGenomes;
-
-    //create genome lookup once we have population
-    self.populationIDs = NeatGenome.Help.CreateGIDLookup(seedGenomes);
-
-
-    //see end of multiobjective search declaration for initailization code
-    self.multiobjective= new MultiobjectiveSearch.multiobjectiveUtilities(neatParameters);
-    self.np.compatibilityThreshold = 100000000.0; //disable speciation w/ multiobjective
-
-    self.initializePopulation = function()
-    {
-        // The GenomeFactories normally won't bother to ensure that like connections have the same ID
-        // throughout the population (because it's not very easy to do in most cases). Therefore just
-        // run this routine to search for like connections and ensure they have the same ID.
-        // Note. This could also be done periodically as part of the search, remember though that like
-        // connections occuring within a generation are already fixed - using a more efficient scheme.
-        self.matchConnectionIDs();
-
-        // Evaluate the whole population.
-        self.evaluatePopulation();
-
-        //TODO: Add in some concept of speciation for NSGA algorithm -- other than genomic novelty?
-        //We don't do speciation for NSGA-II algorithm
-
-        // Now we have fitness scores and no speciated population we can calculate fitness stats for the
-        // population as a whole -- and save best genomes
-        //recall that speciation is NOT part of NSGA-II
-        self.updateFitnessStats();
-
-    };
-
-    self.matchConnectionIDs = function()
-    {
-        var connectionIdTable = {};
-
-        var genomeBound = self.population.length;
-        for(var genomeIdx=0; genomeIdx<genomeBound; genomeIdx++)
-        {
-            var genome = self.population[genomeIdx];
-
-            //loop through all the connections for this genome
-            var connectionGeneBound = genome.connections.length;
-            for(var connectionGeneIdx=0; connectionGeneIdx<connectionGeneBound; connectionGeneIdx++)
-            {
-                var connectionGene = genome.connections[connectionGeneIdx];
-
-                var ces = connectionGene.sourceID + "," + connectionGene.targetID;
-
-                var existingID = connectionIdTable[ces];
-
-                if(existingID==null)
-                {	// No connection withthe same end-points has been registered yet, so
-                    // add it to the table.
-                    connectionIdTable[ces] = connectionGene.gid;
-                }
-                else
-                {	// This connection is already registered. Give our latest connection
-                    // the same innovation ID as the one in the table.
-                    connectionGene.gid = existingID;
-                }
-            }
-            // The connection genes in this genome may now be out of order. Therefore we must ensure
-            // they are sorted before we continue.
-            genome.connections.sort(function(a,b){
-               return a.gid - b.gid;
-            });
-        }
-    };
-
-    self.incrementAges = function()
-    {
-        //would normally increment species age as  well, but doesn't happen in multiobjective
-        for(var i=0; i < self.population.length; i++)
-        {
-            var ng = self.population[i];
-            ng.age++;
-        }
-    };
-    self.updateFitnessStats = function()
-    {
-        self.bestFitness = Number.MIN_VALUE;
-        self.bestGenome = null;
-        self.totalNeuronCount = 0;
-        self.totalConnectionCount = 0;
-        self.totalFitness = 0;
-        self.avgComplexity = 0;
-        self.meanFitness =0;
-
-        //go through the genomes, find the best genome and the most fit
-        for(var i=0; i < self.population.length; i++)
-        {
-            var ng = self.population[i];
-            if(ng.realFitness > self.bestFitness)
-            {
-                self.bestFitness = ng.realFitness;
-                self.bestGenome = ng;
-            }
-            self.totalNeuronCount += ng.nodes.length;
-            self.totalConnectionCount += ng.connections.length;
-            self.totalFitness += ng.realFitness;
-        }
-
-        self.avgComplexity = (self.totalNeuronCount + self.totalConnectionCount)/self.population.length;
-        self.meanFitness = self.totalFitness/self.population.length;
-
-    };
-
-    self.tournamentSelect = function(genomes)
-    {
-        var bestFound= 0.0;
-        var bestGenome=null;
-        var bound = genomes.length;
-
-        //grab the best of 4 by default, can be more attempts than that
-        for(var i=0;i<self.np.tournamentSize;i++) {
-            var next= genomes[utilities.next(bound)];
-            if (next.fitness > bestFound) {
-                bestFound=next.fitness;
-                bestGenome=next;
-            }
-        }
-
-        return bestGenome;
-    };
-
-
-    self.evaluatePopulation= function()
-    {
-        //for each genome, we need to check if we should evaluate the individual, and then evaluate the individual
-
-        //default everyone is evaluated
-        var shouldEvaluate = self.genomeEvaluationFunctions.shouldEvaluateGenome || function(){return true;};
-        var defaultFitness = self.genomeEvaluationFunctions.defaultFitness || 0.0001;
-
-        if(!self.genomeEvaluationFunctions.evaluateGenome)
-            throw new Error("No evaluation function defined, how are you supposed to run evolution?");
-
-        var evaluateGenome = self.genomeEvaluationFunctions.evaluateGenome;
-
-        for(var i=0; i < self.population.length; i++)
-        {
-            var ng = self.population[i];
-
-            var fit = defaultFitness;
-
-            if(shouldEvaluate(ng))
-            {
-                fit = evaluateGenome(ng, self.np);
-            }
-
-            ng.fitness = fit;
-            ng.realFitness = fit;
-        }
-
-    };
-
-    self.performOneGeneration = function()
-    {
-        //No speciation in multiobjective
-        //therefore no species to check for removal
-
-        //----- Stage 1. Create offspring / cull old genomes / add offspring to population.
-        var regenerate = false;
-
-        self.multiobjective.addPopulation(self.population);
-        self.multiobjective.rankGenomes();
-
-
-        //cut the population down to the desired size
-        self.multiobjective.truncatePopulation(self.population.length);
-        //no speciation necessary
-
-        //here we can decide if we want to save to WIN
-
-        self.updateFitnessStats();
-
-        if(!regenerate)
-        {
-            self.createOffSpring();
-
-            //we need to trim population to the elite count, then replace
-            //however, this doesn't affect the multiobjective population -- just the population held in search at the time
-            MultiobjectiveSearch.Help.SortPopulation(self.population);
-            var eliteCount = Math.floor(self.np.elitismProportion*self.population.length);
-
-            //remove everything but the most elite!
-            self.population.splice(eliteCount, self.population.length - eliteCount);
-
-            // Add offspring to the population.
-            var genomeBound = self.offspringList.length;
-            for(var genomeIdx=0; genomeIdx<genomeBound; genomeIdx++)
-                self.population.push(self.offspringList[genomeIdx]);
-        }
-
-        //----- Stage 2. Evaluate genomes / Update stats.
-        self.evaluatePopulation();
-        self.updateFitnessStats();
-
-        self.incrementAges();
-        self.generation++;
-
-    };
-
-
-    self.createOffSpring = function()
-    {
-        self.offspringList = [];
-
-        // Create a new lists so that we can track which connections/neurons have been added during this routine.
-        self.newConnectionTable = [];
-        self.newNodeTable = [];
-
-        //now create chunk of offspring asexually
-        self.createMultipleOffSpring_Asexual();
-        //then the rest sexually
-        self.createMultipleOffSpring_Sexual();
-    };
-    self.createMultipleOffSpring_Asexual = function()
-    {
-        //function for testing if offspring is valid
-        var validOffspring = self.genomeEvaluationFunctions.isValidOffspring || function() {return true;};
-        var attemptValid = self.genomeEvaluationFunctions.validOffspringAttempts || 5;
-
-        var eliteCount = Math.floor(self.np.elitismProportion*self.population.length);
-
-
-        //how many asexual offspring? Well, the proportion of asexual * total number of desired new individuals
-        var offspringCount = Math.max(1, Math.round((self.population.length - eliteCount)*self.np.pOffspringAsexual));
-
-        // Add offspring to a seperate genomeList. We will add the offspring later to prevent corruption of the enumeration loop.
-        for(var i=0; i<offspringCount; i++)
-        {
-            var parent=null;
-
-            //tournament select in multiobjective search
-            parent = self.tournamentSelect(self.population);
-
-            var offspring = parent.createOffspringAsexual(self.newNodeTable, self.newConnectionTable, self.np);
-            var testCount = 0, maxTests = attemptValid;
-
-            //if we have a valid genotype test function, it should be used for generating this individual!
-            while (!validOffspring(offspring, self.np) && testCount++ < maxTests)
-                offspring = parent.createOffspringAsexual(self.newNodeTable, self.newConnectionTable, self.np);
-
-            //we have a valid offspring, send it away!
-            self.offspringList.push(offspring);
-        }
-    };
-
-    self.createMultipleOffSpring_Sexual = function()
-    {
-        //function for testing if offspring is valid
-        var validOffspring = self.genomeEvaluationFunctions.isValidOffspring || function() {return true;};
-        var attemptValid = self.genomeEvaluationFunctions.validOffspringAttempts || 5;
-
-        var oneMember=false;
-        var twoMembers=false;
-
-        if(self.population.length == 1)
-        {
-            // We can't perform sexual reproduction. To give the species a fair chance we call the asexual routine instead.
-            // This keeps the proportions of genomes per species steady.
-            oneMember = true;
-        }
-        else if(self.population.length==2)
-            twoMembers = true;
-
-        // Determine how many sexual offspring to create.
-        var eliteCount = Math.floor(self.np.elitismProportion*self.population.length);
-
-        //how many sexual offspring? Well, the proportion of sexual * total number of desired new individuals
-        var matingCount = Math.round((self.population.length - eliteCount)*self.np.pOffspringSexual);
-
-        for(var i=0; i<matingCount; i++)
-        {
-            var parent1;
-            var parent2=null;
-            var offspring;
-
-            if(utilities.nextDouble() < self.np.pInterspeciesMating)
-            {	// Inter-species mating!
-                //System.Diagnostics.Debug.WriteLine("Inter-species mating!");
-                if(oneMember)
-                    parent1 = self.population[0];
-                else  {
-                    //tournament select in multiobjective search
-                    parent1 = self.tournamentSelect(self.population);
-                }
-
-                // Select the 2nd parent from the whole popualtion (there is a chance that this will be an genome
-                // from this species, but that's OK).
-                var j=0;
-                do
-                {
-                    parent2  = self.tournamentSelect(self.population);
-                }
-
-                while(parent1==parent2 && j++ < 4);	// Slightly wasteful but not too bad. Limited by j.
-            }
-            else
-            {	// Mating within the current species.
-                //System.Diagnostics.Debug.WriteLine("Mating within the current species.");
-                if(oneMember)
-                {	// Use asexual reproduction instead.
-                    offspring = self.population[0].createOffspringAsexual(self.newNodeTable, self.newConnectionTable, self.np);
-
-                    var testCount = 0; var maxTests = attemptValid;
-                    //if we have an assess function, it should be used for generating this individual!
-                    while (!validOffspring(offspring) && testCount++ < maxTests)
-                        offspring = self.population[0].createOffspringAsexual(self.newNodeTable, self.newConnectionTable, self.np);
-
-                    self.offspringList.push(offspring);
-                    continue;
-                }
-
-                if(twoMembers)
-                {
-                    offspring = self.population[0].createOffspringSexual(self.population[1], self.np);
-
-                    var testCount = 0; var maxTests = attemptValid;
-
-                    //if we have an assess function, it should be used for generating this individual!
-                    while (!validOffspring(offspring) && testCount++ < maxTests)
-                        offspring = self.population[0].createOffspringSexual(self.population[1], self.np);
-
-                    self.offspringList.push(offspring);
-                    continue;
-                }
-
-                parent1 = self.tournamentSelect(self.population);
-
-                var j=0;
-                do
-                {
-                    parent2 = self.tournamentSelect(self.population);
-                }
-                while(parent1==parent2 && j++ < 4);	// Slightly wasteful but not too bad. Limited by j.
-            }
-
-            if(parent1 != parent2)
-            {
-                offspring = parent1.createOffspringSexual(parent2, self.np);
-
-                var testCount = 0; var maxTests = attemptValid;
-                //if we have an assess function, it should be used for generating this individual!
-                while (!validOffspring(offspring) && testCount++ < maxTests)
-                    offspring = parent1.createOffspringSexual(parent2, self.np);
-
-                self.offspringList.push(offspring);
-            }
-            else
-            {	// No mating pair could be found. Fallback to asexual reproduction to keep the population size constant.
-                offspring = parent1.createOffspringAsexual(self.newNodeTable, self.newConnectionTable,self.np);
-
-                var testCount = 0; var maxTests = attemptValid;
-                //if we have an assess function, it should be used for generating this individual!
-                while (!validOffspring(offspring) && testCount++ < maxTests)
-                    offspring = parent1.createOffspringAsexual(self.newNodeTable, self.newConnectionTable,self.np);
-
-                self.offspringList.push(offspring);
-            }
-        }
-
-    };
-
-
-
-    //finishing initalizatgion of object
-    self.initializePopulation();
-
-
-}
-
-});
-
-require.register("optimuslime~neatjs@master/evolution/novelty.js", function (exports, module) {
-/**
- * Module dependencies.
- */
-
-var NeatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
-var utilities =  require("optimuslime~cppnjs@master").utilities;
-
-/**
- * Expose `NeatNode`.
- */
-
-module.exports = Novelty;
-
-/**
- * Initialize a new NeatNode.
- *
- * @param {Number} threshold
- * @api public
- */
-function Novelty(threshold)
-{
-    var self = this;
-
-    self.nearestNeighbors = 20;
-    self.initialized = false;
-    self.archiveThreshold = threshold;
-    self.measureAgainst = [];
-    self.archive = [];
-    self.pendingAddition = [];
-
-    self.maxDistSeen = Number.MIN_VALUE;
-}
-
-
-Novelty.Behavior = function()
-{
-    var self =this;
-    self.behaviorList = null;
-    self.objectives = null;
-};
-
-Novelty.Behavior.BehaviorCopy = function(copyFrom)
-{
-    var behavior = new novelty.Behavior();
-    if(copyFrom.behaviorList)
-    {
-        //copy the behavior over
-        behavior.behaviorList = copyFrom.behaviorList.slice(0);
-    }
-    //if you have objectives filled out, take those too
-    if(copyFrom.objectives)
-    {
-        behavior.objectives = copyFrom.objectives.slice(0);
-    }
-    //finished copying behavior
-    return behavior;
-};
-
-Novelty.Behavior.distance = function(x, y)
-{
-    var dist = 0.0;
-
-    if(!x.behaviorList || !y.behaviorList)
-        throw new Error("One of the behaviors is empty, can't compare distance!");
-
-    //simple calculation, loop through double array and sum up square differences
-    for(var k=0;k<x.behaviorList.length;k++)
-    {
-        var delta = x.behaviorList[k]-y.behaviorList[k];
-        dist += delta*delta;
-    }
-
-    //return square distance of behavior
-    return dist;
-};
-
-
-Novelty.prototype.addPending = function()
-{
-    var self = this;
-
-    var length = self.pendingAddition.length;
-
-    if(length === 0)
-    {
-        self.archiveThreshold *= .95;
-    }
-    if(length > 5)
-    {
-        self.archiveThreshold *= 1.3;
-    }
-
-    //for all of our additions to the archive,
-    //check against others to see if entered into archive
-    for(var i=0; i < length; i++)
-    {
-        if(self.measureAgainstArchive(self.pendingAddition[i], false))
-            self.archive.push(self.pendingAddition[i]);
-    }
-
-    //clear it all out
-    self.pendingAddition = [];
-};
-
-Novelty.prototype.measureAgainstArchive = function(neatgenome, addToPending)
-{
-    var self = this;
-
-    for(var genome in self.archive)
-    {
-        var dist = novelty.Behavior.distance(neatgenome.behavior, genome.behavior);
-
-        if(dist > self.maxDistSeen)
-        {
-            self.maxDistSeen = dist;
-            console.log('Most novel dist: ' + self.maxDistSeen);
-        }
-
-        if(dist < self.archiveThreshold)
-            return false;
-
-    }
-
-    if(addToPending)
-    {
-        self.pendingAddition.push(neatgenome);
-    }
-
-    return true;
-};
-
-//measure the novelty of an organism against the fixed population
-Novelty.prototype.measureNovelty = function(neatgenome)
-{
-    var sum = 0.0;
-    var self = this;
-
-    if(!self.initialized)
-        return Number.MIN_VALUE;
-
-    var noveltyList = [];
-
-    for(var genome in self.measureAgainst)
-    {
-        noveltyList.push(
-            {distance: novelty.Behavior.distance(genome, neatgenome.behavior),
-            genome: genome}
-        );
-    }
-
-    for(var genome in self.archive)
-    {
-        noveltyList.push(
-            {distance: novelty.Behavior.distance(genome, neatgenome.behavior),
-                genome: genome}
-        );
-    }
-
-    //see if we should add this genome to the archive
-    self.measureAgainstArchive(neatgenome,true);
-
-    noveltyList.sort(function(a,b){return b.distance - a.distance});
-    var nn = self.nearestNeighbors;
-    if(noveltyList.length < self.nearestNeighbors) {
-        nn=noveltyList.length;
-    }
-
-    neatgenome.nearestNeighbors = nn;
-
-    //Paul - reset local competition and local genome novelty -- might have been incrementing over time
-    //Not sure if that's the intention of the algorithm to keep around those scores to signify longer term success
-    //this would have a biasing effect on individuals that have been around for longer
-//            neatgenome.competition = 0;
-//            neatgenome.localGenomeNovelty = 0;
-
-    //TODO: Verify this is working - are local objectives set up, is this measuring properly?
-    for (var x = 0; x < nn; x++)
-    {
-        sum += noveltyList[x].distance;
-
-        if (neatgenome.realFitness > noveltyList[x].genome.realFitness)
-            neatgenome.competition += 1;
-
-        //compare all the objectives, and locally determine who you are beating
-        for(var o =0; o < neatgenome.objectives.length; o++)
-        {
-            if(neatgenome.objectives[o] > noveltyList[x].genome.objectives[o])
-                neatgenome.localObjectivesCompetition[o] += 1;
-        }
-
-        noveltyList[x].genome.locality += 1;
-        // sum+=10000.0; //was 100
-    }
-    //neatgenome.locality = 0;
-    //for(int x=0;x<nn;x++)
-    //{
-    //    sum+=noveltyList[x].First;
-
-    //    if(neatgenome.RealFitness>noveltyList[x].Second.RealFitness)
-    //        neatgenome.competition+=1;
-
-    //    noveltyList[x].Second.locality+=1;
-    //    //Paul: This might not be the correct meaning of locality, but I am hijacking it instead
-    //    //count how many genomes we are neighbored to
-    //    //then, if we take neatgenome.competition/neatgenome.locality - we get percentage of genomes that were beaten locally!
-    //    neatgenome.locality += 1;
-    //    // sum+=10000.0; //was 100
-    //}
-    return Math.max(sum, .0001);
-}
-
-//Todo REFINE... adding highest fitness might
-//not correspond with most novel?
-Novelty.prototype.add_most_novel = function(genomes)
-{
-    var self = this;
-
-    var max_novelty =0;
-    var best= null;
-
-    for(var i=0;i<genomes.length;i++)
-    {
-        if(genomes[i].fitness > max_novelty)
-        {
-            best = genomes[i];
-            max_novelty = genomes[i].fitness;
-        }
-    }
-    self.archive.push(best);
-};
-
-
-Novelty.prototype.initialize = function(genomes)
-{
-    var self = this;
-    self.initialized = true;
-
-    self.measureAgainst = [];
-
-    if(genomes !=null){
-        for(var i=0;i<genomes.length;i++)
-        {
-            //we might not need to make copies
-            //Paul: removed copies to make it easier to read the realfitness from the indiviudals, without making a million update calls
-            self.measureAgainst.push(genomes[i]);//new NeatGenome.NeatGenome((NeatGenome.NeatGenome)p[i],i));
-        }
-    }
-};
-
-//update the measure population by intelligently sampling
-//the current population + archive + fixed population
-Novelty.prototype.update_measure = function(genomes)
-{
-    var self = this;
-
-    var total = [];
-
-    //we concatenate copies of the genomes, the measureagainst and archive array
-    var total = genomes.slice(0).concat(self.measureAgainst.slice(0), self.archive.slice(0));
-
-    self.mergeTogether(total, genomes.length);
-
-    console.log("Size: " + self.measureAgainst.length);
-}
-
-Novelty.prototype.mergeTogether = function(list, size)
-{
-    var self = this;
-
-    console.log("total count: "+ list.length);
-
-//            Random r = new Random();
-    var newList = [];
-
-
-
-    //bool array
-    var dirty = [];
-    //doubles
-    var closest = [];
-
-    //set default values
-    for(var x=0;x<list.length;x++)
-    {
-        dirty.push(false);
-        closest.push(Number.MAX_VALUE);
-    }
-    //now add the first individual randomly to the new population
-    var last_added = utilities.next(list.length);
-    dirty[last_added] = true;
-    newList.push(list[last_added]);
-
-    while(newList.length < size)
-    {
-        var mostNovel = 0.0;
-        var mostNovelIndex = 0;
-        for(var x=0;x<list.length;x++)
-        {
-            if (dirty[x])
-                continue;
-            var dist_to_last = novelty.Behavior.distance(list[x].behavior,
-            list[last_added].behavior);
-
-            if (dist_to_last < closest[x])
-                closest[x] = dist_to_last;
-
-            if (closest[x] > mostNovel)
-            {
-                mostNovel = closest[x];
-                mostNovelIndex = x;
-            }
-        }
-
-        dirty[mostNovelIndex] = true;
-        newList.push(NeatGenome.Copy(list[mostNovelIndex],0));
-        last_added = mostNovelIndex;
-    }
-
-    self.measureAgainst = newList;
-};
-
-Novelty.prototype.updatePopulationFitness = function(genomes)
-{
-    var self = this;
-
-    for (var i = 0; i < genomes.length; i++)
-    {
-        //we might not need to make copies
-        self.measureAgainst[i].realFitness = genomes[i].realFitness;
-    }
-};
-
-});
-
-require.register("optimuslime~neatjs@master/genome/neatConnection.js", function (exports, module) {
-
-/**
- * Module dependencies.
- */
-//none
-
-/**
- * Expose `NeatConnection`.
- */
-
-module.exports = NeatConnection;
-
-/**
- * Initialize a new NeatConnection.
- *
- * @param {String} gid
- * @param {Number} weight
- * @param {Object} srcTgtObj
- * @api public
- */
-
-function NeatConnection(gid, weight, srcTgtObj) {
-
-    var self = this;
-    //Connection can be inferred by the cantor pair in the gid, however, in other systems, we'll need a source and target ID
-
-    //gid must be a string
-    self.gid = typeof gid === "number" ? "" + gid : gid;//(typeof gid === 'string' ? parseFloat(gid) : gid);
-    self.weight = (typeof weight === 'string' ? parseFloat(weight) : weight);
-
-    //node ids are strings now -- so make sure to save as string always
-    self.sourceID = (typeof srcTgtObj.sourceID === 'number' ? "" + (srcTgtObj.sourceID) : srcTgtObj.sourceID);
-    self.targetID = (typeof srcTgtObj.targetID === 'number' ? "" + (srcTgtObj.targetID) : srcTgtObj.targetID);
-
-    //learning rates and modulatory information contained here, not generally used or tested
-    self.a =0;
-    self.b =0;
-    self.c =0;
-    self.d =0;
-    self.modConnection=0;
-    self.learningRate=0;
-
-    self.isMutated=false;
-}
-
-
-NeatConnection.Copy = function(connection)
-{
-    return new NeatConnection(connection.gid, connection.weight, {sourceID: connection.sourceID, targetID: connection.targetID});
-};
-});
-
-require.register("optimuslime~neatjs@master/genome/neatNode.js", function (exports, module) {
-/**
- * Module dependencies.
- */
-//none
-
-/**
- * Expose `NeatNode`.
- */
-
-module.exports = NeatNode;
-
-/**
- * Initialize a new NeatNode.
- *
- * @param {String} gid
- * @param {Object,String} aFunc
- * @param {Number} layer
- * @param {Object} typeObj
- * @api public
- */
-function NeatNode(gid, aFunc, layer, typeObj) {
-
-    var self = this;
-
-    //gids are strings not numbers -- make it so
-    self.gid =  typeof gid === "number" ? "" + gid : gid;
-    //we only story the string of the activation funciton
-    //let cppns deal with actual act functions
-    self.activationFunction = aFunc.functionID || aFunc;
-
-    self.nodeType = typeObj.type;
-
-    self.layer = (typeof layer === 'string' ? parseFloat(layer) : layer);
-
-    //TODO: Create step tests, include in constructor
-    self.step = 0;
-
-    self.bias = 0;
-}
-
-NeatNode.INPUT_LAYER = 0.0;
-NeatNode.OUTPUT_LAYER = 10.0;
-
-NeatNode.Copy = function(otherNode)
-{
-    return new NeatNode(otherNode.gid, otherNode.activationFunction, otherNode.layer, {type: otherNode.nodeType});
-};
-});
-
-require.register("optimuslime~neatjs@master/genome/neatGenome.js", function (exports, module) {
-/**
- * Module dependencies.
- */
-
-//pull in our cppn lib
-var cppnjs = require("optimuslime~cppnjs@master");
-
-//grab our activation factory, cppn object and connections
-var CPPNactivationFactory = cppnjs.cppnActivationFactory;
-var utilities = cppnjs.utilities;
-
-//neatjs imports
-var novelty = require("optimuslime~neatjs@master/evolution/novelty.js");
-var NeatConnection = require("optimuslime~neatjs@master/genome/neatConnection.js");
-var NeatNode = require("optimuslime~neatjs@master/genome/neatNode.js");
-
-//help and params
-var neatHelp =  require("optimuslime~neatjs@master/neatHelp/neatHelp.js");
-var neatParameters =  require("optimuslime~neatjs@master/neatHelp/neatParameters.js");
-var neatDecoder =  require("optimuslime~neatjs@master/neatHelp/neatDecoder.js");
-
-var wUtils = require("optimuslime~win-utils@master");
-var uuid = wUtils.cuid;
-
-//going to need to read node types appropriately
-var NodeType = require("optimuslime~neatjs@master/types/nodeType.js");
-
-/**
- * Expose `NeatGenome`.
- */
-
-module.exports = NeatGenome;
-
-/**
- * Decodes a neatGenome in a cppn.
- *
- * @param {String} gid
- * @param {Array} nodes
- * @param {Array} connections
- * @param {Number} incount
- * @param {Number} outcount
- * @param {Boolean} debug
- * @api public
- */
-function NeatGenome(gid, nodes, connections, incount, outcount, debug) {
-
-    var self = this;
-
-    self.gid = gid;
-    self.fitness = 0;
-
-    // From C#: Ensure that the connectionGenes are sorted by innovation ID at all times.
-    self.nodes = nodes;
-    self.connections = connections;
-
-    //we start a fresh set of mutations for each genome we create!
-    self.mutations = [];
-
-    self.debug = debug;
-
-    //keep track of behavior for novelty
-    self.behavior = new novelty.Behavior();
-    //keep track of "real" fitness - that is the objective measure we've observed
-    self.realFitness = 0;
-    self.age = 0;
-
-    self.localObjectivesCompetition = [];
-
-    self.meta = {};
-
-    //TODO: Hash nodes, connections, and meta to make a global ID! 128-bit md5 hash?
-    //WIN will assign a globalID or gid
-//        self.gid = //get hash
-
-
-    // From C#: For efficiency we store the number of input and output neurons. These two quantities do not change
-// throughout the life of a genome. Note that inputNeuronCount does NOT include the bias neuron! use inputAndBiasNeuronCount.
-// We also keep all input(including bias) neurons at the start of the neuronGeneList followed by
-// the output neurons.
-    self.inputNodeCount= incount;
-    self.inputAndBiasNodeCount= incount+1;
-    self.outputNodeCount= outcount;
-    self.inputBiasOutputNodeCount= self.inputAndBiasNodeCount + self.outputNodeCount;
-    self.inputBiasOutputNodeCountMinus2= self.inputBiasOutputNodeCount -2;
-
-
-
-    self.networkAdaptable= false;
-    self.networkModulatory= false;
-    // Temp tables.
-    self.connectionLookup = null;
-    self.nodeLookup = null;
-
-    /// From C#: A table that keeps a track of which connections have added to the sexually reproduced child genome.
-    /// This is cleared on each call to CreateOffspring_Sexual() and is only declared at class level to
-    /// prevent having to re-allocate the table and it's associated memory on each invokation.
-//        self.newConnectionTable = null;
-//        self.newNodeTable= null;
-//        self.newConnectionList= null;
-
-    self.parent = null;
-
-}
-
-//Define the helper functions here!
-NeatGenome.Help = {};
-
-var genomeCount = 0;
-
-NeatGenome.Help.nextGenomeID = function()
-{
-    return genomeCount++;
-};
-NeatGenome.Help.currentGenomeID = function(){
-    return genomeCount;
-};
-NeatGenome.Help.resetGenomeID = function(value){
-    if(value ===undefined ){
-        genomeCount = 0;
-        return;
-    }
-    genomeCount = value;
-};
-
-
-var innovationCount = 0;
-var lastID = -1;
-var hitCount = 0;
-//wouldn't work with multithreaded/multi-process environment
-NeatGenome.Help.nextInnovationID = function(ix)
-{
-    if(ix !== undefined)
-        return "" + ix;
-
-    //generate random string quickly (unlikely to cause local collisions on any machine)
-    //no more number based stuff -- all string now
-    return uuid();
-    // var id = 1000*(new Date().valueOf());//innovationCount++;
-    // if(lastID === id)
-    //     hitCount++;
-    // else
-    //     hitCount = 0;
-
-
-    // lastID = id;
-    // return id + (hitCount%1000);
-};
-
-// NeatGenome.Help.currentInnovationID = function(){
-//     return innovationCount;
-// };
-// NeatGenome.Help.resetInnovationID = function(value){
-//     if(value === undefined ){
-//         innovationCount = 0;
-//         return;
-//     }
-
-//     innovationCount = value;
-// };
-
-
-NeatGenome.Help.insertByInnovation = function(connection, connectionList)
-{
-    var self = connectionList;
-    // Determine the insert idx with a linear search, starting from the end
-    // since mostly we expect to be adding genes that belong only 1 or 2 genes
-    // from the end at most.
-    var idx= connectionList.length-1;
-    for(; idx>-1; idx--)
-    {
-        if(uuid.isLessThan(self[idx].gid, connection.gid))
-        {	// Insert idx found.
-            break;
-        }
-    }
-    connectionList.splice(idx+1, 0, connection);
-};
-
-NeatGenome.Help.CreateGIDLookup = function(arObject)
-{
-    var lookup = {};
-    arObject.forEach(function(o)
-    {
-        lookup[o.gid] = o;
-    });
-
-    return lookup;
-
-};
-
-
-//NeuronGene creator
-/// <summary>
-/// Create a default minimal genome that describes a NN with the given number of inputs and outputs.
-/// </summary>
-/// <returns></returns>
-//{connectionWeightRange: val, connectionProportion: val}
-NeatGenome.Help.CreateGenomeByInnovation = function(ins, outs, connParams, existing)
-{
-    //existing is for seing if a connection innovation id already exists according to local believers/shamans
-    existing = existing || {};
-    //create our ins and outs,
-    var inputNodeList = [], outputNodeList = [], nodeList = [], connectionList = [];
-
-    var aFunc = CPPNactivationFactory.getActivationFunction('NullFn');
-
-    var iCount = 0;
-
-    // IMPORTANT NOTE: The neurons must all be created prior to any connections. That way all of the genomes
-    // will obtain the same innovation ID's for the bias,input and output nodes in the initial population.
-    // Create a single bias neuron.
-    var node = new NeatNode(NeatGenome.Help.nextInnovationID(iCount++), aFunc, NeatNode.INPUT_LAYER, {type: NodeType.bias});
-    //null, idGenerator.NextInnovationId, NeuronGene.INPUT_LAYER, NeuronType.Bias, actFunct, stepCount);
-    inputNodeList.push(node);
-    nodeList.push(node);
-
-
-    // Create input neuron genes.
-    aFunc = CPPNactivationFactory.getActivationFunction('NullFn');
-    for(var i=0; i<ins; i++)
-    {
-        //TODO: DAVID proper activation function change to NULL?
-        node = new NeatNode(NeatGenome.Help.nextInnovationID(iCount++), aFunc, NeatNode.INPUT_LAYER, {type: NodeType.input});
-        inputNodeList.push(node);
-        nodeList.push(node);
-    }
-
-    // Create output neuron genes.
-    aFunc = CPPNactivationFactory.getActivationFunction('BipolarSigmoid');
-    for(var i=0; i<outs; i++)
-    {
-        //TODO: DAVID proper activation function change to NULL?
-        node = new NeatNode(NeatGenome.Help.nextInnovationID(iCount++), aFunc, NeatNode.OUTPUT_LAYER, {type: NodeType.output});
-        outputNodeList.push(node);
-        nodeList.push(node);
-    }
-
-    // Loop over all possible connections from input to output nodes and create a number of connections based upon
-    // connectionProportion.
-    outputNodeList.forEach(function(targetNode){
-
-        inputNodeList.forEach(function(sourceNode){
-            // Always generate an ID even if we aren't going to use it. This is necessary to ensure connections
-            // between the same neurons always have the same ID throughout the generated population.
-
-            if(utilities.nextDouble() < connParams.connectionProportion )
-            {
-
-                var cIdentifier = '(' + sourceNode.gid + "," + targetNode.gid + ')';
-
-                // Ok lets create a connection.
-                //if it already exists, we can use the existing innovation ID
-                var connectionInnovationId = existing[cIdentifier] || NeatGenome.Help.nextInnovationID();
-
-                //if we didn't have one before, we do now! If we did, we simply overwrite with the same innovation id
-                existing[cIdentifier] = connectionInnovationId;
-
-                connectionList.push(new NeatConnection(connectionInnovationId,
-                    (utilities.nextDouble() * connParams.connectionWeightRange ) - connParams.connectionWeightRange/2.0,
-                    {sourceID: sourceNode.gid, targetID: targetNode.gid}));
-
-            }
-        });
-    });
-
-    // Don't create any hidden nodes at this point. Fundamental to the NEAT way is to start minimally!
-    return new NeatGenome(NeatGenome.Help.nextGenomeID(), nodeList, connectionList, ins, outs);
-//            NeatGenome(idGenerator.NextGenomeId, neuronGeneList, connectionGeneList, inputNeuronCount, outputNeuronCount);
-
-};
-
-
-NeatGenome.Copy = function(genome, gid)
-{
-
-    var nodeCopy = [], connectionCopy = [];
-    genome.nodes.forEach(function(node)
-    {
-        nodeCopy.push(NeatNode.Copy(node));
-    });
-    genome.connections.forEach(function(conn)
-    {
-        connectionCopy.push(NeatConnection.Copy(conn));
-    });
-
-    //not debuggin
-    var gCopy = new NeatGenome((gid !== undefined ? gid : genome.gid), nodeCopy, connectionCopy, genome.inputNodeCount, genome.outputNodeCount, false);
-
-    //copy the behavior as well -- if there exists any behavior to copy
-    if(genome.behavior && (genome.behavior.objectives || genome.behavior.behaviorList))
-        gCopy.behavior = novelty.Behavior.BehaviorCopy(genome.behavior);
-
-    return gCopy;
-};
-
-
-/// Asexual reproduction with built in mutation.
-NeatGenome.prototype.createOffspringAsexual = function(newNodeTable, newConnectionTable, np)
-{
-    var self = this;
-    //copy the genome, then mutate
-    var genome = NeatGenome.Copy(self, NeatGenome.Help.nextGenomeID());
-
-    //mutate genome before returning
-    genome.mutate(newNodeTable, newConnectionTable, np);
-
-    return genome;
-};
-
-
-
-/// <summary>
-/// Adds a connection to the list that will eventually be copied into a child of this genome during sexual reproduction.
-/// A helper function that is only called by CreateOffspring_Sexual_ProcessCorrelationItem().
-/// </summary>
-/// <param name="connectionGene">Specifies the connection to add to this genome.</param>
-/// <param name="overwriteExisting">If there is already a connection from the same source to the same target,
-/// that connection is replaced when overwriteExisting is true and remains (no change is made) when overwriteExisting is false.</param>
-//TODO: Use gid or innovationID?
-NeatGenome.Help.createOffspringSexual_AddGene  = function(connectionList, connectionTable, connection, overwriteExisting)
-{
-
-    var conKey = connection.gid;
-
-    // Check if a matching gene has already been added.
-    var oIdx = connectionTable[conKey];
-
-    if(oIdx==null)
-    {	// No matching gene has been added.
-        // Register this new gene with the newConnectionGeneTable - store its index within newConnectionGeneList.
-        connectionTable[conKey] = connectionList.length;
-
-        // Add the gene to the list.
-        connectionList.push(NeatConnection.Copy(connection));
-    }
-    else if(overwriteExisting)
-    {
-        // Overwrite the existing matching gene with this one. In fact only the weight value differs between two
-        // matching connection genes, so just overwrite the existing genes weight value.
-
-        // Remember that we stored the gene's index in newConnectionGeneTable. So use it here.
-        connectionList[oIdx].weight = connection.weight;
-    }
-};
-
-/// <summary>
-/// Given a description of a connection in two parents, decide how to copy it into their child.
-/// A helper function that is only called by CreateOffspring_Sexual().
-/// </summary>
-/// <param name="correlationItem">Describes a connection and whether it exists on one parent, the other, or both.</param>
-/// <param name="fitSwitch">If this is 1, then the first parent is more fit; if 2 then the second parent. Other values are not defined.</param>
-/// <param name="combineDisjointExcessFlag">If this is true, add disjoint and excess genes to the child; otherwise, leave them out.</param>
-/// <param name="np">Not used.</param>
-NeatGenome.Help.createOffspringSexual_ProcessCorrelationItem
-    = function(connectionList, connectionTable, correlationItem, fitSwitch, combineDisjointExcessFlag)
-{
-    switch(correlationItem.correlationType)
-    {
-        // Disjoint and excess genes.
-        case neatHelp.CorrelationType.disjointConnectionGene:
-        case neatHelp.CorrelationType.excessConnectionGene:
-        {
-            // If the gene is in the fittest parent then override any existing entry in the connectionGeneTable.
-            if(fitSwitch==1 && correlationItem.connection1!=null)
-            {
-                NeatGenome.Help.createOffspringSexual_AddGene(connectionList, connectionTable, correlationItem.connection1, true);
-                return;
-            }
-
-            if(fitSwitch==2 && correlationItem.connection2!=null)
-            {
-                NeatGenome.Help.createOffspringSexual_AddGene(connectionList, connectionTable, correlationItem.connection2, true);
-                return;
-            }
-
-            // The disjoint/excess gene is on the less fit parent.
-            //if(Utilities.NextDouble() < np.pDisjointExcessGenesRecombined)	// Include the gene n% of the time from whichever parent contains it.
-            if(combineDisjointExcessFlag)
-            {
-                if(correlationItem.connection1!=null)
-                {
-                    NeatGenome.Help.createOffspringSexual_AddGene(connectionList, connectionTable, correlationItem.connection1, false);
-                    return;
-                }
-                if(correlationItem.connection2!=null)
-                {
-                    NeatGenome.Help.createOffspringSexual_AddGene(connectionList, connectionTable, correlationItem.connection2, false);
-                    return;
-                }
-            }
-            break;
-        }
-
-        case neatHelp.CorrelationType.matchedConnectionGenes:
-        {
-            if(utilities.RouletteWheel.singleThrow(0.5))
-            {
-                // Override any existing entries in the table.
-                NeatGenome.Help.createOffspringSexual_AddGene(connectionList, connectionTable, correlationItem.connection1, true);
-            }
-            else
-            {
-                // Override any existing entries in the table.
-                NeatGenome.Help.createOffspringSexual_AddGene(connectionList, connectionTable, correlationItem.connection2, true);
-            }
-            break;
-        }
-    }
-};
-
-
-/// <summary>
-/// Correlate the ConnectionGenes within the two ConnectionGeneLists - based upon innovation number.
-/// Return an ArrayList of ConnectionGene[2] structures - pairs of matching ConnectionGenes.
-/// </summary>
-/// <param name="list1"></param>
-/// <param name="list2"></param>
-/// <returns>Resulting correlation</returns>
-NeatGenome.Help.correlateConnectionListsByInnovation
-    = function(list1, list2)
-{
-    var correlationResults = new neatHelp.CorrelationResults();
-
-    //----- Test for special cases.
-    if(!list1.length && !list2.length)
-    {	// Both lists are empty!
-        return correlationResults;
-    }
-
-    if(!list1.length)
-    {	// All list2 genes are excess.
-        correlationResults.correlationStatistics.excessConnectionCount = list2.length;
-
-        list2.forEach(function(connection){
-            //add a bunch of excess genes to our new creation!
-            correlationResults.correlationList.push(new neatHelp.CorrelationItem(neatHelp.CorrelationType.excessConnectionGene, null, connection));
-        });
-        //done with correlating al; genes since list1 is empty
-        return correlationResults;
-    }
-
-    // i believe there is a bug in the C# code, but it's completely irrelevant cause you'll never have 0 connections and for it to be sensical!
-    if(!list2.length)
-    {	// All list1 genes are excess.
-        correlationResults.correlationStatistics.excessConnectionCount  = list1.length;
-
-        list1.forEach(function(connection){
-            //add a bunch of excess genes to our new creation!
-            correlationResults.correlationList.push(new neatHelp.CorrelationItem(neatHelp.CorrelationType.excessConnectionGene, connection, null));
-        });
-
-        //done with correlating al; genes since list2 is empty
-        return correlationResults;
-    }
-
-    //----- Both ConnectionGeneLists contain genes - compare the contents.
-    var list1Idx=0;
-    var list2Idx=0;
-    var connection1 = list1[list1Idx];
-    var connection2 = list2[list2Idx];
-
-    for(;;)
-    {
-
-        if(uuid.isLessThan(connection2.gid, connection1.gid))
-        {
-            // connectionGene2 is disjoint.
-            correlationResults.correlationList.push(new neatHelp.CorrelationItem(neatHelp.CorrelationType.disjointConnectionGene, null, connection2));
-            correlationResults.correlationStatistics.disjointConnectionCount++;
-
-            // Move to the next gene in list2.
-            list2Idx++;
-        }
-        else if(connection1.gid == connection2.gid)
-        {
-            correlationResults.correlationList.push(new neatHelp.CorrelationItem(neatHelp.CorrelationType.matchedConnectionGenes, connection1, connection2));
-            correlationResults.correlationStatistics.connectionWeightDelta += Math.abs(connection1.weight-connection2.weight);
-            correlationResults.correlationStatistics.matchingCount++;
-
-            // Move to the next gene in both lists.
-            list1Idx++;
-            list2Idx++;
-        }
-        else // (connectionGene2.InnovationId > connectionGene1.InnovationId)
-        {
-            // connectionGene1 is disjoint.
-            correlationResults.correlationList.push(new  neatHelp.CorrelationItem(neatHelp.CorrelationType.disjointConnectionGene, connection1, null));
-            correlationResults.correlationStatistics.disjointConnectionCount++;
-
-            // Move to the next gene in list1.
-            list1Idx++;
-        }
-
-        // Check if we have reached the end of one (or both) of the lists. If we have reached the end of both then
-        // we execute the first if block - but it doesn't matter since the loop is not entered if both lists have
-        // been exhausted.
-        if(list1Idx >= list1.length)
-        {
-            // All remaining list2 genes are excess.
-            for(; list2Idx<list2.length; list2Idx++)
-            {
-                correlationResults.correlationList.push(new neatHelp.CorrelationItem(neatHelp.CorrelationType.excessConnectionGene, null, list2[list2Idx]));
-                correlationResults.correlationStatistics.excessConnectionCount++;
-            }
-            return correlationResults;
-        }
-
-        if(list2Idx >= list2.length)
-        {
-            // All remaining list1 genes are excess.
-            for(; list1Idx<list1.length; list1Idx++)
-            {
-                correlationResults.correlationList.push(new neatHelp.CorrelationItem(neatHelp.CorrelationType.excessConnectionGene, list1[list1Idx], null));
-                correlationResults.correlationStatistics.excessConnectionCount++;
-            }
-            return correlationResults;
-        }
-
-        connection1 = list1[list1Idx];
-        connection2 = list2[list2Idx];
-    }
-};
-
-
-
-//NeuronGene creator
-NeatGenome.prototype.createOffspringSexual
-    = function(otherParent, np)
-{
-    var self = this;
-
-    if (otherParent == null || otherParent === undefined)
-        return null;
-
-    // Build a list of connections in either this genome or the other parent.
-    var correlationResults = NeatGenome.Help.correlateConnectionListsByInnovation(self.connections, otherParent.connections);
-
-    if(self.debug && !correlationResults.performIntegrityCheckByInnovation())
-        throw "CorrelationResults failed innovation integrity check.";
-
-    //----- Connection Genes.
-    // We will temporarily store the offspring's genes in newConnectionGeneList and keeping track of which genes
-    // exist with newConnectionGeneTable. Here we ensure these objects are created, and if they already existed
-    // then ensure they are cleared. Clearing existing objects is more efficient that creating new ones because
-    // allocated memory can be re-used.
-
-    // Key = connection key, value = index in newConnectionGeneList.
-    var newConnectionTable = {};
-
-    //TODO: No 'capacity' constructor on CollectionBase. Create modified/custom CollectionBase.
-    // newConnectionGeneList must be constructed on each call because it is passed to a new NeatGenome
-    // at construction time and a permanent reference to the list is kept.
-    var newConnectionList = [];
-
-    // A switch that stores which parent is fittest 1 or 2. Chooses randomly if both are equal. More efficient to calculate this just once.
-    var fitSwitch;
-    if(self.fitness > otherParent.fitness)
-        fitSwitch = 1;
-    else if(self.fitness < otherParent.fitness)
-        fitSwitch = 2;
-    else
-    {	// Select one of the parents at random to be the 'master' genome during crossover.
-        if(utilities.nextDouble() < 0.5)
-            fitSwitch = 1;
-        else
-            fitSwitch = 2;
-    }
-
-    var combineDisjointExcessFlag = utilities.nextDouble() < np.pDisjointExcessGenesRecombined;
-
-    // Loop through the correlationResults, building a table of ConnectionGenes from the parents that will make it into our
-    // new [single] offspring. We use a table keyed on connection end points to prevent passing connections to the offspring
-    // that may have the same end points but a different innovation number - effectively we filter out duplicate connections.
-//        var idxBound = correlationResults.correlationList.length;
-    correlationResults.correlationList.forEach(function(correlationItem)
-    {
-        NeatGenome.Help.createOffspringSexual_ProcessCorrelationItem(newConnectionList, newConnectionTable, correlationItem, fitSwitch, combineDisjointExcessFlag);
-    });
-
-
-
-    //----- Neuron Genes.
-    // Build a neuronGeneList by analysing each connection's neuron end-point IDs.
-    // This strategy has the benefit of eliminating neurons that are no longer connected too.
-    // Remember to always keep all input, output and bias neurons though!
-    var newNodeList = [];
-
-    // Keep a table of the NeuronGene ID's keyed by ID so that we can keep track of which ones have been added.
-    // Key = innovation ID, value = null for some reason.
-
-    var newNodeTable = {};
-
-    // Get the input/output neurons from this parent. All Genomes share these neurons, they do not change during a run.
-//        idxBound = neuronGeneList.Count;
-
-    self.nodes.forEach(function(node)
-    {
-        if(node.nodeType != NodeType.hidden)
-        {
-            newNodeList.push(NeatNode.Copy(node));
-            newNodeTable[node.gid] = node;
-        }
-//            else
-//            {	// No more bias, input or output nodes. break the loop.
-//                break;
-//            }
-    });
-
-    // Now analyse the connections to determine which NeuronGenes are required in the offspring.
-    // Loop through every connection in the child, and add to the child those hidden neurons that are sources or targets of the connection.
-//        idxBound = newConnectionGeneList.Count;
-
-
-    var nodeLookup = NeatGenome.Help.CreateGIDLookup(self.nodes);
-    var otherNodeLookup = NeatGenome.Help.CreateGIDLookup(otherParent.nodes);
-//        var connLookup =  NeatGenome.Help.CreateGIDLookup(self.connections);
-
-    newConnectionList.forEach(function(connection)
-    {
-        var node;
-
-        if(!newNodeTable[connection.sourceID])
-        {
-            //TODO: DAVID proper activation function
-            // We can safely assume that any missing NeuronGenes at this point are hidden heurons.
-            node = nodeLookup[connection.sourceID];
-            if (node)
-                newNodeList.push(NeatNode.Copy(node));
-            else{
-                node = otherNodeLookup[connection.sourceID];
-                if(!node)
-                    throw new Error("Connection references source node that does not exist in either parent: " + JSON.stringify(connection));
-                
-                newNodeList.push(NeatNode.Copy(otherNodeLookup[connection.sourceID]));
-            }
-            //newNeuronGeneList.Add(new NeuronGene(connectionGene.SourceNeuronId, NeuronType.Hidden, ActivationFunctionFactory.GetActivationFunction("SteepenedSigmoid")));
-            newNodeTable[connection.sourceID] = node;
-        }
-
-        if(!newNodeTable[connection.targetID])
-        {
-            //TODO: DAVID proper activation function
-            // We can safely assume that any missing NeuronGenes at this point are hidden heurons.
-            node = nodeLookup[connection.targetID];
-            if (node != null)
-                newNodeList.push(NeatNode.Copy(node));
-           else{
-                node = otherNodeLookup[connection.targetID];
-                if(!node)
-                    throw new Error("Connection references target node that does not exist in either parent: " + JSON.stringify(connection));
-
-                newNodeList.push(NeatNode.Copy(otherNodeLookup[connection.targetID]));
-            }
-                
-            //newNeuronGeneList.Add(new NeuronGene(connectionGene.TargetNeuronId, NeuronType.Hidden, ActivationFunctionFactory.GetActivationFunction("SteepenedSigmoid")));
-            newNodeTable[connection.targetID] = node;
-        }
-    });
-
-    // TODO: Inefficient code?
-    newNodeList.sort(function(a,b){
-        var compare = uuid.isLessThan(a.gid, b.gid) ? 
-            -1 : //is less than -- a- b = -1
-            (a.gid == b.gid) ? 0 : //is possible equal to or greater
-            1;//is greater than definitely
-        return compare
-    });
-
-    // newConnectionGeneList is already sorted because it was generated by passing over the list returned by
-    // CorrelateConnectionGeneLists() - which is always in order.
-    return new NeatGenome(NeatGenome.Help.nextGenomeID(), newNodeList,newConnectionList, self.inputNodeCount, self.outputNodeCount, self.debug);
-
-    //No module support in here
-
-    // Determine which modules to pass on to the child in the same way.
-    // For each module in this genome or in the other parent, if it was referenced by even one connection add it and all its dummy neurons to the child.
-//        List<ModuleGene> newModuleGeneList = new List<ModuleGene>();
-//
-//        // Build a list of modules the child might have, which is a union of the parents' module lists, but they are all copies so we can't just do a union.
-//        List<ModuleGene> unionParentModules = new List<ModuleGene>(moduleGeneList);
-//        foreach (ModuleGene moduleGene in otherParent.moduleGeneList) {
-//        bool alreadySeen = false;
-//        foreach (ModuleGene match in unionParentModules) {
-//            if (moduleGene.InnovationId == match.InnovationId) {
-//                alreadySeen = true;
-//                break;
-//            }
-//        }
-//        if (!alreadySeen) {
-//            unionParentModules.Add(moduleGene);
-//        }
-//    }
-
-//        foreach (ModuleGene moduleGene in unionParentModules) {
-//        // Examine each neuron in the child to determine whether it is part of a module.
-//        foreach (List<long> dummyNeuronList in new List<long>[] { moduleGene.InputIds, moduleGene.OutputIds })
-//        {
-//            foreach (long dummyNeuronId in dummyNeuronList)
-//            {
-//                if (newNeuronGeneTable.ContainsKey(dummyNeuronId)) {
-//                    goto childHasModule;
-//                }
-//            }
-//        }
-//
-//        continue; // the child does not contain this module, so continue the loop and check for the next module.
-//        childHasModule: // the child does contain this module, so make sure the child gets all the nodes the module requires to work.
-//
-//            // Make sure the child has all the neurons in the given module.
-//            newModuleGeneList.Add(new ModuleGene(moduleGene));
-//        foreach (List<long> dummyNeuronList in new List<long>[] { moduleGene.InputIds, moduleGene.OutputIds })
-//        {
-//            foreach (long dummyNeuronId in dummyNeuronList)
-//            {
-//                if (!newNeuronGeneTable.ContainsKey(dummyNeuronId)) {
-//                    newNeuronGeneTable.Add(dummyNeuronId, null);
-//                    NeuronGene neuronGene = this.neuronGeneList.GetNeuronById(dummyNeuronId);
-//                    if (neuronGene != null) {
-//                        newNeuronGeneList.Add(new NeuronGene(neuronGene));
-//                    } else {
-//                        newNeuronGeneList.Add(new NeuronGene(otherParent.NeuronGeneList.GetNeuronById(dummyNeuronId)));
-//                    }
-//                }
-//            }
-//        }
-//    }
-
-
-
-};
-
-
-/// <summary>
-/// Decode the genome's 'DNA' into a working network.
-/// </summary>
-/// <returns></returns>
-NeatGenome.prototype.networkDecode = function(activationFn)
-{
-    var self = this;
-
-    return neatDecoder.DecodeToFloatFastConcurrentNetwork(self, activationFn);
-};
-
-
-/// <summary>
-/// Clone this genome.
-/// </summary>
-/// <returns></returns>
-NeatGenome.prototype.clone = function()
-{
-    var self = this;
-    return NeatGenome.Copy(self, NeatGenome.Help.nextGenomeID());
-};
-
-NeatGenome.prototype.compatFormer = function(comparisonGenome, np) {
-    /* A very simple way of implementing this routine is to call CorrelateConnectionGeneLists and to then loop
-     * through the correlation items, calculating a compatibility score as we go. However, this routine
-     * is heavily used and in performance tests was shown consume 40% of the CPU time for the core NEAT code.
-     * Therefore this new routine has been rewritten with it's own version of the logic within
-     * CorrelateConnectionGeneLists. This allows us to only keep comparing genes up to the point where the
-     * threshold is passed. This also eliminates the need to build the correlation results list, this difference
-     * alone is responsible for a 200x performance improvement when testing with a 1664 length genome!!
-     *
-     * A further optimisation is achieved by comparing the genes starting at the end of the genomes which is
-     * where most disparities are located - new novel genes are always attached to the end of genomes. This
-     * has the result of complicating the routine because we must now invoke additional logic to determine
-     * which genes are excess and when the first disjoint gene is found. This is done with an extra integer:
-     *
-     * int excessGenesSwitch=0; // indicates to the loop that it is handling the first gene.
-     *						=1;	// Indicates that the first gene was excess and on genome 1.
-     *						=2;	// Indicates that the first gene was excess and on genome 2.
-     *						=3;	// Indicates that there are no more excess genes.
-     *
-     * This extra logic has a slight performance hit, but this is minor especially in comparison to the savings that
-     * are expected to be achieved overall during a NEAT search.
-     *
-     * If you have trouble understanding this logic then it might be best to work through the previous version of
-     * this routine (below) that scans through the genomes from start to end, and which is a lot simpler.
-     *
-     */
-    var self = this;
-
-    //this can be replaced with the following code:
-
-
-
-
-    var list1 = self.connections;
-    var list2 = comparisonGenome.connections;
-
-//
-//        var compatibility = 0;
-//        var correlation = NeatGenome.Help.correlateConnectionListsByInnovation(list1, list2);
-//        compatibility += correlation.correlationStatistics.excessConnectionCount*np.compatibilityExcessCoeff;
-//        compatibility += correlation.correlationStatistics.disjointConnectionCount*np.compatibilityDisjointCoeff;
-//        compatibility += correlation.correlationStatistics.connectionWeightDelta*np.compatibilityWeightDeltaCoeff;
-//        return compatibility;
-
-
-    var excessGenesSwitch=0;
-
-    // Store these heavily used values locally.
-    var list1Count = list1.length;
-    var list2Count = list2.length;
-
-    //----- Test for special cases.
-    if(list1Count==0 && list2Count==0)
-    {	// Both lists are empty! No disparities, therefore the genomes are compatible!
-        return 0.0;
-    }
-
-    if(list1Count==0)
-    {	// All list2 genes are excess.
-        return ((list2.length * np.compatibilityExcessCoeff));
-    }
-
-    if(list2Count==0)
-    {
-        // All list1 genes are excess.
-        return ((list1Count * np.compatibilityExcessCoeff));
-    }
-
-    //----- Both ConnectionGeneLists contain genes - compare the contents.
-    var compatibility = 0.0;
-    var list1Idx=list1Count-1;
-    var list2Idx=list2Count-1;
-    var connection1 = list1[list1Idx];
-    var connection2 = list2[list2Idx];
-    for(;;)
-    {
-        if(connection1.gid == connection2.gid)
-        {
-            // No more excess genes. It's quicker to set this every time than to test if is not yet 3.
-            excessGenesSwitch=3;
-
-            // Matching genes. Increase compatibility by weight difference * coeff.
-            compatibility += Math.abs(connection1.weight-connection2.weight) * np.compatibilityWeightDeltaCoeff;
-
-            // Move to the next gene in both lists.
-            list1Idx--;
-            list2Idx--;
-        }
-        else if(!uuid.isLessThan(connection2.gid, connection1.gid))
-        {
-            // Most common test case(s) at top for efficiency.
-            if(excessGenesSwitch==3)
-            {	// No more excess genes. Therefore this mismatch is disjoint.
-                compatibility += np.compatibilityDisjointCoeff;
-            }
-            else if(excessGenesSwitch==2)
-            {	// Another excess gene on genome 2.
-                compatibility += np.compatibilityExcessCoeff;
-            }
-            else if(excessGenesSwitch==1)
-            {	// We have found the first non-excess gene.
-                excessGenesSwitch=3;
-                compatibility += np.compatibilityDisjointCoeff;
-            }
-            else //if(excessGenesSwitch==0)
-            {	// First gene is excess, and is on genome 2.
-                excessGenesSwitch = 2;
-                compatibility += np.compatibilityExcessCoeff;
-            }
-
-            // Move to the next gene in list2.
-            list2Idx--;
-        } 
-        else // (connectionGene2.InnovationId < connectionGene1.InnovationId)
-        {
-            // Most common test case(s) at top for efficiency.
-            if(excessGenesSwitch==3)
-            {	// No more excess genes. Therefore this mismatch is disjoint.
-                compatibility += np.compatibilityDisjointCoeff;
-            }
-            else if(excessGenesSwitch==1)
-            {	// Another excess gene on genome 1.
-                compatibility += np.compatibilityExcessCoeff;
-            }
-            else if(excessGenesSwitch==2)
-            {	// We have found the first non-excess gene.
-                excessGenesSwitch=3;
-                compatibility += np.compatibilityDisjointCoeff;
-            }
-            else //if(excessGenesSwitch==0)
-            {	// First gene is excess, and is on genome 1.
-                excessGenesSwitch = 1;
-                compatibility += np.compatibilityExcessCoeff;
-            }
-
-            // Move to the next gene in list1.
-            list1Idx--;
-        }
-
-
-        // Check if we have reached the end of one (or both) of the lists. If we have reached the end of both then
-        // we execute the first 'if' block - but it doesn't matter since the loop is not entered if both lists have
-        // been exhausted.
-        if(list1Idx < 0)
-        {
-            // All remaining list2 genes are disjoint.
-            compatibility +=  (list2Idx+1) * np.compatibilityDisjointCoeff;
-            return (compatibility); //< np.compatibilityThreshold);
-        }
-
-        if(list2Idx < 0)
-        {
-            // All remaining list1 genes are disjoint.
-            compatibility += (list1Idx+1) * np.compatibilityDisjointCoeff;
-            return (compatibility); //< np.compatibilityThreshold);
-        }
-
-        connection1 = list1[list1Idx];
-        connection2 = list2[list2Idx];
-    }
-};
-
-NeatGenome.prototype.compat = function(comparisonGenome, np) {
-
-    var self = this;
-    var list1 = self.connections;
-    var list2 = comparisonGenome.connections;
-
-    var compatibility = 0;
-    var correlation = NeatGenome.Help.correlateConnectionListsByInnovation(list1, list2);
-    compatibility += correlation.correlationStatistics.excessConnectionCount*np.compatibilityExcessCoeff;
-    compatibility += correlation.correlationStatistics.disjointConnectionCount*np.compatibilityDisjointCoeff;
-    compatibility += correlation.correlationStatistics.connectionWeightDelta*np.compatibilityWeightDeltaCoeff;
-    return compatibility;
-
-};
-
-NeatGenome.prototype.isCompatibleWithGenome= function(comparisonGenome, np)
-{
-    var self = this;
-
-    return (self.compat(comparisonGenome, np) < np.compatibilityThreshold);
-};
-
-NeatGenome.Help.InOrderInnovation = function(aObj)
-{
-    var prevId = 0;
-
-    for(var i=0; i< aObj.length; i++){
-        var connection = aObj[i];
-        if(uuid.isLessThan(connection.gid, prevId))
-            return false;
-        prevId = connection.gid;
-    }
-
-    return true;
-};
-
-
-/// <summary>
-/// For debug purposes only.
-/// </summary>
-/// <returns>Returns true if genome integrity checks out OK.</returns>
-NeatGenome.prototype.performIntegrityCheck = function()
-{
-    var self = this;
-    return NeatGenome.Help.InOrderInnovation(self.connections);
-};
-
-
-NeatGenome.prototype.mutate = function(newNodeTable, newConnectionTable, np)
-{
-    var self = this;
-
-    // Determine the type of mutation to perform.
-    var probabilities = [];
-    probabilities.push(np.pMutateAddNode);
-//        probabilities.push(0);//np.pMutateAddModule);
-    probabilities.push(np.pMutateAddConnection);
-    probabilities.push(np.pMutateDeleteConnection);
-    probabilities.push(np.pMutateDeleteSimpleNeuron);
-    probabilities.push(np.pMutateConnectionWeights);
-    probabilities.push(np.pMutateChangeActivations);
-
-    var outcome = utilities.RouletteWheel.singleThrowArray(probabilities);
-    switch(outcome)
-    {
-        case 0:
-            self.mutate_AddNode(newNodeTable);
-            return 0;
-        case 1:
-//               self.mutate_Ad Mutate_AddModule(ea);
-            self.mutate_AddConnection(newConnectionTable,np);
-            return 1;
-        case 2:
-            self.mutate_DeleteConnection();
-            return 2;
-        case 3:
-            self.mutate_DeleteSimpleNeuronStructure(newConnectionTable, np);
-            return 3;
-        case 4:
-            self.mutate_ConnectionWeights(np);
-            return 4;
-        case 5:
-            self.mutate_ChangeActivation(np);
-            return 5;
-    }
-};
-
-
-
-//NeuronGene creator
-/// <summary>
-/// Add a new node to the Genome. We do this by removing a connection at random and inserting
-/// a new node and two new connections that make the same circuit as the original connection.
-///
-/// This way the new node is properly integrated into the network from the outset.
-/// </summary>
-/// <param name="ea"></param>
-NeatGenome.prototype.mutate_AddNode = function(newNodeTable, connToSplit)
-{
-    var self = this;
-
-    if(!self.connections.length)
-        return null;
-
-    // Select a connection at random.
-    var connectionToReplaceIdx = Math.floor(utilities.nextDouble() * self.connections.length);
-    var connectionToReplace =  connToSplit || self.connections[connectionToReplaceIdx];
-
-    // Delete the existing connection. JOEL: Why delete old connection?
-    //connectionGeneList.RemoveAt(connectionToReplaceIdx);
-
-    // Check if this connection has already been split on another genome. If so then we should re-use the
-    // neuron ID and two connection ID's so that matching structures within the population maintain the same ID.
-    var existingNeuronGeneStruct = newNodeTable[connectionToReplace.gid];
-
-    var newNode;
-    var newConnection1;
-    var newConnection2;
-    var actFunct;
-
-    var nodeLookup = NeatGenome.Help.CreateGIDLookup(self.nodes);
-
-    //we could attempt to mutate the same node TWICE -- causing big issues, since we'll double add that node
-
-    var acnt = 0;
-    var attempts = 5;
-    //while we
-    while(acnt++ < attempts && existingNeuronGeneStruct && nodeLookup[existingNeuronGeneStruct.node.gid])
-    {
-        connectionToReplaceIdx = Math.floor(utilities.nextDouble() * self.connections.length);
-        connectionToReplace =  connToSplit || self.connections[connectionToReplaceIdx];
-        existingNeuronGeneStruct = newNodeTable[connectionToReplace.gid];
-    }
-
-    //we have failed to produce a new node to split!
-    if(acnt == attempts && existingNeuronGeneStruct && nodeLookup[existingNeuronGeneStruct.node.gid])
-        return;
-
-    if(!existingNeuronGeneStruct)
-    {	// No existing matching structure, so generate some new ID's.
-
-        //TODO: DAVID proper random activation function
-        // Replace connectionToReplace with two new connections and a neuron.
-        actFunct= CPPNactivationFactory.getRandomActivationFunction();
-        //newNeuronGene = new NeuronGene(ea.NextInnovationId, NeuronType.Hidden, actFunct);
-
-        var nextID = NeatGenome.Help.nextInnovationID();//connectionToReplace.gid);
-
-        newNode = new NeatNode(nextID, actFunct,
-            (nodeLookup[connectionToReplace.sourceID].layer + nodeLookup[connectionToReplace.targetID].layer)/2.0,
-            {type: NodeType.hidden});
-
-        nextID = NeatGenome.Help.nextInnovationID();
-        newConnection1 = new NeatConnection(nextID, 1.0, {sourceID: connectionToReplace.sourceID, targetID:newNode.gid});
-
-        nextID = NeatGenome.Help.nextInnovationID();
-        newConnection2 =  new NeatConnection(nextID, connectionToReplace.weight, {sourceID: newNode.gid, targetID: connectionToReplace.targetID});
-
-        // Register the new ID's with NewNeuronGeneStructTable.
-        newNodeTable[connectionToReplace.gid] = {node: newNode, connection1: newConnection1, connection2: newConnection2};
-    }
-    else
-    {	// An existing matching structure has been found. Re-use its ID's
-
-        //TODO: DAVID proper random activation function
-        // Replace connectionToReplace with two new connections and a neuron.
-        actFunct = CPPNactivationFactory.getRandomActivationFunction();
-        var tmpStruct = existingNeuronGeneStruct;
-        //newNeuronGene = new NeuronGene(tmpStruct.NewNeuronGene.InnovationId, NeuronType.Hidden, actFunct);
-        newNode = NeatNode.Copy(tmpStruct.node);
-        newNode.nodeType = NodeType.hidden;
-        //new NeuronGene(null, tmpStruct.NewNeuronGene.gid, tmpStruct.NewNeuronGene.Layer, NeuronType.Hidden, actFunct, this.step);
-
-        newConnection1 = new NeatConnection(tmpStruct.connection1.gid, 1.0, {sourceID: connectionToReplace.sourceID, targetID:newNode.gid});
-//                new ConnectionGene(tmpStruct.NewConnectionGene_Input.gid, connectionToReplace.SourceNeuronId, newNeuronGene.gid, 1.0);
-        newConnection2 = new NeatConnection(tmpStruct.connection2.gid, connectionToReplace.weight, {sourceID: newNode.gid, targetID: connectionToReplace.targetID});
-//                new ConnectionGene(tmpStruct.NewConnectionGene_Output.gid, newNeuronGene.gid, connectionToReplace.TargetNeuronId, connectionToReplace.Weight);
-    }
-
-    // Add the new genes to the genome.
-    self.nodes.push(newNode);
-    NeatGenome.Help.insertByInnovation(newConnection1, self.connections);
-    NeatGenome.Help.insertByInnovation(newConnection2, self.connections);
-
-    //in javascript, we return the new node and connections created, since it's so easy!
-//        return {node: newNode, connection1: newConnection1, newConnection2: newConnection2};
-
-};
-
-//Modules not implemented
-//    NeatGenome.prototype.mutate_AddModule = function(np)
-//    {
-//    }
-
-NeatGenome.prototype.testForExistingConnectionInnovation = function(sourceID, targetID)
-{
-    var self = this;
-//        console.log('looking for source: ' + sourceID + ' target: ' + targetID);
-
-    for(var i=0; i< self.connections.length; i++){
-        var connection = self.connections[i];
-        if(connection.sourceID == sourceID && connection.targetID == targetID){
-            return connection;
-        }
-    }
-
-    return null;
-};
-
-//messes with the activation functions
-NeatGenome.prototype.mutate_ChangeActivation = function(np)
-{
-    //let's select a node at random (so long as it's not an input)
-    var self = this;
-
-    for(var i=0; i < self.nodes.length; i++)
-    {
-        //not going to change the inputs
-        if(i < self.inputAndBiasNodeCount)
-            continue;
-
-        if(utilities.nextDouble() < np.pNodeMutateActivationRate)
-        {
-            self.nodes[i].activationFunction = CPPNactivationFactory.getRandomActivationFunction().functionID;
-        }
-    }
-};
-
-//add a connection, sourcetargetconnect specifies the source, target or both nodes you'd like to connect (optionally)
-NeatGenome.prototype.mutate_AddConnection = function(newConnectionTable, np, sourceTargetConnect)
-{
-    //if we didn't send specifics, just create an empty object
-    sourceTargetConnect = sourceTargetConnect || {};
-
-    var self = this;
-    // We are always guaranteed to have enough neurons to form connections - because the input/output neurons are
-    // fixed. Any domain that doesn't require input/outputs is a bit nonsensical!
-
-    // Make a fixed number of attempts at finding a suitable connection to add.
-
-    if(self.nodes.length>1)
-    {	// At least 2 neurons, so we have a chance at creating a connection.
-
-        for(var attempts=0; attempts<5; attempts++)
-        {
-            // Select candidate source and target neurons. Any neuron can be used as the source. Input neurons
-            // should not be used as a target
-            var srcNeuronIdx;
-            var tgtNeuronIdx;
-
-
-
-            // Find all potential inputs, or quit if there are not enough.
-            // Neurons cannot be inputs if they are dummy input nodes of a module.
-            var potentialInputs = [];
-
-            self.nodes.forEach(function(n)
-            {
-                if(n.activationFunction.functionID !== 'ModuleInputNeuron')
-                    potentialInputs.push(n);
-            });
-
-
-            if (potentialInputs.length < 1)
-                return false;
-
-            var potentialOutputs = [];
-
-            // Find all potential outputs, or quit if there are not enough.
-            // Neurons cannot be outputs if they are dummy input or output nodes of a module, or network input or bias nodes.
-            self.nodes.forEach(function(n)
-            {
-                if(n.nodeType != NodeType.bias && n.nodeType != NodeType.input &&
-                    n.activationFunction.functionID !== 'ModuleInputNeuron'
-                    &&  n.activationFunction.functionID !== 'ModuleOutputNeuron')
-                    potentialOutputs.push(n);
-            });
-
-            if (potentialOutputs.length < 1)
-                return false;
-
-            var sourceNeuron = sourceTargetConnect.source || potentialInputs[utilities.next(potentialInputs.length)];
-            var targetNeuron = sourceTargetConnect.target || potentialOutputs[utilities.next(potentialOutputs.length)];
-
-            // Check if a connection already exists between these two neurons.
-            var sourceID = sourceNeuron.gid;
-            var targetID = targetNeuron.gid;
-
-            //we don't allow recurrent connections, we can't let the target layers be <= src
-            if(np.disallowRecurrence && targetNeuron.layer <= sourceNeuron.layer)
-                continue;
-
-            if(!self.testForExistingConnectionInnovation(sourceID, targetID))
-            {
-                // Check if a matching mutation has already occured on another genome.
-                // If so then re-use the connection ID.
-                var connectionKey = "(" + sourceID + "," + targetID + ")";
-                var existingConnection = newConnectionTable[connectionKey];
-                var newConnection;
-                var nextID = NeatGenome.Help.nextInnovationID();
-                if(existingConnection==null)
-                {	// Create a new connection with a new ID and add it to the Genome.
-                    newConnection = new NeatConnection(nextID,
-                        (utilities.nextDouble()*np.connectionWeightRange/4.0) - np.connectionWeightRange/8.0,
-                        {sourceID: sourceID, targetID: targetID});
-
-//                            new ConnectionGene(ea.NextInnovationId, sourceID, targetID,
-//                            (Utilities.NextDouble() * ea.NeatParameters.connectionWeightRange/4.0) - ea.NeatParameters.connectionWeightRange/8.0);
-
-                    // Register the new connection with NewConnectionGeneTable.
-                    newConnectionTable[connectionKey] = newConnection;
-
-                    // Add the new gene to this genome. We have a new ID so we can safely append the gene to the end
-                    // of the list without risk of breaking the innovation ID order.
-                    self.connections.push(newConnection);
-                }
-                else
-                {	// Create a new connection, re-using the ID from existingConnection, and add it to the Genome.
-                    newConnection = new NeatConnection(existingConnection.gid,
-                        (utilities.nextDouble()*np.connectionWeightRange/4.0) -  np.connectionWeightRange/8.0,
-                        {sourceID: sourceID, targetID: targetID});
-
-//                            new ConnectionGene(existingConnection.InnovationId, sourceId, targetID,
-//                            (Utilities.NextDouble() * ea.NeatParameters.connectionWeightRange/4.0) - ea.NeatParameters.connectionWeightRange/8.0);
-
-                    // Add the new gene to this genome. We are re-using an ID so we must ensure the connection gene is
-                    // inserted into the correct position (sorted by innovation ID).
-                    NeatGenome.Help.insertByInnovation(newConnection, self.connections);
-//                        connectionGeneList.InsertIntoPosition(newConnection);
-                }
-
-
-
-                return true;
-            }
-        }
-    }
-
-    // We couldn't find a valid connection to create. Instead of doing nothing lets perform connection
-    // weight mutation.
-    self.mutate_ConnectionWeights(np);
-
-    return false;
-};
-
-NeatGenome.prototype.mutate_ConnectionWeights = function(np)
-{
-    var self = this;
-    // Determine the type of weight mutation to perform.
-    var probabilties = [];
-
-    np.connectionMutationParameterGroupList.forEach(function(connMut){
-        probabilties.push(connMut.activationProportion);
-    });
-
-    // Get a reference to the group we will be using.
-    var paramGroup = np.connectionMutationParameterGroupList[utilities.RouletteWheel.singleThrowArray(probabilties)];
-
-    // Perform mutations of the required type.
-    if(paramGroup.selectionType== neatParameters.ConnectionSelectionType.proportional)
-    {
-        var mutationOccured=false;
-        var connectionCount = self.connections.length;
-        self.connections.forEach(function(connection){
-
-            if(utilities.nextDouble() < paramGroup.proportion)
-            {
-                self.mutateConnectionWeight(connection, np, paramGroup);
-                mutationOccured = true;
-            }
-
-        });
-
-        if(!mutationOccured && connectionCount>0)
-        {	// Perform at least one mutation. Pick a gene at random.
-            self.mutateConnectionWeight(self.connections[utilities.next(connectionCount)], // (Utilities.NextDouble() * connectionCount)],
-                np,
-                paramGroup);
-        }
-    }
-    else // if(paramGroup.SelectionType==ConnectionSelectionType.FixedQuantity)
-    {
-        // Determine how many mutations to perform. At least one - if there are any genes.
-        var connectionCount = self.connections.length;
-
-        var mutations = Math.min(connectionCount, Math.max(1, paramGroup.quantity));
-        if(mutations==0) return;
-
-        // The mutation loop. Here we pick an index at random and scan forward from that point
-        // for the first non-mutated gene. This prevents any gene from being mutated more than once without
-        // too much overhead. In fact it's optimal for small numbers of mutations where clashes are unlikely
-        // to occur.
-        for(var i=0; i<mutations; i++)
-        {
-            // Pick an index at random.
-            var index = utilities.next(connectionCount);
-            var connection = self.connections[index];
-
-            // Scan forward and find the first non-mutated gene.
-            while(self.connections[index].isMutated)
-            {	// Increment index. Wrap around back to the start if we go off the end.
-                if(++index==connectionCount)
-                    index=0;
-            }
-
-            // Mutate the gene at 'index'.
-            self.mutateConnectionWeight(self.connections[index], np, paramGroup);
-            self.connections[index].isMutated = true;
-        }
-
-        self.connections.forEach(function(connection){
-            //reset if connection has been mutated, in case we go to do more mutations...
-            connection.isMutated = false;
-        });
-
-    }
-};
-
-NeatGenome.prototype.mutateConnectionWeight = function(connection, np, paramGroup)
-{
-    switch(paramGroup.perturbationType)
-    {
-        case neatParameters.ConnectionPerturbationType.jiggleEven:
-        {
-            connection.weight += (utilities.nextDouble()*2-1.0) * paramGroup.perturbationFactor;
-
-            // Cap the connection weight. Large connections weights reduce the effectiveness of the search.
-            connection.weight = Math.max(connection.weight, -np.connectionWeightRange/2.0);
-            connection.weight = Math.min(connection.weight, np.connectionWeightRange/2.0);
-            break;
-        }
-        //Paul - not implementing cause Randlib.gennor is a terribel terrible function
-        //if i need normal distribution, i'll find another javascript source
-//            case neatParameters.ConnectionPerturbationType.jiggleND:
-//            {
-//                connectionGene.weight += RandLib.gennor(0, paramGroup.Sigma);
-//
-//                // Cap the connection weight. Large connections weights reduce the effectiveness of the search.
-//                connectionGene.weight = Math.max(connectionGene.weight, -np.connectionWeightRange/2.0);
-//                connectionGene.weight = Math.min(connectionGene.weight, np.connectionWeightRange/2.0);
-//                break;
-//            }
-        case neatParameters.ConnectionPerturbationType.reset:
-        {
-            // TODO: Precalculate connectionWeightRange / 2.
-            connection.weight = (utilities.nextDouble()*np.connectionWeightRange) - np.connectionWeightRange/2.0;
-            break;
-        }
-        default:
-        {
-            throw "Unexpected ConnectionPerturbationType";
-        }
-    }
-};
-
-/// <summary>
-/// If the neuron is a hidden neuron and no connections connect to it then it is redundant.
-/// No neuron is redundant that is part of a module (although the module itself might be found redundant separately).
-/// </summary>
-NeatGenome.prototype.isNeuronRedundant=function(nodeLookup, nid)
-{
-    var self = this;
-    var node = nodeLookup[nid];
-    if (node.nodeType != NodeType.hidden
-        || node.activationFunction.functionID === 'ModuleInputNeuron'
-        || node.activationFunction.functionID === 'ModuleOutputNeuron')
-        return false;
-
-    return !self.isNeuronConnected(nid);
-};
-
-NeatGenome.prototype.isNeuronConnected = function(nid)
-{
-    var self = this;
-    for(var i=0; i < self.connections.length; i++)
-    {
-        var connection =  self.connections[i];
-
-        if(connection.sourceID == nid)
-            return true;
-        if(connection.targetID == nid)
-            return true;
-
-    }
-
-    return false;
-};
-
-
-NeatGenome.prototype.mutate_DeleteConnection = function(connection)
-{
-    var self = this;
-    if(self.connections.length ==0)
-        return;
-
-    self.nodeLookup = NeatGenome.Help.CreateGIDLookup(self.nodes);
-
-    // Select a connection at random.
-    var connectionToDeleteIdx = utilities.next(self.connections.length);
-
-    if(connection){
-        for(var i=0; i< self.connections.length; i++){
-            if(connection.gid == self.connections[i].gid)
-            {
-                connectionToDeleteIdx = i;
-                break;
-            }
-        }
-    }
-
-    var connectionToDelete = connection || self.connections[connectionToDeleteIdx];
-
-    // Delete the connection.
-    self.connections.splice(connectionToDeleteIdx,1);
-
-    var srcIx = -1;
-    var tgtIx = -1;
-
-    self.nodes.forEach(function(node,i){
-
-        if(node.sourceID == connectionToDelete.sourceID)
-            srcIx = i;
-
-        if(node.targetID == connectionToDelete.targetID)
-            tgtIx = i;
-    });
-
-    // Remove any neurons that may have been left floating.
-    if(self.isNeuronRedundant(self.nodeLookup ,connectionToDelete.sourceID)){
-        self.nodes.splice(srcIx,1);//(connectionToDelete.sourceID);
-    }
-
-    // Recurrent connection has both end points at the same neuron!
-    if(connectionToDelete.sourceID !=connectionToDelete.targetID){
-        if(self.isNeuronRedundant(self.nodeLookup, connectionToDelete.targetID))
-            self.nodes.splice(tgtIx,1);//neuronGeneList.Remove(connectionToDelete.targetID);
-    }
-};
-
-NeatGenome.BuildNeuronConnectionLookupTable_NewConnection = function(nodeConnectionLookup,nodeTable, gid, connection, inOrOut)
-{
-    // Is this neuron already known to the lookup table?
-    var lookup = nodeConnectionLookup[gid];
-
-    if(lookup==null)
-    {	// Creae a new lookup entry for this neuron Id.
-        lookup = {node: nodeTable[gid], incoming: [], outgoing: [] };
-        nodeConnectionLookup[gid] = lookup;
-    }
-
-    // Register the connection with the NeuronConnectionLookup object.
-    lookup[inOrOut].push(connection);
-};
-NeatGenome.prototype.buildNeuronConnectionLookupTable = function()
-{
-    var self = this;
-    self.nodeLookup = NeatGenome.Help.CreateGIDLookup(self.nodes);
-
-    var nodeConnectionLookup = {};
-
-    self.connections.forEach(function(connection){
-
-        //what node is this connections target? That makes this an incoming connection
-        NeatGenome.BuildNeuronConnectionLookupTable_NewConnection(nodeConnectionLookup,
-            self.nodeLookup,connection.targetID, connection, 'incoming');
-
-        //what node is this connectino's source? That makes this an outgoing connection for the node
-        NeatGenome.BuildNeuronConnectionLookupTable_NewConnection(nodeConnectionLookup,
-            self.nodeLookup, connection.sourceID, connection, 'outgoing');
-    });
-
-    return nodeConnectionLookup;
-};
-
-/// <summary>
-/// We define a simple neuron structure as a neuron that has a single outgoing or single incoming connection.
-/// With such a structure we can easily eliminate the neuron and shift it's connections to an adjacent neuron.
-/// If the neuron's non-linearity was not being used then such a mutation is a simplification of the network
-/// structure that shouldn't adversly affect its functionality.
-/// </summary>
-NeatGenome.prototype.mutate_DeleteSimpleNeuronStructure = function(newConnectionTable, np)
-{
-
-    var self = this;
-
-    // We will use the NeuronConnectionLookupTable to find the simple structures.
-    var nodeConnectionLookup = self.buildNeuronConnectionLookupTable();
-
-
-    // Build a list of candidate simple neurons to choose from.
-    var simpleNeuronIdList = [];
-
-    for(var lookupKey in nodeConnectionLookup)
-    {
-        var lookup = nodeConnectionLookup[lookupKey];
-
-
-        // If we test the connection count with <=1 then we also pick up neurons that are in dead-end circuits,
-        // RemoveSimpleNeuron is then able to delete these neurons from the network structure along with any
-        // associated connections.
-        // All neurons that are part of a module would appear to be dead-ended, but skip removing them anyway.
-        if (lookup.node.nodeType == NodeType.hidden
-            && !(lookup.node.activationFunction.functionID == 'ModuleInputNeuron')
-            && !(lookup.node.activationFunction.functionID == 'ModuleOutputNeuron') ) {
-            if((lookup.incoming.length<=1) || (lookup.outgoing.length<=1))
-                simpleNeuronIdList.push(lookup.node.gid);
-        }
-    }
-
-    // Are there any candiate simple neurons?
-    if(simpleNeuronIdList.length==0)
-    {	// No candidate neurons. As a fallback lets delete a connection.
-        self.mutate_DeleteConnection();
-        return false;
-    }
-
-    // Pick a simple neuron at random.
-    var idx = utilities.next(simpleNeuronIdList.length);//Math.floor(utilities.nextDouble() * simpleNeuronIdList.length);
-    var nid = simpleNeuronIdList[idx];
-    self.removeSimpleNeuron(nodeConnectionLookup, nid, newConnectionTable, np);
-
-    return true;
-};
-
-NeatGenome.prototype.removeSimpleNeuron = function(nodeConnectionLookup, nid, newConnectionTable, np)
-{
-    var self = this;
-    // Create new connections that connect all of the incoming and outgoing neurons
-    // that currently exist for the simple neuron.
-    var lookup = nodeConnectionLookup[nid];
-
-    lookup.incoming.forEach(function(incomingConnection)
-    {
-        lookup.outgoing.forEach(function(outgoingConnection){
-
-            if(!self.testForExistingConnectionInnovation(incomingConnection.sourceID, outgoingConnection.targetID))
-            {	// Connection doesnt already exists.
-
-                // Test for matching connection within NewConnectionGeneTable.
-                var connectionKey =  "(" + incomingConnection.sourceID + "," + outgoingConnection.targetID + ")";
-
-                //new ConnectionEndpointsStruct(incomingConnection.SourceNeuronId,
-//                   outgoi//ngConnection.TargetNeuronId);
-                var existingConnection = newConnectionTable[connectionKey];
-                var newConnection;
-                var nextID = NeatGenome.Help.nextInnovationID();
-                if(existingConnection==null)
-                {	// No matching connection found. Create a connection with a new ID.
-                    newConnection = new NeatConnection(nextID,
-                        (utilities.nextDouble() * np.connectionWeightRange) - np.connectionWeightRange/2.0,
-                        {sourceID:incomingConnection.sourceID, targetID: outgoingConnection.targetID});
-//                           new ConnectionGene(ea.NextInnovationId,
-//                           incomingConnection.SourceNeuronId,
-//                           outgoingConnection.TargetNeuronId,
-//                           (Utilities.NextDouble() * ea.NeatParameters.connectionWeightRange) - ea.NeatParameters.connectionWeightRange/2.0);
-
-                    // Register the new ID with NewConnectionGeneTable.
-                    newConnectionTable[connectionKey] = newConnection;
-
-                    // Add the new gene to the genome.
-                    self.connections.push(newConnection);
-                }
-                else
-                {	// Matching connection found. Re-use its ID.
-                    newConnection = new NeatConnection(existingConnection.gid,
-                        (utilities.nextDouble() * np.connectionWeightRange) - np.connectionWeightRange/2.0,
-                        {sourceID:incomingConnection.sourceID, targetID: outgoingConnection.targetID});
-
-                    // Add the new gene to the genome. Use InsertIntoPosition() to ensure we don't break the sort
-                    // order of the connection genes.
-                    NeatGenome.Help.insertByInnovation(newConnection, self.connections);
-                }
-
-            }
-
-        });
-
-    });
-
-
-    lookup.incoming.forEach(function(incomingConnection, inIx)
-    {
-        for(var i=0; i < self.connections.length; i++)
-        {
-            if(self.connections[i].gid == incomingConnection.gid)
-            {
-                self.connections.splice(i,1);
-                break;
-            }
-        }
-    });
-
-    lookup.outgoing.forEach(function(outgoingConnection, inIx)
-    {
-        if(outgoingConnection.targetID != nid)
-        {
-            for(var i=0; i < self.connections.length; i++)
-            {
-                if(self.connections[i].gid == outgoingConnection.gid)
-                {
-                    self.connections.splice(i,1);
-                    break;
-                }
-            }
-        }
-    });
-
-    // Delete the simple neuron - it no longer has any connections to or from it.
-    for(var i=0; i < self.nodes.length; i++)
-    {
-        if(self.nodes[i].gid == nid)
-        {
-            self.nodes.splice(i,1);
-            break;
-        }
-    }
-
-
-};
-
-});
-
-require.register("optimuslime~neatjs@master/neatHelp/neatDecoder.js", function (exports, module) {
-/**
- * Module dependencies.
- */
-
-//pull in our cppn lib
-var cppnjs = require("optimuslime~cppnjs@master");
-
-//grab our activation factory, cppn object and connections
-var CPPNactivationFactory = cppnjs.cppnActivationFactory;
-var CPPN = cppnjs.cppn;
-var CPPNConnection = cppnjs.cppnConnection;
-
-//going to need to read node types appropriately
-var NodeType = require("optimuslime~neatjs@master/types/nodeType.js");
-
-/**
- * Expose `NeatDecoder`.
- */
-
-var neatDecoder = {};
-
-module.exports = neatDecoder;
-
-/**
- * Decodes a neatGenome in a cppn.
- *
- * @param {Object} ng
- * @param {String} activationFunction
- * @api public
- */
-neatDecoder.DecodeToFloatFastConcurrentNetwork = function(ng, activationFunction)
-{
-    var outputNeuronCount = ng.outputNodeCount;
-    var neuronGeneCount = ng.nodes.length;
-
-    var biasList = [];
-    for(var b=0; b< neuronGeneCount; b++)
-        biasList.push(0);
-
-    // Slightly inefficient - determine the number of bias nodes. Fortunately there is not actually
-    // any reason to ever have more than one bias node - although there may be 0.
-
-    var activationFunctionArray = [];
-    for(var i=0; i < neuronGeneCount; i++){
-        activationFunctionArray.push("");
-    }
-
-    var nodeIdx=0;
-    for(; nodeIdx<neuronGeneCount; nodeIdx++)
-    {
-        activationFunctionArray[nodeIdx] = CPPNactivationFactory.getActivationFunction(ng.nodes[nodeIdx].activationFunction);
-        if(ng.nodes[nodeIdx].nodeType !=  NodeType.bias)
-            break;
-    }
-    var biasNodeCount = nodeIdx;
-    var inputNeuronCount = ng.inputNodeCount;
-    for (; nodeIdx < neuronGeneCount; nodeIdx++)
-    {
-        activationFunctionArray[nodeIdx] = CPPNactivationFactory.getActivationFunction(ng.nodes[nodeIdx].activationFunction);
-        biasList[nodeIdx] = ng.nodes[nodeIdx].bias;
-    }
-
-    // ConnectionGenes point to a neuron ID. We need to map this ID to a 0 based index for
-    // efficiency.
-
-    // Use a quick heuristic to determine which will be the fastest technique for mapping the connection end points
-    // to neuron indexes. This is heuristic is not 100% perfect but has been found to be very good in in real word
-    // tests. Feel free to perform your own calculation and create a more intelligent heuristic!
-    var  connectionCount= ng.connections.length;
-
-    var fastConnectionArray = [];
-    for(var i=0; i< connectionCount; i++){
-        fastConnectionArray.push(new CPPNConnection(0,0,0));
-    }
-
-    var nodeTable = {};// neuronIndexTable = new Hashtable(neuronGeneCount);
-    for(var i=0; i<neuronGeneCount; i++)
-        nodeTable[ng.nodes[i].gid] = i;
-
-    for(var connectionIdx=0; connectionIdx<connectionCount; connectionIdx++)
-    {
-        //fastConnectionArray[connectionIdx] = new FloatFastConnection();
-        //Note. Binary search algorithm assume that neurons are ordered by their innovation Id.
-        var connection = ng.connections[connectionIdx];
-        fastConnectionArray[connectionIdx].sourceIdx = nodeTable[connection.sourceID];
-        fastConnectionArray[connectionIdx].targetIdx = nodeTable[connection.targetID];
-
-        //save this for testing!
-//                System.Diagnostics.Debug.Assert(fastConnectionArray[connectionIdx].sourceNeuronIdx>=0 && fastConnectionArray[connectionIdx].targetNeuronIdx>=0, "invalid idx");
-
-        fastConnectionArray[connectionIdx].weight = connection.weight;
-        fastConnectionArray[connectionIdx].learningRate = connection.learningRate;
-        fastConnectionArray[connectionIdx].a = connection.a;
-        fastConnectionArray[connectionIdx].b = connection.b;
-        fastConnectionArray[connectionIdx].c = connection.c;
-
-//                connectionIdx++;
-    }
-
-    // Now sort the connection array on sourceNeuronIdx, secondary sort on targetNeuronIdx.
-    // Using Array.Sort is 10 times slower than the hand-coded sorting routine. See notes on that routine for more
-    // information. Also note that in tests that this sorting did no t actually improve the speed of the network!
-    // However, it may have a benefit for CPUs with small caches or when networks are very large, and since the new
-    // sort takes up hardly any time for even large networks, it seems reasonable to leave in the sort.
-    //Array.Sort(fastConnectionArray, fastConnectionComparer);
-    //if(fastConnectionArray.Length>1)
-    //	QuickSortFastConnections(0, fastConnectionArray.Length-1);
-
-    return new CPPN(biasNodeCount, inputNeuronCount,
-        outputNeuronCount, neuronGeneCount,
-        fastConnectionArray, biasList, activationFunctionArray);
-
-};
-
-
-});
-
-require.register("optimuslime~neatjs@master/neatHelp/neatHelp.js", function (exports, module) {
-/**
-* Module dependencies.
-*/
-var uuid = require("optimuslime~win-utils@master").cuid;
-/**
-* Expose `neatHelp`.
-*/
-
-var neatHelp = {};
-
-module.exports = neatHelp;
-
-//define helper types!
-neatHelp.CorrelationType =
-{
-    matchedConnectionGenes : 0,
-    disjointConnectionGene : 1,
-    excessConnectionGene : 2
-};
-
-neatHelp.CorrelationStatistics = function(){
-
-    var self= this;
-    self.matchingCount = 0;
-    self.disjointConnectionCount = 0;
-    self.excessConnectionCount = 0;
-    self.connectionWeightDelta = 0;
-};
-
-neatHelp.CorrelationItem = function(correlationType, conn1, conn2)
-{
-    var self= this;
-    self.correlationType = correlationType;
-    self.connection1 = conn1;
-    self.connection2 = conn2;
-};
-
-
-neatHelp.CorrelationResults = function()
-{
-    var self = this;
-
-    self.correlationStatistics = new neatHelp.CorrelationStatistics();
-    self.correlationList = [];
-
-};
-
-//TODO: Integrity check by GlobalID
-neatHelp.CorrelationResults.prototype.performIntegrityCheckByInnovation = function()
-{
-    var prevInnovationId= "";
-
-    var self = this;
-
-    for(var i=0; i< self.correlationList.length; i++){
-        var correlationItem =  self.correlationList[i];
-
-        switch(correlationItem.correlationType)
-        {
-            // Disjoint and excess genes.
-            case neatHelp.CorrelationType.disjointConnectionGene:
-            case neatHelp.CorrelationType.excessConnectionGene:
-                // Disjoint or excess gene.
-                if(		(!correlationItem.connection1 && !correlationItem.connection2)
-                    ||	(correlationItem.connection1 && correlationItem.connection2))
-                {	// Precisely one gene should be present.
-                    return false;
-                }
-                if(correlationItem.connection1)
-                {
-                    if(uuid.isLessThan(correlationItem.connection1.gid, prevInnovationId) || correlationItem.connection1.gid == prevInnovationId)
-                        return false;
-
-                    prevInnovationId = correlationItem.connection1.gid;
-                }
-                else // ConnectionGene2 is present.
-                {
-                    if(uuid.isLessThan(correlationItem.connection2.gid, prevInnovationId) || correlationItem.connection2.gid == prevInnovationId)
-                        return false;
-
-                    prevInnovationId = correlationItem.connection2.gid;
-                }
-
-                break;
-            case neatHelp.CorrelationType.matchedConnectionGenes:
-
-                if(!correlationItem.connection1 || !correlationItem.connection2)
-                    return false;
-
-                if(		(correlationItem.connection1.gid != correlationItem.connection2.gid)
-                    ||	(correlationItem.connection1.sourceID != correlationItem.connection2.sourceID)
-                    ||	(correlationItem.connection1.targetID != correlationItem.connection2.targetID))
-                    return false;
-
-                // Innovation ID's should be in order and not duplicated.
-                if(uuid.isLessThan(correlationItem.connection1.gid, prevInnovationId) || correlationItem.connection1.gid == prevInnovationId)
-                    return false;
-
-                prevInnovationId = correlationItem.connection1.gid;
-
-                break;
-        }
-    }
-
-    return true;
-};
-
-});
-
-require.register("optimuslime~neatjs@master/neatHelp/neatParameters.js", function (exports, module) {
-/**
- * Module dependencies.
- */
-//none
-
-/**
- * Expose `neatParameters`.
- */
-module.exports = NeatParameters;
-
-var	DEFAULT_POPULATION_SIZE = 150;
-var  DEFAULT_P_INITIAL_POPULATION_INTERCONNECTIONS = 1.00;//DAVID 0.05F;
-
-var DEFAULT_P_OFFSPRING_ASEXUAL = 0.5;
-var DEFAULT_P_OFFSPRING_SEXUAL = 0.5;
-var DEFAULT_P_INTERSPECIES_MATING = 0.01;
-
-var DEFAULT_P_DISJOINGEXCESSGENES_RECOMBINED = 0.1;
-
-//----- High level mutation proportions
-var DEFAULT_P_MUTATE_CONNECTION_WEIGHTS = 0.988;
-var DEFAULT_P_MUTATE_ADD_NODE = 0.002;
-var DEFAULT_P_MUTATE_ADD_MODULE = 0.0;
-var DEFAULT_P_MUTATE_ADD_CONNECTION = 0.018;
-var DEFAULT_P_MUTATE_CHANGE_ACTIVATIONS = 0.001;
-var DEFAULT_P_MUTATE_DELETE_CONNECTION = 0.001;
-var DEFAULT_P_MUTATE_DELETE_SIMPLENEURON = 0.00;
-var DEFAULT_N_MUTATE_ACTIVATION = 0.01;
-
-//-----
-var DEFAULT_COMPATIBILITY_THRESHOLD = 8 ;
-var DEFAULT_COMPATIBILITY_DISJOINT_COEFF = 1.0;
-var DEFAULT_COMPATIBILITY_EXCESS_COEFF = 1.0;
-var DEFAULT_COMPATIBILITY_WEIGHTDELTA_COEFF = 0.05;
-
-var DEFAULT_ELITISM_PROPORTION = 0.2;
-var DEFAULT_SELECTION_PROPORTION = 0.2;
-
-var DEFAULT_TARGET_SPECIES_COUNT_MIN = 6;
-var DEFAULT_TARGET_SPECIES_COUNT_MAX = 10;
-
-var DEFAULT_SPECIES_DROPOFF_AGE = 200;
-
-var DEFAULT_PRUNINGPHASE_BEGIN_COMPLEXITY_THRESHOLD = 50;
-var DEFAULT_PRUNINGPHASE_BEGIN_FITNESS_STAGNATION_THRESHOLD = 10;
-var DEFAULT_PRUNINGPHASE_END_COMPLEXITY_STAGNATION_THRESHOLD = 15;
-
-var DEFAULT_CONNECTION_WEIGHT_RANGE = 10.0;
-//		public const double DEFAULT_CONNECTION_MUTATION_SIGMA = 0.015;
-
-var DEFAULT_ACTIVATION_PROBABILITY = 1.0;
-
-NeatParameters.ConnectionPerturbationType =
-{
-    /// <summary>
-    /// Reset weights.
-    /// </summary>
-    reset : 0,
-
-        /// <summary>
-        /// Jiggle - even distribution
-        /// </summary>
-        jiggleEven :1
-
-        /// <summary>
-        /// Jiggle - normal distribution
-        /// </summary>
-//            jiggleND : 2
-};
-NeatParameters.ConnectionSelectionType =
-{
-    /// <summary>
-    /// Select a proportion of the weights in a genome.
-    /// </summary>
-    proportional :0,
-
-        /// <summary>
-        /// Select a fixed number of weights in a genome.
-        /// </summary>
-        fixedQuantity :1
-};
-
-NeatParameters.ConnectionMutationParameterGroup = function(
-     activationProportion,
-     perturbationType,
-     selectionType,
-     proportion,
-     quantity,
-     perturbationFactor,
-     sigma)
-{
-    var self = this;
-    /// <summary>
-    /// This group's activation proportion - relative to the totalled
-    /// ActivationProportion for all groups.
-    /// </summary>
-    self.activationProportion = activationProportion;
-
-    /// <summary>
-    /// The type of mutation that this group represents.
-    /// </summary>
-    self.perturbationType = perturbationType;
-
-    /// <summary>
-    /// The type of connection selection that this group represents.
-    /// </summary>
-    self.selectionType = selectionType;
-
-    /// <summary>
-    /// Specifies the proportion for SelectionType.Proportional
-    /// </summary>
-    self.proportion=proportion ;
-
-    /// <summary>
-    /// Specifies the quantity for SelectionType.FixedQuantity
-    /// </summary>
-    self.quantity= quantity;
-
-    /// <summary>
-    /// The perturbation factor for ConnectionPerturbationType.JiggleEven.
-    /// </summary>
-    self.perturbationFactor= perturbationFactor;
-
-    /// <summary>
-    /// Sigma for for ConnectionPerturbationType.JiggleND.
-    /// </summary>
-    self.sigma= sigma;
-};
-
-NeatParameters.ConnectionMutationParameterGroup.Copy = function(copyFrom)
-{
-    return new NeatParameters.ConnectionMutationParameterGroup(
-        copyFrom.ActivationProportion,
-         copyFrom.PerturbationType,
-           copyFrom.SelectionType,
-         copyFrom.Proportion,
-      copyFrom.Quantity,
-       copyFrom.PerturbationFactor,
-     copyFrom.Sigma
-    );
-};
-
-function NeatParameters()
-{
-    var self = this;
-    self.histogramBins = [];
-    self.archiveThreshold=3.00;
-    self.tournamentSize=4;
-    self.noveltySearch=false;
-    self.noveltyHistogram=false;
-    self.noveltyFixed=false;
-    self.noveltyFloat=false;
-    self.multiobjective=false;
-
-    self.allowSelfConnections = false;
-
-    self.populationSize = DEFAULT_POPULATION_SIZE;
-    self.pInitialPopulationInterconnections = DEFAULT_P_INITIAL_POPULATION_INTERCONNECTIONS;
-
-    self.pOffspringAsexual = DEFAULT_P_OFFSPRING_ASEXUAL;
-    self.pOffspringSexual = DEFAULT_P_OFFSPRING_SEXUAL;
-    self.pInterspeciesMating = DEFAULT_P_INTERSPECIES_MATING;
-
-    self.pDisjointExcessGenesRecombined = DEFAULT_P_DISJOINGEXCESSGENES_RECOMBINED;
-
-    //----- High level mutation proportions
-    self.pMutateConnectionWeights	= DEFAULT_P_MUTATE_CONNECTION_WEIGHTS;
-    self.pMutateAddNode = DEFAULT_P_MUTATE_ADD_NODE;
-    self.pMutateAddModule = DEFAULT_P_MUTATE_ADD_MODULE;
-    self.pMutateAddConnection = DEFAULT_P_MUTATE_ADD_CONNECTION;
-    self.pMutateDeleteConnection		= DEFAULT_P_MUTATE_DELETE_CONNECTION;
-    self.pMutateDeleteSimpleNeuron	= DEFAULT_P_MUTATE_DELETE_SIMPLENEURON;
-    self.pMutateChangeActivations = DEFAULT_P_MUTATE_CHANGE_ACTIVATIONS;
-    self.pNodeMutateActivationRate = DEFAULT_N_MUTATE_ACTIVATION;
-
-    //----- Build a default ConnectionMutationParameterGroupList.
-    self.connectionMutationParameterGroupList = [];
-
-    self.connectionMutationParameterGroupList.push(new NeatParameters.ConnectionMutationParameterGroup(0.125, NeatParameters.ConnectionPerturbationType.jiggleEven,
-        NeatParameters.ConnectionSelectionType.proportional, 0.5, 0, 0.05, 0.0));
-
-    self.connectionMutationParameterGroupList.push(new NeatParameters.ConnectionMutationParameterGroup(0.5, NeatParameters.ConnectionPerturbationType.jiggleEven,
-        NeatParameters.ConnectionSelectionType.proportional, 0.1, 0, 0.05, 0.0));
-
-    self.connectionMutationParameterGroupList.push(new NeatParameters.ConnectionMutationParameterGroup(0.125, NeatParameters.ConnectionPerturbationType.jiggleEven,
-        NeatParameters.ConnectionSelectionType.fixedQuantity, 0.0, 1, 0.05, 0.0));
-
-    self.connectionMutationParameterGroupList.push(new NeatParameters.ConnectionMutationParameterGroup(0.125, NeatParameters.ConnectionPerturbationType.reset,
-        NeatParameters.ConnectionSelectionType.proportional, 0.1, 0, 0.0, 0.0));
-
-    self.connectionMutationParameterGroupList.push(new NeatParameters.ConnectionMutationParameterGroup(0.125, NeatParameters.ConnectionPerturbationType.reset,
-        NeatParameters.ConnectionSelectionType.fixedQuantity, 0.0, 1, 0.0, 0.0));
-
-    //-----
-    self.compatibilityThreshold = DEFAULT_COMPATIBILITY_THRESHOLD;
-    self.compatibilityDisjointCoeff = DEFAULT_COMPATIBILITY_DISJOINT_COEFF;
-    self.compatibilityExcessCoeff = DEFAULT_COMPATIBILITY_EXCESS_COEFF;
-    self.compatibilityWeightDeltaCoeff = DEFAULT_COMPATIBILITY_WEIGHTDELTA_COEFF;
-
-    self.elitismProportion = DEFAULT_ELITISM_PROPORTION;
-    self.selectionProportion = DEFAULT_SELECTION_PROPORTION;
-
-    self.targetSpeciesCountMin = DEFAULT_TARGET_SPECIES_COUNT_MIN;
-    self.targetSpeciesCountMax = DEFAULT_TARGET_SPECIES_COUNT_MAX;
-
-    self.pruningPhaseBeginComplexityThreshold = DEFAULT_PRUNINGPHASE_BEGIN_COMPLEXITY_THRESHOLD;
-    self.pruningPhaseBeginFitnessStagnationThreshold = DEFAULT_PRUNINGPHASE_BEGIN_FITNESS_STAGNATION_THRESHOLD;
-    self.pruningPhaseEndComplexityStagnationThreshold = DEFAULT_PRUNINGPHASE_END_COMPLEXITY_STAGNATION_THRESHOLD;
-
-    self.speciesDropoffAge = DEFAULT_SPECIES_DROPOFF_AGE;
-
-    self.connectionWeightRange = DEFAULT_CONNECTION_WEIGHT_RANGE;
-
-    //DAVID
-    self.activationProbabilities = [];//new double[4];
-    self.activationProbabilities.push(DEFAULT_ACTIVATION_PROBABILITY);
-    self.activationProbabilities.push(0);
-    self.activationProbabilities.push(0);
-    self.activationProbabilities.push(0);
-};
-
-NeatParameters.Copy = function(copyFrom)
-{
-    var self = new NeatParameters();
-
-    //paul - joel originally
-    self.noveltySearch = copyFrom.noveltySearch;
-    self.noveltyHistogram = copyFrom.noveltyHistogram;
-    self.noveltyFixed = copyFrom.noveltyFixed;
-    self.noveltyFloat = copyFrom.noveltyFloat;
-    self.histogramBins = copyFrom.histogramBins;
-
-
-    self.allowSelfConnections = copyFrom.allowSelfConnections;
-
-    self.populationSize = copyFrom.populationSize;
-
-    self.pOffspringAsexual = copyFrom.pOffspringAsexual;
-    self.pOffspringSexual = copyFrom.pOffspringSexual;
-    self.pInterspeciesMating = copyFrom.pInterspeciesMating;
-
-    self.pDisjointExcessGenesRecombined = copyFrom.pDisjointExcessGenesRecombined;
-
-    self.pMutateConnectionWeights = copyFrom.pMutateConnectionWeights;
-    self.pMutateAddNode = copyFrom.pMutateAddNode;
-    self.pMutateAddModule = copyFrom.pMutateAddModule;
-    self.pMutateAddConnection = copyFrom.pMutateAddConnection;
-    self.pMutateDeleteConnection = copyFrom.pMutateDeleteConnection;
-    self.pMutateDeleteSimpleNeuron = copyFrom.pMutateDeleteSimpleNeuron;
-
-    // Copy the list.
-    self.connectionMutationParameterGroupList = [];
-    copyFrom.connectionMutationParameterGroupList.forEach(function(c){
-        self.connectionMutationParameterGroupList.push(NeatParameters.ConnectionMutationParameterGroup.Copy(c));
-
-    });
-
-    self.compatibilityThreshold = copyFrom.compatibilityThreshold;
-    self.compatibilityDisjointCoeff = copyFrom.compatibilityDisjointCoeff;
-    self.compatibilityExcessCoeff = copyFrom.compatibilityExcessCoeff;
-    self.compatibilityWeightDeltaCoeff = copyFrom.compatibilityWeightDeltaCoeff;
-
-    self.elitismProportion = copyFrom.elitismProportion;
-    self.selectionProportion = copyFrom.selectionProportion;
-
-    self.targetSpeciesCountMin = copyFrom.targetSpeciesCountMin;
-    self.targetSpeciesCountMax = copyFrom.targetSpeciesCountMax;
-
-    self.pruningPhaseBeginComplexityThreshold = copyFrom.pruningPhaseBeginComplexityThreshold;
-    self.pruningPhaseBeginFitnessStagnationThreshold = copyFrom.pruningPhaseBeginFitnessStagnationThreshold;
-    self.pruningPhaseEndComplexityStagnationThreshold = copyFrom.pruningPhaseEndComplexityStagnationThreshold;
-
-    self.speciesDropoffAge = copyFrom.speciesDropoffAge;
-
-    self.connectionWeightRange = copyFrom.connectionWeightRange;
-
-    return self;
-};
-
-
-
-});
-
-require.register("optimuslime~neatjs@master/types/nodeType.js", function (exports, module) {
-var NodeType =
-{
-    bias : "Bias",
-    input: "Input",
-    output: "Output",
-    hidden: "Hidden",
-    other : "Other"
-};
-
-module.exports = NodeType;
-});
-
-require.register("optimuslime~neatjs@master/utility/genomeSharpToJS.js", function (exports, module) {
-//Convert between C# SharpNEAT Genotype encoded in XML into a JS genotype in JSON
-//pretty simple
-
-/**
- * Module dependencies.
- */
-
-var NeatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
-var NeatNode = require("optimuslime~neatjs@master/genome/neatNode.js");
-var NeatConnection = require("optimuslime~neatjs@master/genome/neatConnection.js");
-var NodeType = require("optimuslime~neatjs@master/types/nodeType.js");
-
-
-/**
- * Expose `GenomeConverter`.
- */
-
-var converter = {};
-
-//we export the convert object, with two functions
-module.exports = converter;
-
-converter.NeuronTypeToNodeType = function(type)
-{
-    switch(type)
-    {
-        case "bias":
-            return NodeType.bias;
-        case "in":
-            return NodeType.input;
-        case "out":
-            return NodeType.output;
-        case "hid":
-            return NodeType.hidden;
-        default:
-            throw new Error("inpropper C# neuron type detected");
-    }
-};
-
-converter.ConvertCSharpToJS = function(xmlGenome)
-{
-
-    //we need to parse through a c# version of genome, and make a js genome from it
-
-    var aNeurons = xmlGenome['neurons']['neuron'] || xmlGenome['neurons'];
-    var aConnections = xmlGenome['connections']['connection'] || xmlGenome['connections'];
-
-
-    //we will use nodes and connections to make our genome
-    var nodes = [], connections = [];
-    var inCount = 0, outCount = 0;
-
-    for(var i=0; i < aNeurons.length; i++)
-    {
-        var csNeuron = aNeurons[i];
-        var jsNode = new NeatNode(csNeuron.id, csNeuron.activationFunction, csNeuron.layer, {type: converter.NeuronTypeToNodeType(csNeuron.type)});
-        nodes.push(jsNode);
-
-        if(csNeuron.type == 'in') inCount++;
-        else if(csNeuron.type == 'out') outCount++;
-    }
-
-    for(var i=0; i < aConnections.length; i++)
-    {
-        var csConnection = aConnections[i];
-        var jsConnection = new NeatConnection(csConnection['innov-id'], csConnection.weight, {sourceID:csConnection['src-id'], targetID: csConnection['tgt-id']});
-        connections.push(jsConnection);
-    }
-
-    var ng = new NeatGenome(xmlGenome['id'], nodes, connections, inCount, outCount);
-    ng.adaptable = (xmlGenome['adaptable'] == 'True');
-    ng.modulated = (xmlGenome['modulated'] == 'True');
-    ng.fitness = xmlGenome['fitness'];
-    ng.realFitness = xmlGenome['realfitness'];
-    ng.age = xmlGenome['age'];
-
-    return ng;
-};
-
-});
-
-require.modules["optimuslime-neatjs"] = require.modules["optimuslime~neatjs@master"];
-require.modules["optimuslime~neatjs"] = require.modules["optimuslime~neatjs@master"];
-require.modules["neatjs"] = require.modules["optimuslime~neatjs@master"];
-
-
-require.register("optimuslime~win-neat@0.0.1-9/lib/neatSchema.js", function (exports, module) {
-//contains the neat schema setup -- default for neatjs stuff.
-
-//Need a way to override schema inside WIN -- for now, neat comes with its own schema. Will be able to add variations later
-//(for things looking to add extra neat features while still having all the custom code). 
-
-//Alternatively, they could just copy this module, and add their own stuff. Module is small. 
- 
-module.exports = {
-    "nodes": {
-        "type" : "array",
-        "gid": "String",
-        "step": {"type": "Number"},
-        "activationFunction": "String",
-        "nodeType": "String",
-        "layer": {"type": "Number"},
-        "bias" : {"type": "Number"}
-    },
-    "connections": {
-        "type" : "array",
-        "gid" : "String",
-        // "step": {"type": "Number"},
-
-        "sourceID": "String",
-        "targetID": "String",
-        "weight": "Number"
-    }
-};
-
-
-
-});
-
-require.register("optimuslime~win-neat@0.0.1-9", function (exports, module) {
-//here we test the insert functions
-//making sure the database is filled with objects of the schema type
-var neat = require("optimuslime~neatjs@master");
-var neatSchema = require("optimuslime~win-neat@0.0.1-9/lib/neatSchema.js");
-var NodeType = neat.NodeType;
-var neatNode = neat.neatNode;
-var neatConnection = neat.neatConnection;
-var neatGenome = neat.neatGenome;
-
-var wMath = require("optimuslime~win-utils@master").math;
-
-module.exports = winneat;
-
-function defaultParameters()
-{
-	//make a new neat param object
-	var np = new neat.neatParameters();
-
-    //set up the defaults here
-    np.pMutateAddConnection = .13;
-    np.pMutateAddNode = .13;
-    np.pMutateDeleteSimpleNeuron = .00;
-    np.pMutateDeleteConnection = .00;
-    np.pMutateConnectionWeights = .72;
-    np.pMutateChangeActivations = .02;
-
-    np.pNodeMutateActivationRate = 0.2;
-    np.connectionWeightRange = 3.0;
-    np.disallowRecurrence = true;
-
-    //send it back
-    return np;
-}
-
-function selectXFromSmallObject(x, objects){
-
-	//the final ix object will be returned
-    var ixs = [];
-    //works with objects with count or arrays with length
-    var gCount = objects.count === undefined ? objects.length : objects.count;
-
-    for(var i=0; i<gCount;i++)
-        ixs.push(i);
-
-    //how many do we need back? we need x back. So we must remove (# of objects - x) leaving ... x objects
-    for(var i=0; i < gCount -x; i++)
-    {
-        //remove random index
-        ixs.splice(wMath.next(ixs.length),1);
-    }
-
-    //return a random collection of distinct indices
-    return ixs;
-};
-
-
-function winneat(backbone, globalConfig, localConfig)
-{
+	//need to make requests, much like win-publish
+	//pull in backbone info, we gotta set our logger/emitter up
 	var self = this;
 
-	//boom, let's get right into the business of encoding
+	self.winFunction = "data";
 
-	self.winFunction = "encoding";
-	//maintain backwards compat with old win versions -- use neat geno name
-	self.encodingName = "NEATGenotype";
+	//this is how we talk to win-backbone
+	self.backEmit = backbone.getEmitter(self);
 
+	//grab our logger
 	self.log = backbone.getLogger(self);
+
 	//only vital stuff goes out for normal logs
 	self.log.logLevel = localConfig.logLevel || self.log.normal;
 
-	//either pass in your own, or we make some defaults
-	self.neatParameters = localConfig.neatParameters || defaultParameters();
+	//we have logger and emitter, set up some of our functions
 
-	//pull options from the local config object under options
-	self.options = localConfig.options || {};
+	if(!globalConfig.server)
+		throw new Error("Global configuration requires server location and port")
 
+	self.hostname = globalConfig.server;
+	self.port = globalConfig.port;
 
+	//what events do we need?
+	//none for now, though in the future, we might have a way to communicate with foreign win-backbones as if it was just sending
+	//a message within our own backbone -- thereby obfuscating what is done remotely and what is done locally 
+	self.requiredEvents = function()
+	{
+		return [
+		];
+	}
+
+	//what events do we respond to?
 	self.eventCallbacks = function()
 	{ 
 		return {
-            "encoding:NEATGenotype-measureGenomeDistances" : self.calculateGenomicDistances,
-			//easy to handle neat geno full offspring
-			"encoding:NEATGenotype-createFullOffspring" : function(genProps, parentProps, sessionObject, done) { 
-				
-                //session might be undefined -- depending on win-gen behavior
-                //make sure session exists
-                sessionObject = sessionObject || {};
-
-				//need to engage parent creation here -- could be complicated
-				//taken from previous neatjs stuff -- added forced parents logic
-				var jsonParents = parentProps.parents;
-
-                // self.log("Create children from: ", jsonParents);
-
-				//we have the json parents above, now we need to convert into fresh actual parents 
-				var parents = [];
-				for(var i=0; i < jsonParents.length; i++)
-				{
-					//convert genotype json into full genotype with functions and stuff
-					var ng = genotypeFromJSON(jsonParents[i]);
-					parents.push(ng);
-				}
-
-                //how many to make
-				var count = genProps.count;
-
-                //these will be the final objects to return
-				var allParents = [];
-				var children = [];
-
-				//pull potential forced parents
-				var forced = sessionObject.forceParents;
-
-                //if we are forced to use particular parents, this helper will put the list of parents in an array for us
-				var getForceParents = function(parentList)
-				{
-                    var pIxMap = {};
-					var fullParents = [];
-					for(var i=0; i < parentList.length; i++)
-					{
-						//grab the index
-						var pIx = parentList[i];
-                        //given an index of fullParents, we can say what the original index was
-                        pIxMap[i] = pIx;
-						//use index to fetch full parent object -- push to parental list
-						fullParents.push(parents[pIx]);
-					}
-					return {parents: fullParents, ixMap: pIxMap};
-				}
-
-				//go through all the children -- using parents or force parents to create the new offspring
-				// keep in mind all parents are full neatgenomes that have all necessary functions
-				for(var c=0; c < count; c++)
-				{
-					//use the parents 
-					var oParents = parents;
-
-                    var fmap;
-					//forced has a full parental list
-					if(forced){    
-                        fmap = getForceParents(forced[c]);
-						oParents = fmap.parents;
-                        // self.log("Forced parents: ", oParents);
-                    }
-
-					//create offspring from the parents, hooray
-                    //session object potentially has things for handling newConnection/newNodes logic
-					var offObject = self.createNextGenome(oParents, sessionObject);
-
-					//back to JSON from whence you came!
-					var rOffspring = genotypeToJSON(offObject.offspring);
-
-					//grab the json offspring object
-					children.push(rOffspring);
-
-                    //parent ixs returned from create genome
-                    var rParentIxs = offObject.parentIxs;
-
-                    //parentixs tells us which of the forced parents was used 
-                    //but the forced parent index != original parent index
-                    //so we have to map back from the forced parents to the original parent index using ixMap
-                    if(forced)
-                    {
-                        realIxs = [];
-                        for(var p=0; p < rParentIxs.length; p++)
-                            realIxs.push(fmap.ixMap[rParentIxs[p]]);
-
-                        rParentIxs = realIxs;
-                    }
-
-					//createnext genome knows which parents were involved
-					allParents.push(rParentIxs);
-				}
-
-				//done, send er back
-				done(undefined, children, allParents);
-
-			 	return; 
-			 }
+			"data:winPOST" : self.postWIN,
+			"data:winGET" : self.getWIN
 		};
+	}
+
+	 var baseWIN = function()
+	{
+		return self.hostname + (self.port ? ":" + self.port : "") + "/api";
+	}
+
+	self.getWIN = function(apiPath, queryObjects, resFunction)
+	{
+		var base = baseWIN();
+
+		if(typeof queryObjects == "function")
+		{
+		  resFunction = queryObjects;
+		  queryObjects = {};
+		}
+		else //make sure to always have at least an empty object
+		  queryObjects = queryObjects || {};
+
+		var qNotEmpty = false;
+		var queryAdditions = "?";
+		for(var key in queryObjects){
+		  if(queryAdditions.length > 1)
+		    queryAdditions += "&";
+
+		  qNotEmpty = true;
+		  queryAdditions += key + "=" + queryObjects[key];
+		} 
+		var fullPath = base + apiPath + (qNotEmpty ? queryAdditions : "");
+
+		self.log("Requesting get from: ",fullPath )
+		request
+		  .get(fullPath)
+		  // .send(data)
+		  .set('Accept', 'application/json')
+		  .end(resFunction);
+	}
+
+	self.postWIN = function(apiPath, data, resFunction)
+	{
+		var base = baseWIN();
+
+		var fullPath= base + apiPath;
+		self.log("Requesting post to: ",fullPath )
+
+		request
+		  .post(fullPath)
+		  .send(data)
+		  .set('Accept', 'application/json')
+		  .end(resFunction);
+	}
+
+
+	return self;
+}
+
+
+
+});
+
+require.modules["optimuslime-win-data"] = require.modules["optimuslime~win-data@0.0.1-3"];
+require.modules["optimuslime~win-data"] = require.modules["optimuslime~win-data@0.0.1-3"];
+require.modules["win-data"] = require.modules["optimuslime~win-data@0.0.1-3"];
+
+
+require.register("geraintluff~tv4@master", function (exports, module) {
+/*
+Author: Geraint Luff and others
+Year: 2013
+
+This code is released into the "public domain" by its author(s).  Anybody may use, alter and distribute the code without restriction.  The author makes no guarantees, and takes no liability of any kind for use of this code.
+
+If you find a bug or make an improvement, it would be courteous to let the author know, but it is not compulsory.
+*/
+(function (global, factory) {
+  if (typeof define === 'function' && define.amd) {
+    // AMD. Register as an anonymous module.
+    define([], factory);
+  } else if (typeof module !== 'undefined' && module.exports){
+    // CommonJS. Define export.
+    module.exports = factory();
+  } else {
+    // Browser globals
+    global.tv4 = factory();
+  }
+}(this, function () {
+
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys?redirectlocale=en-US&redirectslug=JavaScript%2FReference%2FGlobal_Objects%2FObject%2Fkeys
+if (!Object.keys) {
+	Object.keys = (function () {
+		var hasOwnProperty = Object.prototype.hasOwnProperty,
+			hasDontEnumBug = !({toString: null}).propertyIsEnumerable('toString'),
+			dontEnums = [
+				'toString',
+				'toLocaleString',
+				'valueOf',
+				'hasOwnProperty',
+				'isPrototypeOf',
+				'propertyIsEnumerable',
+				'constructor'
+			],
+			dontEnumsLength = dontEnums.length;
+
+		return function (obj) {
+			if (typeof obj !== 'object' && typeof obj !== 'function' || obj === null) {
+				throw new TypeError('Object.keys called on non-object');
+			}
+
+			var result = [];
+
+			for (var prop in obj) {
+				if (hasOwnProperty.call(obj, prop)) {
+					result.push(prop);
+				}
+			}
+
+			if (hasDontEnumBug) {
+				for (var i=0; i < dontEnumsLength; i++) {
+					if (hasOwnProperty.call(obj, dontEnums[i])) {
+						result.push(dontEnums[i]);
+					}
+				}
+			}
+			return result;
+		};
+	})();
+}
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/create
+if (!Object.create) {
+	Object.create = (function(){
+		function F(){}
+
+		return function(o){
+			if (arguments.length !== 1) {
+				throw new Error('Object.create implementation only accepts one parameter.');
+			}
+			F.prototype = o;
+			return new F();
+		};
+	})();
+}
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/isArray?redirectlocale=en-US&redirectslug=JavaScript%2FReference%2FGlobal_Objects%2FArray%2FisArray
+if(!Array.isArray) {
+	Array.isArray = function (vArg) {
+		return Object.prototype.toString.call(vArg) === "[object Array]";
+	};
+}
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/indexOf?redirectlocale=en-US&redirectslug=JavaScript%2FReference%2FGlobal_Objects%2FArray%2FindexOf
+if (!Array.prototype.indexOf) {
+	Array.prototype.indexOf = function (searchElement /*, fromIndex */ ) {
+		if (this === null) {
+			throw new TypeError();
+		}
+		var t = Object(this);
+		var len = t.length >>> 0;
+
+		if (len === 0) {
+			return -1;
+		}
+		var n = 0;
+		if (arguments.length > 1) {
+			n = Number(arguments[1]);
+			if (n !== n) { // shortcut for verifying if it's NaN
+				n = 0;
+			} else if (n !== 0 && n !== Infinity && n !== -Infinity) {
+				n = (n > 0 || -1) * Math.floor(Math.abs(n));
+			}
+		}
+		if (n >= len) {
+			return -1;
+		}
+		var k = n >= 0 ? n : Math.max(len - Math.abs(n), 0);
+		for (; k < len; k++) {
+			if (k in t && t[k] === searchElement) {
+				return k;
+			}
+		}
+		return -1;
+	};
+}
+
+// Grungey Object.isFrozen hack
+if (!Object.isFrozen) {
+	Object.isFrozen = function (obj) {
+		var key = "tv4_test_frozen_key";
+		while (obj.hasOwnProperty(key)) {
+			key += Math.random();
+		}
+		try {
+			obj[key] = true;
+			delete obj[key];
+			return false;
+		} catch (e) {
+			return true;
+		}
+	};
+}
+// Based on: https://github.com/geraintluff/uri-templates, but with all the de-substitution stuff removed
+
+var uriTemplateGlobalModifiers = {
+	"+": true,
+	"#": true,
+	".": true,
+	"/": true,
+	";": true,
+	"?": true,
+	"&": true
+};
+var uriTemplateSuffices = {
+	"*": true
+};
+
+function notReallyPercentEncode(string) {
+	return encodeURI(string).replace(/%25[0-9][0-9]/g, function (doubleEncoded) {
+		return "%" + doubleEncoded.substring(3);
+	});
+}
+
+function uriTemplateSubstitution(spec) {
+	var modifier = "";
+	if (uriTemplateGlobalModifiers[spec.charAt(0)]) {
+		modifier = spec.charAt(0);
+		spec = spec.substring(1);
+	}
+	var separator = "";
+	var prefix = "";
+	var shouldEscape = true;
+	var showVariables = false;
+	var trimEmptyString = false;
+	if (modifier === '+') {
+		shouldEscape = false;
+	} else if (modifier === ".") {
+		prefix = ".";
+		separator = ".";
+	} else if (modifier === "/") {
+		prefix = "/";
+		separator = "/";
+	} else if (modifier === '#') {
+		prefix = "#";
+		shouldEscape = false;
+	} else if (modifier === ';') {
+		prefix = ";";
+		separator = ";";
+		showVariables = true;
+		trimEmptyString = true;
+	} else if (modifier === '?') {
+		prefix = "?";
+		separator = "&";
+		showVariables = true;
+	} else if (modifier === '&') {
+		prefix = "&";
+		separator = "&";
+		showVariables = true;
+	}
+
+	var varNames = [];
+	var varList = spec.split(",");
+	var varSpecs = [];
+	var varSpecMap = {};
+	for (var i = 0; i < varList.length; i++) {
+		var varName = varList[i];
+		var truncate = null;
+		if (varName.indexOf(":") !== -1) {
+			var parts = varName.split(":");
+			varName = parts[0];
+			truncate = parseInt(parts[1], 10);
+		}
+		var suffices = {};
+		while (uriTemplateSuffices[varName.charAt(varName.length - 1)]) {
+			suffices[varName.charAt(varName.length - 1)] = true;
+			varName = varName.substring(0, varName.length - 1);
+		}
+		var varSpec = {
+			truncate: truncate,
+			name: varName,
+			suffices: suffices
+		};
+		varSpecs.push(varSpec);
+		varSpecMap[varName] = varSpec;
+		varNames.push(varName);
+	}
+	var subFunction = function (valueFunction) {
+		var result = "";
+		var startIndex = 0;
+		for (var i = 0; i < varSpecs.length; i++) {
+			var varSpec = varSpecs[i];
+			var value = valueFunction(varSpec.name);
+			if (value === null || value === undefined || (Array.isArray(value) && value.length === 0) || (typeof value === 'object' && Object.keys(value).length === 0)) {
+				startIndex++;
+				continue;
+			}
+			if (i === startIndex) {
+				result += prefix;
+			} else {
+				result += (separator || ",");
+			}
+			if (Array.isArray(value)) {
+				if (showVariables) {
+					result += varSpec.name + "=";
+				}
+				for (var j = 0; j < value.length; j++) {
+					if (j > 0) {
+						result += varSpec.suffices['*'] ? (separator || ",") : ",";
+						if (varSpec.suffices['*'] && showVariables) {
+							result += varSpec.name + "=";
+						}
+					}
+					result += shouldEscape ? encodeURIComponent(value[j]).replace(/!/g, "%21") : notReallyPercentEncode(value[j]);
+				}
+			} else if (typeof value === "object") {
+				if (showVariables && !varSpec.suffices['*']) {
+					result += varSpec.name + "=";
+				}
+				var first = true;
+				for (var key in value) {
+					if (!first) {
+						result += varSpec.suffices['*'] ? (separator || ",") : ",";
+					}
+					first = false;
+					result += shouldEscape ? encodeURIComponent(key).replace(/!/g, "%21") : notReallyPercentEncode(key);
+					result += varSpec.suffices['*'] ? '=' : ",";
+					result += shouldEscape ? encodeURIComponent(value[key]).replace(/!/g, "%21") : notReallyPercentEncode(value[key]);
+				}
+			} else {
+				if (showVariables) {
+					result += varSpec.name;
+					if (!trimEmptyString || value !== "") {
+						result += "=";
+					}
+				}
+				if (varSpec.truncate != null) {
+					value = value.substring(0, varSpec.truncate);
+				}
+				result += shouldEscape ? encodeURIComponent(value).replace(/!/g, "%21"): notReallyPercentEncode(value);
+			}
+		}
+		return result;
+	};
+	subFunction.varNames = varNames;
+	return {
+		prefix: prefix,
+		substitution: subFunction
+	};
+}
+
+function UriTemplate(template) {
+	if (!(this instanceof UriTemplate)) {
+		return new UriTemplate(template);
+	}
+	var parts = template.split("{");
+	var textParts = [parts.shift()];
+	var prefixes = [];
+	var substitutions = [];
+	var varNames = [];
+	while (parts.length > 0) {
+		var part = parts.shift();
+		var spec = part.split("}")[0];
+		var remainder = part.substring(spec.length + 1);
+		var funcs = uriTemplateSubstitution(spec);
+		substitutions.push(funcs.substitution);
+		prefixes.push(funcs.prefix);
+		textParts.push(remainder);
+		varNames = varNames.concat(funcs.substitution.varNames);
+	}
+	this.fill = function (valueFunction) {
+		var result = textParts[0];
+		for (var i = 0; i < substitutions.length; i++) {
+			var substitution = substitutions[i];
+			result += substitution(valueFunction);
+			result += textParts[i + 1];
+		}
+		return result;
+	};
+	this.varNames = varNames;
+	this.template = template;
+}
+UriTemplate.prototype = {
+	toString: function () {
+		return this.template;
+	},
+	fillFromObject: function (obj) {
+		return this.fill(function (varName) {
+			return obj[varName];
+		});
+	}
+};
+var ValidatorContext = function ValidatorContext(parent, collectMultiple, errorMessages, checkRecursive, trackUnknownProperties) {
+	this.missing = [];
+	this.missingMap = {};
+	this.formatValidators = parent ? Object.create(parent.formatValidators) : {};
+	this.schemas = parent ? Object.create(parent.schemas) : {};
+	this.collectMultiple = collectMultiple;
+	this.errors = [];
+	this.handleError = collectMultiple ? this.collectError : this.returnError;
+	if (checkRecursive) {
+		this.checkRecursive = true;
+		this.scanned = [];
+		this.scannedFrozen = [];
+		this.scannedFrozenSchemas = [];
+		this.scannedFrozenValidationErrors = [];
+		this.validatedSchemasKey = 'tv4_validation_id';
+		this.validationErrorsKey = 'tv4_validation_errors_id';
+	}
+	if (trackUnknownProperties) {
+		this.trackUnknownProperties = true;
+		this.knownPropertyPaths = {};
+		this.unknownPropertyPaths = {};
+	}
+	this.errorMessages = errorMessages;
+	this.definedKeywords = {};
+	if (parent) {
+		for (var key in parent.definedKeywords) {
+			this.definedKeywords[key] = parent.definedKeywords[key].slice(0);
+		}
+	}
+};
+ValidatorContext.prototype.defineKeyword = function (keyword, keywordFunction) {
+	this.definedKeywords[keyword] = this.definedKeywords[keyword] || [];
+	this.definedKeywords[keyword].push(keywordFunction);
+};
+ValidatorContext.prototype.createError = function (code, messageParams, dataPath, schemaPath, subErrors) {
+	var messageTemplate = this.errorMessages[code] || ErrorMessagesDefault[code];
+	if (typeof messageTemplate !== 'string') {
+		return new ValidationError(code, "Unknown error code " + code + ": " + JSON.stringify(messageParams), messageParams, dataPath, schemaPath, subErrors);
+	}
+	// Adapted from Crockford's supplant()
+	var message = messageTemplate.replace(/\{([^{}]*)\}/g, function (whole, varName) {
+		var subValue = messageParams[varName];
+		return typeof subValue === 'string' || typeof subValue === 'number' ? subValue : whole;
+	});
+	return new ValidationError(code, message, messageParams, dataPath, schemaPath, subErrors);
+};
+ValidatorContext.prototype.returnError = function (error) {
+	return error;
+};
+ValidatorContext.prototype.collectError = function (error) {
+	if (error) {
+		this.errors.push(error);
+	}
+	return null;
+};
+ValidatorContext.prototype.prefixErrors = function (startIndex, dataPath, schemaPath) {
+	for (var i = startIndex; i < this.errors.length; i++) {
+		this.errors[i] = this.errors[i].prefixWith(dataPath, schemaPath);
+	}
+	return this;
+};
+ValidatorContext.prototype.banUnknownProperties = function () {
+	for (var unknownPath in this.unknownPropertyPaths) {
+		var error = this.createError(ErrorCodes.UNKNOWN_PROPERTY, {path: unknownPath}, unknownPath, "");
+		var result = this.handleError(error);
+		if (result) {
+			return result;
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.addFormat = function (format, validator) {
+	if (typeof format === 'object') {
+		for (var key in format) {
+			this.addFormat(key, format[key]);
+		}
+		return this;
+	}
+	this.formatValidators[format] = validator;
+};
+ValidatorContext.prototype.resolveRefs = function (schema, urlHistory) {
+	if (schema['$ref'] !== undefined) {
+		urlHistory = urlHistory || {};
+		if (urlHistory[schema['$ref']]) {
+			return this.createError(ErrorCodes.CIRCULAR_REFERENCE, {urls: Object.keys(urlHistory).join(', ')}, '', '');
+		}
+		urlHistory[schema['$ref']] = true;
+		schema = this.getSchema(schema['$ref'], urlHistory);
+	}
+	return schema;
+};
+ValidatorContext.prototype.getSchema = function (url, urlHistory) {
+	var schema;
+	if (this.schemas[url] !== undefined) {
+		schema = this.schemas[url];
+		return this.resolveRefs(schema, urlHistory);
+	}
+	var baseUrl = url;
+	var fragment = "";
+	if (url.indexOf('#') !== -1) {
+		fragment = url.substring(url.indexOf("#") + 1);
+		baseUrl = url.substring(0, url.indexOf("#"));
+	}
+	if (typeof this.schemas[baseUrl] === 'object') {
+		schema = this.schemas[baseUrl];
+		var pointerPath = decodeURIComponent(fragment);
+		if (pointerPath === "") {
+			return this.resolveRefs(schema, urlHistory);
+		} else if (pointerPath.charAt(0) !== "/") {
+			return undefined;
+		}
+		var parts = pointerPath.split("/").slice(1);
+		for (var i = 0; i < parts.length; i++) {
+			var component = parts[i].replace(/~1/g, "/").replace(/~0/g, "~");
+			if (schema[component] === undefined) {
+				schema = undefined;
+				break;
+			}
+			schema = schema[component];
+		}
+		if (schema !== undefined) {
+			return this.resolveRefs(schema, urlHistory);
+		}
+	}
+	if (this.missing[baseUrl] === undefined) {
+		this.missing.push(baseUrl);
+		this.missing[baseUrl] = baseUrl;
+		this.missingMap[baseUrl] = baseUrl;
+	}
+};
+ValidatorContext.prototype.searchSchemas = function (schema, url) {
+	if (Array.isArray(schema)) {
+		for (var i = 0; i < schema.length; i++) {
+			this.searchSchemas(schema[i], url);
+		}
+	} else if (schema && typeof schema === "object") {
+		if (typeof schema.id === "string") {
+			if (isTrustedUrl(url, schema.id)) {
+				if (this.schemas[schema.id] === undefined) {
+					this.schemas[schema.id] = schema;
+				}
+			}
+		}
+		for (var key in schema) {
+			if (key !== "enum") {
+				if (typeof schema[key] === "object") {
+					this.searchSchemas(schema[key], url);
+				} else if (key === "$ref") {
+					var uri = getDocumentUri(schema[key]);
+					if (uri && this.schemas[uri] === undefined && this.missingMap[uri] === undefined) {
+						this.missingMap[uri] = uri;
+					}
+				}
+			}
+		}
+	}
+};
+ValidatorContext.prototype.addSchema = function (url, schema) {
+	//overload
+	if (typeof url !== 'string' || typeof schema === 'undefined') {
+		if (typeof url === 'object' && typeof url.id === 'string') {
+			schema = url;
+			url = schema.id;
+		}
+		else {
+			return;
+		}
+	}
+	if (url === getDocumentUri(url) + "#") {
+		// Remove empty fragment
+		url = getDocumentUri(url);
+	}
+	this.schemas[url] = schema;
+	delete this.missingMap[url];
+	normSchema(schema, url);
+	this.searchSchemas(schema, url);
+};
+
+ValidatorContext.prototype.getSchemaMap = function () {
+	var map = {};
+	for (var key in this.schemas) {
+		map[key] = this.schemas[key];
+	}
+	return map;
+};
+
+ValidatorContext.prototype.getSchemaUris = function (filterRegExp) {
+	var list = [];
+	for (var key in this.schemas) {
+		if (!filterRegExp || filterRegExp.test(key)) {
+			list.push(key);
+		}
+	}
+	return list;
+};
+
+ValidatorContext.prototype.getMissingUris = function (filterRegExp) {
+	var list = [];
+	for (var key in this.missingMap) {
+		if (!filterRegExp || filterRegExp.test(key)) {
+			list.push(key);
+		}
+	}
+	return list;
+};
+
+ValidatorContext.prototype.dropSchemas = function () {
+	this.schemas = {};
+	this.reset();
+};
+ValidatorContext.prototype.reset = function () {
+	this.missing = [];
+	this.missingMap = {};
+	this.errors = [];
+};
+
+ValidatorContext.prototype.validateAll = function (data, schema, dataPathParts, schemaPathParts, dataPointerPath) {
+	var topLevel;
+	schema = this.resolveRefs(schema);
+	if (!schema) {
+		return null;
+	} else if (schema instanceof ValidationError) {
+		this.errors.push(schema);
+		return schema;
+	}
+
+	var startErrorCount = this.errors.length;
+	var frozenIndex, scannedFrozenSchemaIndex = null, scannedSchemasIndex = null;
+	if (this.checkRecursive && data && typeof data === 'object') {
+		topLevel = !this.scanned.length;
+		if (data[this.validatedSchemasKey]) {
+			var schemaIndex = data[this.validatedSchemasKey].indexOf(schema);
+			if (schemaIndex !== -1) {
+				this.errors = this.errors.concat(data[this.validationErrorsKey][schemaIndex]);
+				return null;
+			}
+		}
+		if (Object.isFrozen(data)) {
+			frozenIndex = this.scannedFrozen.indexOf(data);
+			if (frozenIndex !== -1) {
+				var frozenSchemaIndex = this.scannedFrozenSchemas[frozenIndex].indexOf(schema);
+				if (frozenSchemaIndex !== -1) {
+					this.errors = this.errors.concat(this.scannedFrozenValidationErrors[frozenIndex][frozenSchemaIndex]);
+					return null;
+				}
+			}
+		}
+		this.scanned.push(data);
+		if (Object.isFrozen(data)) {
+			if (frozenIndex === -1) {
+				frozenIndex = this.scannedFrozen.length;
+				this.scannedFrozen.push(data);
+				this.scannedFrozenSchemas.push([]);
+			}
+			scannedFrozenSchemaIndex = this.scannedFrozenSchemas[frozenIndex].length;
+			this.scannedFrozenSchemas[frozenIndex][scannedFrozenSchemaIndex] = schema;
+			this.scannedFrozenValidationErrors[frozenIndex][scannedFrozenSchemaIndex] = [];
+		} else {
+			if (!data[this.validatedSchemasKey]) {
+				try {
+					Object.defineProperty(data, this.validatedSchemasKey, {
+						value: [],
+						configurable: true
+					});
+					Object.defineProperty(data, this.validationErrorsKey, {
+						value: [],
+						configurable: true
+					});
+				} catch (e) {
+					//IE 7/8 workaround
+					data[this.validatedSchemasKey] = [];
+					data[this.validationErrorsKey] = [];
+				}
+			}
+			scannedSchemasIndex = data[this.validatedSchemasKey].length;
+			data[this.validatedSchemasKey][scannedSchemasIndex] = schema;
+			data[this.validationErrorsKey][scannedSchemasIndex] = [];
+		}
+	}
+
+	var errorCount = this.errors.length;
+	var error = this.validateBasic(data, schema, dataPointerPath)
+		|| this.validateNumeric(data, schema, dataPointerPath)
+		|| this.validateString(data, schema, dataPointerPath)
+		|| this.validateArray(data, schema, dataPointerPath)
+		|| this.validateObject(data, schema, dataPointerPath)
+		|| this.validateCombinations(data, schema, dataPointerPath)
+		|| this.validateHypermedia(data, schema, dataPointerPath)
+		|| this.validateFormat(data, schema, dataPointerPath)
+		|| this.validateDefinedKeywords(data, schema, dataPointerPath)
+		|| null;
+
+	if (topLevel) {
+		while (this.scanned.length) {
+			var item = this.scanned.pop();
+			delete item[this.validatedSchemasKey];
+		}
+		this.scannedFrozen = [];
+		this.scannedFrozenSchemas = [];
+	}
+
+	if (error || errorCount !== this.errors.length) {
+		while ((dataPathParts && dataPathParts.length) || (schemaPathParts && schemaPathParts.length)) {
+			var dataPart = (dataPathParts && dataPathParts.length) ? "" + dataPathParts.pop() : null;
+			var schemaPart = (schemaPathParts && schemaPathParts.length) ? "" + schemaPathParts.pop() : null;
+			if (error) {
+				error = error.prefixWith(dataPart, schemaPart);
+			}
+			this.prefixErrors(errorCount, dataPart, schemaPart);
+		}
+	}
+
+	if (scannedFrozenSchemaIndex !== null) {
+		this.scannedFrozenValidationErrors[frozenIndex][scannedFrozenSchemaIndex] = this.errors.slice(startErrorCount);
+	} else if (scannedSchemasIndex !== null) {
+		data[this.validationErrorsKey][scannedSchemasIndex] = this.errors.slice(startErrorCount);
+	}
+
+	return this.handleError(error);
+};
+ValidatorContext.prototype.validateFormat = function (data, schema) {
+	if (typeof schema.format !== 'string' || !this.formatValidators[schema.format]) {
+		return null;
+	}
+	var errorMessage = this.formatValidators[schema.format].call(null, data, schema);
+	if (typeof errorMessage === 'string' || typeof errorMessage === 'number') {
+		return this.createError(ErrorCodes.FORMAT_CUSTOM, {message: errorMessage}).prefixWith(null, "format");
+	} else if (errorMessage && typeof errorMessage === 'object') {
+		return this.createError(ErrorCodes.FORMAT_CUSTOM, {message: errorMessage.message || "?"}, errorMessage.dataPath || null, errorMessage.schemaPath || "/format");
+	}
+	return null;
+};
+ValidatorContext.prototype.validateDefinedKeywords = function (data, schema) {
+	for (var key in this.definedKeywords) {
+		if (typeof schema[key] === 'undefined') {
+			continue;
+		}
+		var validationFunctions = this.definedKeywords[key];
+		for (var i = 0; i < validationFunctions.length; i++) {
+			var func = validationFunctions[i];
+			var result = func(data, schema[key], schema);
+			if (typeof result === 'string' || typeof result === 'number') {
+				return this.createError(ErrorCodes.KEYWORD_CUSTOM, {key: key, message: result}).prefixWith(null, "format");
+			} else if (result && typeof result === 'object') {
+				var code = result.code || ErrorCodes.KEYWORD_CUSTOM;
+				if (typeof code === 'string') {
+					if (!ErrorCodes[code]) {
+						throw new Error('Undefined error code (use defineError): ' + code);
+					}
+					code = ErrorCodes[code];
+				}
+				var messageParams = (typeof result.message === 'object') ? result.message : {key: key, message: result.message || "?"};
+				var schemaPath = result.schemaPath ||( "/" + key.replace(/~/g, '~0').replace(/\//g, '~1'));
+				return this.createError(code, messageParams, result.dataPath || null, schemaPath);
+			}
+		}
+	}
+	return null;
+};
+
+function recursiveCompare(A, B) {
+	if (A === B) {
+		return true;
+	}
+	if (typeof A === "object" && typeof B === "object") {
+		if (Array.isArray(A) !== Array.isArray(B)) {
+			return false;
+		} else if (Array.isArray(A)) {
+			if (A.length !== B.length) {
+				return false;
+			}
+			for (var i = 0; i < A.length; i++) {
+				if (!recursiveCompare(A[i], B[i])) {
+					return false;
+				}
+			}
+		} else {
+			var key;
+			for (key in A) {
+				if (B[key] === undefined && A[key] !== undefined) {
+					return false;
+				}
+			}
+			for (key in B) {
+				if (A[key] === undefined && B[key] !== undefined) {
+					return false;
+				}
+			}
+			for (key in A) {
+				if (!recursiveCompare(A[key], B[key])) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+	return false;
+}
+
+ValidatorContext.prototype.validateBasic = function validateBasic(data, schema, dataPointerPath) {
+	var error;
+	if (error = this.validateType(data, schema, dataPointerPath)) {
+		return error.prefixWith(null, "type");
+	}
+	if (error = this.validateEnum(data, schema, dataPointerPath)) {
+		return error.prefixWith(null, "type");
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateType = function validateType(data, schema) {
+	if (schema.type === undefined) {
+		return null;
+	}
+	var dataType = typeof data;
+	if (data === null) {
+		dataType = "null";
+	} else if (Array.isArray(data)) {
+		dataType = "array";
+	}
+	var allowedTypes = schema.type;
+	if (typeof allowedTypes !== "object") {
+		allowedTypes = [allowedTypes];
+	}
+
+	for (var i = 0; i < allowedTypes.length; i++) {
+		var type = allowedTypes[i];
+		if (type === dataType || (type === "integer" && dataType === "number" && (data % 1 === 0))) {
+			return null;
+		}
+	}
+	return this.createError(ErrorCodes.INVALID_TYPE, {type: dataType, expected: allowedTypes.join("/")});
+};
+
+ValidatorContext.prototype.validateEnum = function validateEnum(data, schema) {
+	if (schema["enum"] === undefined) {
+		return null;
+	}
+	for (var i = 0; i < schema["enum"].length; i++) {
+		var enumVal = schema["enum"][i];
+		if (recursiveCompare(data, enumVal)) {
+			return null;
+		}
+	}
+	return this.createError(ErrorCodes.ENUM_MISMATCH, {value: (typeof JSON !== 'undefined') ? JSON.stringify(data) : data});
+};
+
+ValidatorContext.prototype.validateNumeric = function validateNumeric(data, schema, dataPointerPath) {
+	return this.validateMultipleOf(data, schema, dataPointerPath)
+		|| this.validateMinMax(data, schema, dataPointerPath)
+		|| this.validateNaN(data, schema, dataPointerPath)
+		|| null;
+};
+
+var CLOSE_ENOUGH_LOW = Math.pow(2, -51);
+var CLOSE_ENOUGH_HIGH = 1 - CLOSE_ENOUGH_LOW;
+ValidatorContext.prototype.validateMultipleOf = function validateMultipleOf(data, schema) {
+	var multipleOf = schema.multipleOf || schema.divisibleBy;
+	if (multipleOf === undefined) {
+		return null;
+	}
+	if (typeof data === "number") {
+		var remainder = (data/multipleOf)%1;
+		if (remainder >= CLOSE_ENOUGH_LOW && remainder < CLOSE_ENOUGH_HIGH) {
+			return this.createError(ErrorCodes.NUMBER_MULTIPLE_OF, {value: data, multipleOf: multipleOf});
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateMinMax = function validateMinMax(data, schema) {
+	if (typeof data !== "number") {
+		return null;
+	}
+	if (schema.minimum !== undefined) {
+		if (data < schema.minimum) {
+			return this.createError(ErrorCodes.NUMBER_MINIMUM, {value: data, minimum: schema.minimum}).prefixWith(null, "minimum");
+		}
+		if (schema.exclusiveMinimum && data === schema.minimum) {
+			return this.createError(ErrorCodes.NUMBER_MINIMUM_EXCLUSIVE, {value: data, minimum: schema.minimum}).prefixWith(null, "exclusiveMinimum");
+		}
+	}
+	if (schema.maximum !== undefined) {
+		if (data > schema.maximum) {
+			return this.createError(ErrorCodes.NUMBER_MAXIMUM, {value: data, maximum: schema.maximum}).prefixWith(null, "maximum");
+		}
+		if (schema.exclusiveMaximum && data === schema.maximum) {
+			return this.createError(ErrorCodes.NUMBER_MAXIMUM_EXCLUSIVE, {value: data, maximum: schema.maximum}).prefixWith(null, "exclusiveMaximum");
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateNaN = function validateNaN(data) {
+	if (typeof data !== "number") {
+		return null;
+	}
+	if (isNaN(data) === true || data === Infinity || data === -Infinity) {
+		return this.createError(ErrorCodes.NUMBER_NOT_A_NUMBER, {value: data}).prefixWith(null, "type");
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateString = function validateString(data, schema, dataPointerPath) {
+	return this.validateStringLength(data, schema, dataPointerPath)
+		|| this.validateStringPattern(data, schema, dataPointerPath)
+		|| null;
+};
+
+ValidatorContext.prototype.validateStringLength = function validateStringLength(data, schema) {
+	if (typeof data !== "string") {
+		return null;
+	}
+	if (schema.minLength !== undefined) {
+		if (data.length < schema.minLength) {
+			return this.createError(ErrorCodes.STRING_LENGTH_SHORT, {length: data.length, minimum: schema.minLength}).prefixWith(null, "minLength");
+		}
+	}
+	if (schema.maxLength !== undefined) {
+		if (data.length > schema.maxLength) {
+			return this.createError(ErrorCodes.STRING_LENGTH_LONG, {length: data.length, maximum: schema.maxLength}).prefixWith(null, "maxLength");
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateStringPattern = function validateStringPattern(data, schema) {
+	if (typeof data !== "string" || schema.pattern === undefined) {
+		return null;
+	}
+	var regexp = new RegExp(schema.pattern);
+	if (!regexp.test(data)) {
+		return this.createError(ErrorCodes.STRING_PATTERN, {pattern: schema.pattern}).prefixWith(null, "pattern");
+	}
+	return null;
+};
+ValidatorContext.prototype.validateArray = function validateArray(data, schema, dataPointerPath) {
+	if (!Array.isArray(data)) {
+		return null;
+	}
+	return this.validateArrayLength(data, schema, dataPointerPath)
+		|| this.validateArrayUniqueItems(data, schema, dataPointerPath)
+		|| this.validateArrayItems(data, schema, dataPointerPath)
+		|| null;
+};
+
+ValidatorContext.prototype.validateArrayLength = function validateArrayLength(data, schema) {
+	var error;
+	if (schema.minItems !== undefined) {
+		if (data.length < schema.minItems) {
+			error = (this.createError(ErrorCodes.ARRAY_LENGTH_SHORT, {length: data.length, minimum: schema.minItems})).prefixWith(null, "minItems");
+			if (this.handleError(error)) {
+				return error;
+			}
+		}
+	}
+	if (schema.maxItems !== undefined) {
+		if (data.length > schema.maxItems) {
+			error = (this.createError(ErrorCodes.ARRAY_LENGTH_LONG, {length: data.length, maximum: schema.maxItems})).prefixWith(null, "maxItems");
+			if (this.handleError(error)) {
+				return error;
+			}
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateArrayUniqueItems = function validateArrayUniqueItems(data, schema) {
+	if (schema.uniqueItems) {
+		for (var i = 0; i < data.length; i++) {
+			for (var j = i + 1; j < data.length; j++) {
+				if (recursiveCompare(data[i], data[j])) {
+					var error = (this.createError(ErrorCodes.ARRAY_UNIQUE, {match1: i, match2: j})).prefixWith(null, "uniqueItems");
+					if (this.handleError(error)) {
+						return error;
+					}
+				}
+			}
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateArrayItems = function validateArrayItems(data, schema, dataPointerPath) {
+	if (schema.items === undefined) {
+		return null;
+	}
+	var error, i;
+	if (Array.isArray(schema.items)) {
+		for (i = 0; i < data.length; i++) {
+			if (i < schema.items.length) {
+				if (error = this.validateAll(data[i], schema.items[i], [i], ["items", i], dataPointerPath + "/" + i)) {
+					return error;
+				}
+			} else if (schema.additionalItems !== undefined) {
+				if (typeof schema.additionalItems === "boolean") {
+					if (!schema.additionalItems) {
+						error = (this.createError(ErrorCodes.ARRAY_ADDITIONAL_ITEMS, {})).prefixWith("" + i, "additionalItems");
+						if (this.handleError(error)) {
+							return error;
+						}
+					}
+				} else if (error = this.validateAll(data[i], schema.additionalItems, [i], ["additionalItems"], dataPointerPath + "/" + i)) {
+					return error;
+				}
+			}
+		}
+	} else {
+		for (i = 0; i < data.length; i++) {
+			if (error = this.validateAll(data[i], schema.items, [i], ["items"], dataPointerPath + "/" + i)) {
+				return error;
+			}
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateObject = function validateObject(data, schema, dataPointerPath) {
+	if (typeof data !== "object" || data === null || Array.isArray(data)) {
+		return null;
+	}
+	return this.validateObjectMinMaxProperties(data, schema, dataPointerPath)
+		|| this.validateObjectRequiredProperties(data, schema, dataPointerPath)
+		|| this.validateObjectProperties(data, schema, dataPointerPath)
+		|| this.validateObjectDependencies(data, schema, dataPointerPath)
+		|| null;
+};
+
+ValidatorContext.prototype.validateObjectMinMaxProperties = function validateObjectMinMaxProperties(data, schema) {
+	var keys = Object.keys(data);
+	var error;
+	if (schema.minProperties !== undefined) {
+		if (keys.length < schema.minProperties) {
+			error = this.createError(ErrorCodes.OBJECT_PROPERTIES_MINIMUM, {propertyCount: keys.length, minimum: schema.minProperties}).prefixWith(null, "minProperties");
+			if (this.handleError(error)) {
+				return error;
+			}
+		}
+	}
+	if (schema.maxProperties !== undefined) {
+		if (keys.length > schema.maxProperties) {
+			error = this.createError(ErrorCodes.OBJECT_PROPERTIES_MAXIMUM, {propertyCount: keys.length, maximum: schema.maxProperties}).prefixWith(null, "maxProperties");
+			if (this.handleError(error)) {
+				return error;
+			}
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateObjectRequiredProperties = function validateObjectRequiredProperties(data, schema) {
+	if (schema.required !== undefined) {
+		for (var i = 0; i < schema.required.length; i++) {
+			var key = schema.required[i];
+			if (data[key] === undefined) {
+				var error = this.createError(ErrorCodes.OBJECT_REQUIRED, {key: key}).prefixWith(null, "" + i).prefixWith(null, "required");
+				if (this.handleError(error)) {
+					return error;
+				}
+			}
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateObjectProperties = function validateObjectProperties(data, schema, dataPointerPath) {
+	var error;
+	for (var key in data) {
+		var keyPointerPath = dataPointerPath + "/" + key.replace(/~/g, '~0').replace(/\//g, '~1');
+		var foundMatch = false;
+		if (schema.properties !== undefined && schema.properties[key] !== undefined) {
+			foundMatch = true;
+			if (error = this.validateAll(data[key], schema.properties[key], [key], ["properties", key], keyPointerPath)) {
+				return error;
+			}
+		}
+		if (schema.patternProperties !== undefined) {
+			for (var patternKey in schema.patternProperties) {
+				var regexp = new RegExp(patternKey);
+				if (regexp.test(key)) {
+					foundMatch = true;
+					if (error = this.validateAll(data[key], schema.patternProperties[patternKey], [key], ["patternProperties", patternKey], keyPointerPath)) {
+						return error;
+					}
+				}
+			}
+		}
+		if (!foundMatch) {
+			if (schema.additionalProperties !== undefined) {
+				if (this.trackUnknownProperties) {
+					this.knownPropertyPaths[keyPointerPath] = true;
+					delete this.unknownPropertyPaths[keyPointerPath];
+				}
+				if (typeof schema.additionalProperties === "boolean") {
+					if (!schema.additionalProperties) {
+						error = this.createError(ErrorCodes.OBJECT_ADDITIONAL_PROPERTIES, {}).prefixWith(key, "additionalProperties");
+						if (this.handleError(error)) {
+							return error;
+						}
+					}
+				} else {
+					if (error = this.validateAll(data[key], schema.additionalProperties, [key], ["additionalProperties"], keyPointerPath)) {
+						return error;
+					}
+				}
+			} else if (this.trackUnknownProperties && !this.knownPropertyPaths[keyPointerPath]) {
+				this.unknownPropertyPaths[keyPointerPath] = true;
+			}
+		} else if (this.trackUnknownProperties) {
+			this.knownPropertyPaths[keyPointerPath] = true;
+			delete this.unknownPropertyPaths[keyPointerPath];
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateObjectDependencies = function validateObjectDependencies(data, schema, dataPointerPath) {
+	var error;
+	if (schema.dependencies !== undefined) {
+		for (var depKey in schema.dependencies) {
+			if (data[depKey] !== undefined) {
+				var dep = schema.dependencies[depKey];
+				if (typeof dep === "string") {
+					if (data[dep] === undefined) {
+						error = this.createError(ErrorCodes.OBJECT_DEPENDENCY_KEY, {key: depKey, missing: dep}).prefixWith(null, depKey).prefixWith(null, "dependencies");
+						if (this.handleError(error)) {
+							return error;
+						}
+					}
+				} else if (Array.isArray(dep)) {
+					for (var i = 0; i < dep.length; i++) {
+						var requiredKey = dep[i];
+						if (data[requiredKey] === undefined) {
+							error = this.createError(ErrorCodes.OBJECT_DEPENDENCY_KEY, {key: depKey, missing: requiredKey}).prefixWith(null, "" + i).prefixWith(null, depKey).prefixWith(null, "dependencies");
+							if (this.handleError(error)) {
+								return error;
+							}
+						}
+					}
+				} else {
+					if (error = this.validateAll(data, dep, [], ["dependencies", depKey], dataPointerPath)) {
+						return error;
+					}
+				}
+			}
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateCombinations = function validateCombinations(data, schema, dataPointerPath) {
+	return this.validateAllOf(data, schema, dataPointerPath)
+		|| this.validateAnyOf(data, schema, dataPointerPath)
+		|| this.validateOneOf(data, schema, dataPointerPath)
+		|| this.validateNot(data, schema, dataPointerPath)
+		|| null;
+};
+
+ValidatorContext.prototype.validateAllOf = function validateAllOf(data, schema, dataPointerPath) {
+	if (schema.allOf === undefined) {
+		return null;
+	}
+	var error;
+	for (var i = 0; i < schema.allOf.length; i++) {
+		var subSchema = schema.allOf[i];
+		if (error = this.validateAll(data, subSchema, [], ["allOf", i], dataPointerPath)) {
+			return error;
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateAnyOf = function validateAnyOf(data, schema, dataPointerPath) {
+	if (schema.anyOf === undefined) {
+		return null;
+	}
+	var errors = [];
+	var startErrorCount = this.errors.length;
+	var oldUnknownPropertyPaths, oldKnownPropertyPaths;
+	if (this.trackUnknownProperties) {
+		oldUnknownPropertyPaths = this.unknownPropertyPaths;
+		oldKnownPropertyPaths = this.knownPropertyPaths;
+	}
+	var errorAtEnd = true;
+	for (var i = 0; i < schema.anyOf.length; i++) {
+		if (this.trackUnknownProperties) {
+			this.unknownPropertyPaths = {};
+			this.knownPropertyPaths = {};
+		}
+		var subSchema = schema.anyOf[i];
+
+		var errorCount = this.errors.length;
+		var error = this.validateAll(data, subSchema, [], ["anyOf", i], dataPointerPath);
+
+		if (error === null && errorCount === this.errors.length) {
+			this.errors = this.errors.slice(0, startErrorCount);
+
+			if (this.trackUnknownProperties) {
+				for (var knownKey in this.knownPropertyPaths) {
+					oldKnownPropertyPaths[knownKey] = true;
+					delete oldUnknownPropertyPaths[knownKey];
+				}
+				for (var unknownKey in this.unknownPropertyPaths) {
+					if (!oldKnownPropertyPaths[unknownKey]) {
+						oldUnknownPropertyPaths[unknownKey] = true;
+					}
+				}
+				// We need to continue looping so we catch all the property definitions, but we don't want to return an error
+				errorAtEnd = false;
+				continue;
+			}
+
+			return null;
+		}
+		if (error) {
+			errors.push(error.prefixWith(null, "" + i).prefixWith(null, "anyOf"));
+		}
+	}
+	if (this.trackUnknownProperties) {
+		this.unknownPropertyPaths = oldUnknownPropertyPaths;
+		this.knownPropertyPaths = oldKnownPropertyPaths;
+	}
+	if (errorAtEnd) {
+		errors = errors.concat(this.errors.slice(startErrorCount));
+		this.errors = this.errors.slice(0, startErrorCount);
+		return this.createError(ErrorCodes.ANY_OF_MISSING, {}, "", "/anyOf", errors);
+	}
+};
+
+ValidatorContext.prototype.validateOneOf = function validateOneOf(data, schema, dataPointerPath) {
+	if (schema.oneOf === undefined) {
+		return null;
+	}
+	var validIndex = null;
+	var errors = [];
+	var startErrorCount = this.errors.length;
+	var oldUnknownPropertyPaths, oldKnownPropertyPaths;
+	if (this.trackUnknownProperties) {
+		oldUnknownPropertyPaths = this.unknownPropertyPaths;
+		oldKnownPropertyPaths = this.knownPropertyPaths;
+	}
+	for (var i = 0; i < schema.oneOf.length; i++) {
+		if (this.trackUnknownProperties) {
+			this.unknownPropertyPaths = {};
+			this.knownPropertyPaths = {};
+		}
+		var subSchema = schema.oneOf[i];
+
+		var errorCount = this.errors.length;
+		var error = this.validateAll(data, subSchema, [], ["oneOf", i], dataPointerPath);
+
+		if (error === null && errorCount === this.errors.length) {
+			if (validIndex === null) {
+				validIndex = i;
+			} else {
+				this.errors = this.errors.slice(0, startErrorCount);
+				return this.createError(ErrorCodes.ONE_OF_MULTIPLE, {index1: validIndex, index2: i}, "", "/oneOf");
+			}
+			if (this.trackUnknownProperties) {
+				for (var knownKey in this.knownPropertyPaths) {
+					oldKnownPropertyPaths[knownKey] = true;
+					delete oldUnknownPropertyPaths[knownKey];
+				}
+				for (var unknownKey in this.unknownPropertyPaths) {
+					if (!oldKnownPropertyPaths[unknownKey]) {
+						oldUnknownPropertyPaths[unknownKey] = true;
+					}
+				}
+			}
+		} else if (error) {
+			errors.push(error);
+		}
+	}
+	if (this.trackUnknownProperties) {
+		this.unknownPropertyPaths = oldUnknownPropertyPaths;
+		this.knownPropertyPaths = oldKnownPropertyPaths;
+	}
+	if (validIndex === null) {
+		errors = errors.concat(this.errors.slice(startErrorCount));
+		this.errors = this.errors.slice(0, startErrorCount);
+		return this.createError(ErrorCodes.ONE_OF_MISSING, {}, "", "/oneOf", errors);
+	} else {
+		this.errors = this.errors.slice(0, startErrorCount);
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateNot = function validateNot(data, schema, dataPointerPath) {
+	if (schema.not === undefined) {
+		return null;
+	}
+	var oldErrorCount = this.errors.length;
+	var oldUnknownPropertyPaths, oldKnownPropertyPaths;
+	if (this.trackUnknownProperties) {
+		oldUnknownPropertyPaths = this.unknownPropertyPaths;
+		oldKnownPropertyPaths = this.knownPropertyPaths;
+		this.unknownPropertyPaths = {};
+		this.knownPropertyPaths = {};
+	}
+	var error = this.validateAll(data, schema.not, null, null, dataPointerPath);
+	var notErrors = this.errors.slice(oldErrorCount);
+	this.errors = this.errors.slice(0, oldErrorCount);
+	if (this.trackUnknownProperties) {
+		this.unknownPropertyPaths = oldUnknownPropertyPaths;
+		this.knownPropertyPaths = oldKnownPropertyPaths;
+	}
+	if (error === null && notErrors.length === 0) {
+		return this.createError(ErrorCodes.NOT_PASSED, {}, "", "/not");
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateHypermedia = function validateCombinations(data, schema, dataPointerPath) {
+	if (!schema.links) {
+		return null;
+	}
+	var error;
+	for (var i = 0; i < schema.links.length; i++) {
+		var ldo = schema.links[i];
+		if (ldo.rel === "describedby") {
+			var template = new UriTemplate(ldo.href);
+			var allPresent = true;
+			for (var j = 0; j < template.varNames.length; j++) {
+				if (!(template.varNames[j] in data)) {
+					allPresent = false;
+					break;
+				}
+			}
+			if (allPresent) {
+				var schemaUrl = template.fillFromObject(data);
+				var subSchema = {"$ref": schemaUrl};
+				if (error = this.validateAll(data, subSchema, [], ["links", i], dataPointerPath)) {
+					return error;
+				}
+			}
+		}
+	}
+};
+
+// parseURI() and resolveUrl() are from https://gist.github.com/1088850
+//   -  released as public domain by author ("Yaffle") - see comments on gist
+
+function parseURI(url) {
+	var m = String(url).replace(/^\s+|\s+$/g, '').match(/^([^:\/?#]+:)?(\/\/(?:[^:@]*(?::[^:@]*)?@)?(([^:\/?#]*)(?::(\d*))?))?([^?#]*)(\?[^#]*)?(#[\s\S]*)?/);
+	// authority = '//' + user + ':' + pass '@' + hostname + ':' port
+	return (m ? {
+		href     : m[0] || '',
+		protocol : m[1] || '',
+		authority: m[2] || '',
+		host     : m[3] || '',
+		hostname : m[4] || '',
+		port     : m[5] || '',
+		pathname : m[6] || '',
+		search   : m[7] || '',
+		hash     : m[8] || ''
+	} : null);
+}
+
+function resolveUrl(base, href) {// RFC 3986
+
+	function removeDotSegments(input) {
+		var output = [];
+		input.replace(/^(\.\.?(\/|$))+/, '')
+			.replace(/\/(\.(\/|$))+/g, '/')
+			.replace(/\/\.\.$/, '/../')
+			.replace(/\/?[^\/]*/g, function (p) {
+				if (p === '/..') {
+					output.pop();
+				} else {
+					output.push(p);
+				}
+		});
+		return output.join('').replace(/^\//, input.charAt(0) === '/' ? '/' : '');
+	}
+
+	href = parseURI(href || '');
+	base = parseURI(base || '');
+
+	return !href || !base ? null : (href.protocol || base.protocol) +
+		(href.protocol || href.authority ? href.authority : base.authority) +
+		removeDotSegments(href.protocol || href.authority || href.pathname.charAt(0) === '/' ? href.pathname : (href.pathname ? ((base.authority && !base.pathname ? '/' : '') + base.pathname.slice(0, base.pathname.lastIndexOf('/') + 1) + href.pathname) : base.pathname)) +
+		(href.protocol || href.authority || href.pathname ? href.search : (href.search || base.search)) +
+		href.hash;
+}
+
+function getDocumentUri(uri) {
+	return uri.split('#')[0];
+}
+function normSchema(schema, baseUri) {
+	if (schema && typeof schema === "object") {
+		if (baseUri === undefined) {
+			baseUri = schema.id;
+		} else if (typeof schema.id === "string") {
+			baseUri = resolveUrl(baseUri, schema.id);
+			schema.id = baseUri;
+		}
+		if (Array.isArray(schema)) {
+			for (var i = 0; i < schema.length; i++) {
+				normSchema(schema[i], baseUri);
+			}
+		} else {
+			if (typeof schema['$ref'] === "string") {
+				schema['$ref'] = resolveUrl(baseUri, schema['$ref']);
+			}
+			for (var key in schema) {
+				if (key !== "enum") {
+					normSchema(schema[key], baseUri);
+				}
+			}
+		}
+	}
+}
+
+var ErrorCodes = {
+	INVALID_TYPE: 0,
+	ENUM_MISMATCH: 1,
+	ANY_OF_MISSING: 10,
+	ONE_OF_MISSING: 11,
+	ONE_OF_MULTIPLE: 12,
+	NOT_PASSED: 13,
+	// Numeric errors
+	NUMBER_MULTIPLE_OF: 100,
+	NUMBER_MINIMUM: 101,
+	NUMBER_MINIMUM_EXCLUSIVE: 102,
+	NUMBER_MAXIMUM: 103,
+	NUMBER_MAXIMUM_EXCLUSIVE: 104,
+	NUMBER_NOT_A_NUMBER: 105,
+	// String errors
+	STRING_LENGTH_SHORT: 200,
+	STRING_LENGTH_LONG: 201,
+	STRING_PATTERN: 202,
+	// Object errors
+	OBJECT_PROPERTIES_MINIMUM: 300,
+	OBJECT_PROPERTIES_MAXIMUM: 301,
+	OBJECT_REQUIRED: 302,
+	OBJECT_ADDITIONAL_PROPERTIES: 303,
+	OBJECT_DEPENDENCY_KEY: 304,
+	// Array errors
+	ARRAY_LENGTH_SHORT: 400,
+	ARRAY_LENGTH_LONG: 401,
+	ARRAY_UNIQUE: 402,
+	ARRAY_ADDITIONAL_ITEMS: 403,
+	// Custom/user-defined errors
+	FORMAT_CUSTOM: 500,
+	KEYWORD_CUSTOM: 501,
+	// Schema structure
+	CIRCULAR_REFERENCE: 600,
+	// Non-standard validation options
+	UNKNOWN_PROPERTY: 1000
+};
+var ErrorCodeLookup = {};
+for (var key in ErrorCodes) {
+	ErrorCodeLookup[ErrorCodes[key]] = key;
+}
+var ErrorMessagesDefault = {
+	INVALID_TYPE: "Invalid type: {type} (expected {expected})",
+	ENUM_MISMATCH: "No enum match for: {value}",
+	ANY_OF_MISSING: "Data does not match any schemas from \"anyOf\"",
+	ONE_OF_MISSING: "Data does not match any schemas from \"oneOf\"",
+	ONE_OF_MULTIPLE: "Data is valid against more than one schema from \"oneOf\": indices {index1} and {index2}",
+	NOT_PASSED: "Data matches schema from \"not\"",
+	// Numeric errors
+	NUMBER_MULTIPLE_OF: "Value {value} is not a multiple of {multipleOf}",
+	NUMBER_MINIMUM: "Value {value} is less than minimum {minimum}",
+	NUMBER_MINIMUM_EXCLUSIVE: "Value {value} is equal to exclusive minimum {minimum}",
+	NUMBER_MAXIMUM: "Value {value} is greater than maximum {maximum}",
+	NUMBER_MAXIMUM_EXCLUSIVE: "Value {value} is equal to exclusive maximum {maximum}",
+	NUMBER_NOT_A_NUMBER: "Value {value} is not a valid number",
+	// String errors
+	STRING_LENGTH_SHORT: "String is too short ({length} chars), minimum {minimum}",
+	STRING_LENGTH_LONG: "String is too long ({length} chars), maximum {maximum}",
+	STRING_PATTERN: "String does not match pattern: {pattern}",
+	// Object errors
+	OBJECT_PROPERTIES_MINIMUM: "Too few properties defined ({propertyCount}), minimum {minimum}",
+	OBJECT_PROPERTIES_MAXIMUM: "Too many properties defined ({propertyCount}), maximum {maximum}",
+	OBJECT_REQUIRED: "Missing required property: {key}",
+	OBJECT_ADDITIONAL_PROPERTIES: "Additional properties not allowed",
+	OBJECT_DEPENDENCY_KEY: "Dependency failed - key must exist: {missing} (due to key: {key})",
+	// Array errors
+	ARRAY_LENGTH_SHORT: "Array is too short ({length}), minimum {minimum}",
+	ARRAY_LENGTH_LONG: "Array is too long ({length}), maximum {maximum}",
+	ARRAY_UNIQUE: "Array items are not unique (indices {match1} and {match2})",
+	ARRAY_ADDITIONAL_ITEMS: "Additional items not allowed",
+	// Format errors
+	FORMAT_CUSTOM: "Format validation failed ({message})",
+	KEYWORD_CUSTOM: "Keyword failed: {key} ({message})",
+	// Schema structure
+	CIRCULAR_REFERENCE: "Circular $refs: {urls}",
+	// Non-standard validation options
+	UNKNOWN_PROPERTY: "Unknown property (not in schema)"
+};
+
+function ValidationError(code, message, params, dataPath, schemaPath, subErrors) {
+	Error.call(this);
+	if (code === undefined) {
+		throw new Error ("No code supplied for error: "+ message);
+	}
+	this.message = message;
+	this.params = params;
+	this.code = code;
+	this.dataPath = dataPath || "";
+	this.schemaPath = schemaPath || "";
+	this.subErrors = subErrors || null;
+
+	var err = new Error(this.message);
+	this.stack = err.stack || err.stacktrace;
+	if (!this.stack) {
+		try {
+			throw err;
+		}
+		catch(err) {
+			this.stack = err.stack || err.stacktrace;
+		}
+	}
+}
+ValidationError.prototype = Object.create(Error.prototype);
+ValidationError.prototype.constructor = ValidationError;
+ValidationError.prototype.name = 'ValidationError';
+
+ValidationError.prototype.prefixWith = function (dataPrefix, schemaPrefix) {
+	if (dataPrefix !== null) {
+		dataPrefix = dataPrefix.replace(/~/g, "~0").replace(/\//g, "~1");
+		this.dataPath = "/" + dataPrefix + this.dataPath;
+	}
+	if (schemaPrefix !== null) {
+		schemaPrefix = schemaPrefix.replace(/~/g, "~0").replace(/\//g, "~1");
+		this.schemaPath = "/" + schemaPrefix + this.schemaPath;
+	}
+	if (this.subErrors !== null) {
+		for (var i = 0; i < this.subErrors.length; i++) {
+			this.subErrors[i].prefixWith(dataPrefix, schemaPrefix);
+		}
+	}
+	return this;
+};
+
+function isTrustedUrl(baseUrl, testUrl) {
+	if(testUrl.substring(0, baseUrl.length) === baseUrl){
+		var remainder = testUrl.substring(baseUrl.length);
+		if ((testUrl.length > 0 && testUrl.charAt(baseUrl.length - 1) === "/")
+			|| remainder.charAt(0) === "#"
+			|| remainder.charAt(0) === "?") {
+			return true;
+		}
+	}
+	return false;
+}
+
+var languages = {};
+function createApi(language) {
+	var globalContext = new ValidatorContext();
+	var currentLanguage = language || 'en';
+	var api = {
+		addFormat: function () {
+			globalContext.addFormat.apply(globalContext, arguments);
+		},
+		language: function (code) {
+			if (!code) {
+				return currentLanguage;
+			}
+			if (!languages[code]) {
+				code = code.split('-')[0]; // fall back to base language
+			}
+			if (languages[code]) {
+				currentLanguage = code;
+				return code; // so you can tell if fall-back has happened
+			}
+			return false;
+		},
+		addLanguage: function (code, messageMap) {
+			var key;
+			for (key in ErrorCodes) {
+				if (messageMap[key] && !messageMap[ErrorCodes[key]]) {
+					messageMap[ErrorCodes[key]] = messageMap[key];
+				}
+			}
+			var rootCode = code.split('-')[0];
+			if (!languages[rootCode]) { // use for base language if not yet defined
+				languages[code] = messageMap;
+				languages[rootCode] = messageMap;
+			} else {
+				languages[code] = Object.create(languages[rootCode]);
+				for (key in messageMap) {
+					if (typeof languages[rootCode][key] === 'undefined') {
+						languages[rootCode][key] = messageMap[key];
+					}
+					languages[code][key] = messageMap[key];
+				}
+			}
+			return this;
+		},
+		freshApi: function (language) {
+			var result = createApi();
+			if (language) {
+				result.language(language);
+			}
+			return result;
+		},
+		validate: function (data, schema, checkRecursive, banUnknownProperties) {
+			var context = new ValidatorContext(globalContext, false, languages[currentLanguage], checkRecursive, banUnknownProperties);
+			if (typeof schema === "string") {
+				schema = {"$ref": schema};
+			}
+			context.addSchema("", schema);
+			var error = context.validateAll(data, schema, null, null, "");
+			if (!error && banUnknownProperties) {
+				error = context.banUnknownProperties();
+			}
+			this.error = error;
+			this.missing = context.missing;
+			this.valid = (error === null);
+			return this.valid;
+		},
+		validateResult: function () {
+			var result = {};
+			this.validate.apply(result, arguments);
+			return result;
+		},
+		validateMultiple: function (data, schema, checkRecursive, banUnknownProperties) {
+			var context = new ValidatorContext(globalContext, true, languages[currentLanguage], checkRecursive, banUnknownProperties);
+			if (typeof schema === "string") {
+				schema = {"$ref": schema};
+			}
+			context.addSchema("", schema);
+			context.validateAll(data, schema, null, null, "");
+			if (banUnknownProperties) {
+				context.banUnknownProperties();
+			}
+			var result = {};
+			result.errors = context.errors;
+			result.missing = context.missing;
+			result.valid = (result.errors.length === 0);
+			return result;
+		},
+		addSchema: function () {
+			return globalContext.addSchema.apply(globalContext, arguments);
+		},
+		getSchema: function () {
+			return globalContext.getSchema.apply(globalContext, arguments);
+		},
+		getSchemaMap: function () {
+			return globalContext.getSchemaMap.apply(globalContext, arguments);
+		},
+		getSchemaUris: function () {
+			return globalContext.getSchemaUris.apply(globalContext, arguments);
+		},
+		getMissingUris: function () {
+			return globalContext.getMissingUris.apply(globalContext, arguments);
+		},
+		dropSchemas: function () {
+			globalContext.dropSchemas.apply(globalContext, arguments);
+		},
+		defineKeyword: function () {
+			globalContext.defineKeyword.apply(globalContext, arguments);
+		},
+		defineError: function (codeName, codeNumber, defaultMessage) {
+			if (typeof codeName !== 'string' || !/^[A-Z]+(_[A-Z]+)*$/.test(codeName)) {
+				throw new Error('Code name must be a string in UPPER_CASE_WITH_UNDERSCORES');
+			}
+			if (typeof codeNumber !== 'number' || codeNumber%1 !== 0 || codeNumber < 10000) {
+				throw new Error('Code number must be an integer > 10000');
+			}
+			if (typeof ErrorCodes[codeName] !== 'undefined') {
+				throw new Error('Error already defined: ' + codeName + ' as ' + ErrorCodes[codeName]);
+			}
+			if (typeof ErrorCodeLookup[codeNumber] !== 'undefined') {
+				throw new Error('Error code already used: ' + ErrorCodeLookup[codeNumber] + ' as ' + codeNumber);
+			}
+			ErrorCodes[codeName] = codeNumber;
+			ErrorCodeLookup[codeNumber] = codeName;
+			ErrorMessagesDefault[codeName] = ErrorMessagesDefault[codeNumber] = defaultMessage;
+			for (var langCode in languages) {
+				var language = languages[langCode];
+				if (language[codeName]) {
+					language[codeNumber] = language[codeNumber] || language[codeName];
+				}
+			}
+		},
+		reset: function () {
+			globalContext.reset();
+			this.error = null;
+			this.missing = [];
+			this.valid = true;
+		},
+		missing: [],
+		error: null,
+		valid: true,
+		normSchema: normSchema,
+		resolveUrl: resolveUrl,
+		getDocumentUri: getDocumentUri,
+		errorCodes: ErrorCodes
+	};
+	return api;
+}
+
+var tv4 = createApi();
+tv4.addLanguage('en-gb', ErrorMessagesDefault);
+
+//legacy property
+tv4.tv4 = tv4;
+
+return tv4; // used by _header.js to globalise.
+
+}));
+});
+
+require.register("geraintluff~tv4@master/lang/de.js", function (exports, module) {
+(function (global) {
+	var lang = {
+		INVALID_TYPE: "Ungültiger Typ: {type} (erwartet wurde: {expected})",
+		ENUM_MISMATCH: "Keine Übereinstimmung mit der Aufzählung (enum) für: {value}",
+		ANY_OF_MISSING: "Daten stimmen nicht überein mit einem der Schemas von \"anyOf\"",
+		ONE_OF_MISSING: "Daten stimmen nicht überein mit einem der Schemas von \"oneOf\"",
+		ONE_OF_MULTIPLE: "Daten sind valid in Bezug auf mehreren Schemas von \"oneOf\": index {index1} und {index2}",
+		NOT_PASSED: "Daten stimmen mit dem \"not\" Schema überein",
+		// Numeric errors
+		NUMBER_MULTIPLE_OF: "Wert {value} ist kein Vielfaches von {multipleOf}",
+		NUMBER_MINIMUM: "Wert {value} ist kleiner als das Minimum {minimum}",
+		NUMBER_MINIMUM_EXCLUSIVE: "Wert {value} ist gleich dem Exklusiven Minimum {minimum}",
+		NUMBER_MAXIMUM: "Wert {value} ist größer als das Maximum {maximum}",
+		NUMBER_MAXIMUM_EXCLUSIVE: "Wert {value} ist gleich dem Exklusiven Maximum {maximum}",
+		// String errors
+		STRING_LENGTH_SHORT: "Zeichenkette zu kurz ({length} chars), minimum {minimum}",
+		STRING_LENGTH_LONG: "Zeichenkette zu lang ({length} chars), maximum {maximum}",
+		STRING_PATTERN: "Zeichenkette entspricht nicht dem Muster: {pattern}",
+		// Object errors
+		OBJECT_PROPERTIES_MINIMUM: "Zu wenige Attribute definiert ({propertyCount}), minimum {minimum}",
+		OBJECT_PROPERTIES_MAXIMUM: "Zu viele Attribute definiert ({propertyCount}), maximum {maximum}",
+		OBJECT_REQUIRED: "Notwendiges Attribut fehlt: {key}",
+		OBJECT_ADDITIONAL_PROPERTIES: "Zusätzliche Attribute nicht erlaubt",
+		OBJECT_DEPENDENCY_KEY: "Abhängigkeit fehlt - Schlüssel nicht vorhanden: {missing} (wegen Schlüssel: {key})",
+		// Array errors
+		ARRAY_LENGTH_SHORT: "Array zu kurz ({length}), minimum {minimum}",
+		ARRAY_LENGTH_LONG: "Array zu lang ({length}), maximum {maximum}",
+		ARRAY_UNIQUE: "Array Einträge nicht eindeutig (Index {match1} und {match2})",
+		ARRAY_ADDITIONAL_ITEMS: "Zusätzliche Einträge nicht erlaubt"
 	};
 
-	self.markParentConnections = function(parents, sessionObject){
+	if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['../tv4'], function(tv4) {
+			tv4.addLanguage('de', lang);
+			return tv4;
+		});
+	} else if (typeof module !== 'undefined' && module.exports){
+		// CommonJS. Define export.
+		var tv4 = require('geraintluff~tv4@master');
+		tv4.addLanguage('de', lang);
+		module.exports = tv4;
+	} else {
+		// Browser globals
+		global.tv4.addLanguage('de', lang);
+	}
+})(this);
 
-        for(var s=0; s < parents.length; s++)
-        {
-            var parent = parents[s];
-            for(var c =0; c < parent.connections.length; c++)
-            {
-                var sConn = parent.connections[c];
-                var cid = '(' + sConn.sourceID + ',' + sConn.targetID + ')';
-                sessionObject.newConnections[cid] = sConn;
-            }
-        }
-    };
+});
 
-	self.createNextGenome = function(parents, sessionObject)
-    {
-        //make sure to have session object setup
-        sessionObject.newConnections = sessionObject.newConnections || {};
-        //nodes is just an array -- doesn't really do much ...
-        sessionObject.newNodes = sessionObject.newNodes || {};
-
-        self.markParentConnections(parents,sessionObject);
-
-        //IF we have 0 parents, we create a genome with the default configurations
-        var ng;
-        var initialMutationCount = self.options.initialMutationCount || 0,
-            postXOMutationCount = self.options.postMutationCount || 0;
-            
-        var moreThanTwoParents = self.options.moreThanTwoParents || 0.05;
-
-        var responsibleParents = [];
-
-        switch(parents.length)
-        {
-            case 0:
-                throw new Error("Cannot create new NEAT genome in win-NEAT without any parents.")
-            case 1:
-
-                //we have one parent
-                //asexual reproduction
-                ng = parents[0].createOffspringAsexual(sessionObject.newNodes, sessionObject.newConnections, self.neatParameters);
-                // self.log("\n\n\n\n\nPars: ".red, parents[0].createOffspringAsexual);
-                //parent at index 0 responsible
-                responsibleParents.push(0);
-
-                for(var m=0; m < postXOMutationCount; m++)
-                    ng.mutate(sessionObject.newNodes, sessionObject.newConnections, self.neatParameters);
-
-                break;
-            default:
-                //greater than 1 individual as a possible parent
-
-                //at least 1 parent, and at most self.activeParents.count # of parents
-                var parentCount = 1;
-
-                //if you are more than the probabiliy of having >2 parents, then it's just normal behavior -- 1 or 2 parents
-                if(Math.random() > moreThanTwoParents)
-                {
-                    parentCount = 1 + wMath.next(2);
-                  
-                }
-                else  //chance that parents will be more than 2 parents -- unusual for neat genotypes
-                    parentCount = 1 + wMath.next(parents.length);
-
-                if(parentCount == 1)
-                {
-                    //select a single parent for offspring
-                    var rIx = wMath.next(parents.length);
-
-                    ng = parents[rIx].createOffspringAsexual(sessionObject.newNodes, sessionObject.newConnections, self.neatParameters);
-                    //1 responsible parent at index 0
-                    responsibleParents.push(rIx);
-                    break;
-                }
-
-                //we expect active parents to be small, so we grab parentCount number of parents from a small array of parents
-                var parentIxs = selectXFromSmallObject(parentCount, parents);
-
-                var p1 = parents[parentIxs[0]], p2;
-                //if I have 3 parents, go in order composing the objects
-
-                responsibleParents.push(parentIxs[0]);
-
-                //p1 mates with p2 to create o1, o1 mates with p3, to make o2 -- p1,p2,p3 are all combined now inside of o2
-                for(var i=1; i < parentIxs.length; i++)
-                {
-                    p2 = parents[parentIxs[i]];
-                    ng = p1.createOffspringSexual(p2, self.neatParameters);
-                    p1 = ng;
-                    responsibleParents.push(parentIxs[i]);
-                }
-
-                for(var m=0; m < postXOMutationCount; m++)
-                    ng.mutate(sessionObject.newNodes, sessionObject.newConnections, self.neatParameters);
-
-
-                break;
-        }
-
-        //we have our genome, let's send it back
-
-        //the reason we don't end it inisde the switch loop is that later, we might be interested in saving this genome from some other purpose
-        return {offspring: ng, parentIxs: responsibleParents};
-    };
-
-        //currently not used, calculates genomic novelty objective for protecting innovation
-    //uses a rough characterization of topology, i.e. number of connections in the genome
-    self.calculateGenomicDistances = function(genomeMap, closestCount, finished) {
-
-        var sum=0.0;
-        var max_conn = 0;
-
-        var xx, yy;
-        // self.log('Geno obj: ', neatGenome.prototype);
-
-        //convert from json if it is json
-        var checkNotJSON = function(gObject)
-        {
-            //gneomes should have a compat function
-            if(typeof gObject.compat != "function")
-            {
-                gObject = genotypeFromJSON(gObject);
-            }
-
-            //don't touch object if not necessary
-            return gObject;
-        }
-
-        var gDiversity = {};
-        var gc = 0;
-        for(var wid in genomeMap) 
-        {
-            //keep count
-            gc++;
-
-            xx = checkNotJSON(genomeMap[wid]);
-            //quickly make sure our genomeMap is full of real objects
-            genomeMap[wid] = xx;
-            
-
-            var minDist=10000000.0;
-
-            var difference=0.0;
-            var delta=0.0;
-            //double array
-            var distances= [];
-
-            if(xx.connections.length > max_conn)
-                max_conn = xx.connections.length;
-
-            //int ccount=xx.ConnectionGeneList.Count;
-            for(var sWID in genomeMap) {
-
-                //make sure it's not json object -- we can do this before comparison cause it needs
-                //to happen anyways
-                yy = checkNotJSON(genomeMap[sWID]); 
-                genomeMap[sWID] = yy;
-
-                if(wid==sWID)
-                    continue;
-
-                //measure genomic compatability using neatparams
-                var d = xx.compat(yy, self.neatParameters);
-                //if(d<minDist)
-                //  minDist=d;
-
-                distances.push(d);
-            }
-
-            //ascending order
-            //want the closest individuals
-            distances.sort(function(a,b) {return a-b;});
-
-            //grab the 10 closest distances
-            var sz=Math.min(distances.length, closestCount);
-
-            var gDistance = 0.0;
-
-            for(var i=0;i<sz;i++)
-                gDistance+=distances[i];
-
-            sum += gDistance;
-
-            gDiversity[wid] = {distance: gDistance};
-        }
-
-        self.log("Sum Distance among genotypes: " + sum/gc + " with max connections in genome: " + max_conn);
-
-        var results = {genomeDistances: gDiversity, sumDistance: sum, averageDistance: sum/gc, genomeCount: gc};
-
-        //sync or asyn, don't matter to us -- as long as win-backbone supports it(not yet)
-        if(finished)
-            finished(undefined, results);
-        else
-            return results;
-
-    };
-
-	//need to be able to add our schema
-	self.requiredEvents = function() {
-		return [
-			"schema:addSchema"
-		];
+require.register("geraintluff~tv4@master/lang/no-nb.js", function (exports, module) {
+(function (global) {
+	var lang = {
+		INVALID_TYPE: "Ugyldig type: {type} (forventet {expected})",
+		ENUM_MISMATCH: "Ingen samsvarende enum verdi for: {value}",
+		ANY_OF_MISSING: "Data samsvarer ikke med noe skjema fra \"anyOf\"",
+		ONE_OF_MISSING: "Data samsvarer ikke med noe skjema fra \"oneOf\"",
+		ONE_OF_MULTIPLE: "Data samsvarer med mer enn ett skjema fra \"oneOf\": indeks {index1} og {index2}",
+		NOT_PASSED: "Data samsvarer med skjema fra \"not\"",
+		// Numeric errors
+		NUMBER_MULTIPLE_OF: "Verdien {value} er ikke et multiplum av {multipleOf}",
+		NUMBER_MINIMUM: "Verdien {value} er mindre enn minsteverdi {minimum}",
+		NUMBER_MINIMUM_EXCLUSIVE: "Verdien {value} er lik eksklusiv minsteverdi {minimum}",
+		NUMBER_MAXIMUM: "Verdien {value} er større enn maksimalverdi {maximum}",
+		NUMBER_MAXIMUM_EXCLUSIVE: "Verdien {value} er lik eksklusiv maksimalverdi {maximum}",
+		NUMBER_NOT_A_NUMBER: "Verdien {value} er ikke et gyldig tall",
+		// String errors
+		STRING_LENGTH_SHORT: "Strengen er for kort ({length} tegn), minst {minimum}",
+		STRING_LENGTH_LONG: "Strengen er for lang ({length} tegn), maksimalt {maximum}",
+		STRING_PATTERN: "Strengen samsvarer ikke med regulært uttrykk: {pattern}",
+		// Object errors
+		OBJECT_PROPERTIES_MINIMUM: "For få variabler definert ({propertyCount}), minst {minimum} er forventet",
+		OBJECT_PROPERTIES_MAXIMUM: "For mange variabler definert ({propertyCount}), makismalt {maximum} er tillatt",
+		OBJECT_REQUIRED: "Mangler obligatorisk variabel: {key}",
+		OBJECT_ADDITIONAL_PROPERTIES: "Tilleggsvariabler er ikke tillatt",
+		OBJECT_DEPENDENCY_KEY: "Variabelen {missing} må være definert (på grunn av følgende variabel: {key})",
+		// Array errors
+		ARRAY_LENGTH_SHORT: "Listen er for kort ({length} elementer), minst {minimum}",
+		ARRAY_LENGTH_LONG: "Listen er for lang ({length} elementer), maksimalt {maximum}",
+		ARRAY_UNIQUE: "Elementene er ikke unike (indeks {match1} og {match2} er like)",
+		ARRAY_ADDITIONAL_ITEMS: "Tillegselementer er ikke tillatt",
+		// Format errors
+		FORMAT_CUSTOM: "Formatteringen stemmer ikke ({message})",
+		KEYWORD_CUSTOM: "Nøkkelen stemmer ikke: {key} ({message})",
+		// Schema structure
+		CIRCULAR_REFERENCE: "Sirkulære referanser ($refs): {urls}",
+		// Non-standard validation options
+		UNKNOWN_PROPERTY: "Ukjent variabel (eksisterer ikke i skjemaet)"
 	};
+	
+	if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['../tv4'], function(tv4) {
+			tv4.addLanguage('no-nb', lang);
+			return tv4;
+		});
+	} else if (typeof module !== 'undefined' && module.exports) {
+		// CommonJS. Define export.
+		var tv4 = require('geraintluff~tv4@master');
+		tv4.addLanguage('no-nb', lang);
+		module.exports = tv4;
+	} else {
+		// Browser globals
+		global.tv4.addLanguage('no-nb', lang);
+	}
+})(this);
 
-	self.initialize = function(done)
+});
+
+require.modules["geraintluff-tv4"] = require.modules["geraintluff~tv4@master"];
+require.modules["geraintluff~tv4"] = require.modules["geraintluff~tv4@master"];
+require.modules["tv4"] = require.modules["geraintluff~tv4@master"];
+
+
+require.register("optimuslime~win-schema@master/lib/addSchema.js", function (exports, module) {
+//pull in traverse object for this guy
+var traverse = require('optimuslime~traverse@master');
+var schemaSpec = require('optimuslime~win-schema@master/lib/schemaSpec.js');
+
+
+module.exports = extendAddSchema;
+
+function extendAddSchema(self)
+{
+
+  var pathDelim = self.pathDelimiter;
+
+  var defaultWINAdd = {
+    wid : "string",
+    dbType : "string",
+    parents : {
+      type: "array",
+      items : {
+        type : "string"
+      }
+    }
+  }
+
+  var winTypeRegExp = [];
+  for(var key in defaultWINAdd)
+  {
+    winTypeRegExp.push(key);
+  }
+  self.log("--All WIN keywords: ", winTypeRegExp);
+
+  winTypeRegExp = new RegExp("\\b" + winTypeRegExp.join("\\b|\\b") + "\\b");
+
+  //everything we need to do to add a schema inside
+  //this requires checking if it's properly formatted, pulling references, and moving
+  //around things if it's not formatted but we would like to make it less wordy to make schema
+    self.internalAddSchema = function(type, schemaJSON, options, finished)
     {
-    	self.log("Init win-neat encoding");
+      if(typeof options == "function")
+      {
+        finished = options;
+        options = {};
+      }
+      else
+        options = options || {};
 
-		//how we talk to the backbone by emitting events
-    	var emitter = backbone.getEmitter(self);
+      if((schemaJSON.type == "array" || schemaJSON.items) && !options.skipWINAdditions)
+      {
+        finished("Array-types for schema cannot have WIN additions. It doesn't make any sense. The object must be an array, but also have a wid property? Failed: " + type);
+        return;
+      }
 
-		//add our neat genotype schema -- loaded neatschema from another file -- 
-		//this is just the standard neat schema type -- others can make neatjs changes that require a different schema
-        emitter.emit("schema:addSchema", self.encodingName, neatSchema, function(err)
+      //make a clone of the object 
+      schemaJSON = JSON.parse(JSON.stringify(schemaJSON)); 
+
+      //force all types to lower case -- always -- deal with weird validation errors otherwise
+      traverse(schemaJSON).forEach(function(node)
+      {
+          if(this.key == "type" && typeof this.node == "string")
+            this.update(this.node.toLowerCase());
+      })
+
+      //we add or move objects inside the schema to make it conform to expected v4 JSON schema validation
+      appendSchemaInformation(schemaJSON, options);      
+
+      //check our schema for wacky errors!
+      var schemaCheck = checkSchemaErrors(schemaJSON);
+      if(schemaCheck && schemaCheck.errors)
+      {
+        finished("Improper schema format for " + type + " - " + JSON.stringify(schemaCheck));
+        return;
+      }
+
+      if(schemaCheck && schemaCheck.warnings)
+      {
+        self.log("Warnings: ".yellow, schemaCheck.warnings);
+      }
+
+      //save it in our map
+      self.allSchema[type] = schemaJSON;
+
+      if(!schemaJSON.id || schemaJSON.id != type)
+        schemaJSON.id = type;
+
+      if(!schemaJSON['$schema'])
+        schemaJSON['$schema'] = "http://json-schema.org/draft-04/schema#";
+      
+      if(!schemaJSON.type)
+        schemaJSON.type = "object";
+
+      //add the schema to our validator -- this does most heavy lifting for us
+      self.validator.addSchema(schemaJSON);
+
+      //failed to add schema for some reason?
+      if(self.validator.error){
+        finished(self.validator.error);
+      }
+      else
+      {
+        //no error from validator, store the references inside
+        storeSchemaReferences(type, schemaJSON);
+
+        //when we create it 
+        setSchemaProperties(type, schemaJSON, options);
+        //take what you want, and give nothing back! The pirates way for us!
+        finished();
+      }
+    }
+    function setSchemaProperties(type, schemaJSON, options)
+    {
+      var props = {};
+      if(options.skipWINAdditions)
+        props.isWIN = false;
+      else
+        props.isWIN = true;
+      
+      var primePaths = {};
+
+      var tJSON = traverse(schemaJSON);
+
+      var references = self.requiredReferences[type];
+      var refMap = {};
+
+      for(var refType in references)
+      {
+          var locations = references[refType];
+          for(var l =0; l < locations.length; l++)
+          {
+              var refInfo = locations[l];
+              refMap[refInfo.typePath] = refInfo;
+          }
+      }
+      // self.log("Refmap: ", refMap);
+      function isRef(path){ return refMap[path.join(pathDelim)]}
+
+      tJSON.forEach(function(node)
+      {
+        if(this.isRoot || this.isLeaf)
+          return;
+
+        //kill the future investigation of references
+        if(isRef(this.path))
+            this.keys = [];
+
+          //if we are a known keyword -- that's not properties or items, we skip you!
+        if(this.key != "properties" && this.key != "items" && self.keywordRegExp.test(this.key))
+          this.keys = [];
+
+        //we also ignore this as well
+        if(winTypeRegExp.test(this.key))
+          this.keys = [];
+
+        // self.log("Isref?".green, isRef(this.path));
+
+        // if(this.keys.length)
+          // self.log("Potential PrimePath: ".green, this.key, " node: ", this.node);
+
+        if(this.keys.length){
+
+          var objPath = self.stripObjectPath(this.path);
+
+          //we're an array, or we're inisde an array!
+          if(this.node.type == "array" || this.node.items || this.key =="items")
+          {
+              //we are an array, we'll pull the array info -- and then we close off this array -- forever!
+              //remember, primary paths are all about the objects, and the FIRST layer of array
+              primePaths[objPath] = {type: "array"};
+              this.keys = [];
+          }
+          else
+          {
+            //you must be a properties object
+            //either you have a type, or you're an object
+            primePaths[objPath] = {type: this.node.type || "object"};
+          }
+        }
+        
+
+      })
+
+      // self.log("\n\tprimaryPaths: ".cyan, primePaths);
+
+      self.primaryPaths[type] = primePaths;
+      self.typeProperties[type] = props;
+
+    }
+    function hasNonKeywords(obj)
+    {
+      var hasNonKeywords = false;
+        
+      if(Array.isArray(obj))
+      {
+        //loop through object to grab keys
+        for(var i=0; i < obj.length; i++)
         {
-        	if(err){
-        		done(new Error(err));
-        		return;
-        	}
-        	done();
+          var iKey = obj[i];
+          //check if you're not a keyword
+          if(!self.keywordRegExp.test(iKey))
+          {
+            //just one is enough
+            hasNonKeywords = true;
+            break;
+          }
+        }
+      }
+      else
+      {
+        for(var iKey in obj)
+        {
+          if(!self.keywordRegExp.test(iKey))
+          {
+            //just one is enough
+            hasNonKeywords = true;
+            break;
+          }
+        }
+      }
+
+      return hasNonKeywords;           
+    }
+
+  //handle everything associated with adding a schema
+    function checkSchemaErrors(schemaJSON)
+    {
+
+      //check against the proper schema definition
+      // var vck = self.validator.validateMultiple(schemaJSON, schemaSpec, true);
+       var valCheck = self.validateFunction.apply(self.validator, [schemaJSON, schemaSpec, true]);
+       
+       //grab all possible errors
+       var checkErrors = {length: 0};
+       var checkWarnings = {length: 0};
+
+       //if we're valid -- which we almost certainly are -- just keep going
+       if(!valCheck.valid)
+       {
+          //let it be known -- this is a weird error
+          self.log("Invalid from v4 JSON schema perspective: ", valCheck[errorKey]);
+
+          checkErrors["root"] = valCheck[errorKey];
+          checkErrors.length++;
+
+          //not valid, throw it back
+          return checkErrors;
+       }
+
+
+       //make sure we have some properties -- otherwise there is literally no validation/
+       //during the move process, this is overridden, but it's a good check nonetheless
+       if(!schemaJSON.properties && !schemaJSON.items)
+       {
+          checkErrors["root"] = "No properties/items defined at root. Schema has no validation without properties!";
+          checkErrors.length++;
+       }
+
+       //going to need to traverse our schema object
+       var tJSON = traverse(schemaJSON);
+
+       tJSON.forEach(function(node)
+       {
+        //skip the root please
+        if(this.isRoot || this.path.join(pathDelim).indexOf('required') != -1)
+          return;
+
+        //this should be a warning
+        if(!self.requireByDefault && !this.isLeaf && !this.node.required)
+        {
+            //if you don't have a required object, then you're gonna have a bad time
+            //this is a warning
+            checkWarnings[this.path.join(pathDelim)] = "warning: if you disable requireByDefault and don't put require arrays, validation will ignore those properties.";
+            checkWarnings.length++;
+
+        }
+        if(this.key == "properties" && this.node.properties)
+        {
+           checkErrors[this.path.join(pathDelim)] = "Properties inside properties is meaningless.";
+           checkErrors.length++;
+        }
+        if(this.key == "type" && typeof this.node != "string")
+        {
+            //for whatever reason, there is a type defined, but not a string in it's place? Waa?
+            checkErrors[this.path.join(pathDelim)] = "Types must be string";
+            checkErrors.length++;
+        }
+        if(this.key == "type" && !self.typeRegExp.test(this.node.toLowerCase()))
+        {
+           checkErrors[this.path.join(pathDelim)] = "Types must be one of " + self.validTypes + " not " + this.node;
+           checkErrors.length++;
+        }
+        if(this.isLeaf)
+        {
+          //if you don't have a type, and there is no ref object
+          if(!this.parent.node.properties && (this.key != "type" && this.key != "$ref") && !this.parent.node.type && !this.parent.node["$ref"])
+          {
+              checkErrors[this.path.join(pathDelim)] = "Object doesn't have any properties, a valid type, or a reference, therefore it is invalid in the WIN spec.";
+              checkErrors.length++;
+          }
+        }
+        //not a leaf, you don't have a reference
+        if(!self.allowAnyObjects && !this.isLeaf && !this.node["$ref"] )
+        {
+          //special case for items -- doesn't apply
+          if(this.node.type == "object" && this.key != "items")
+          {
+            //we're going to check if the list of keys to follow have any non keywords
+            //for instance if {type: "object", otherThing: "string"} keys = type, otherThing
+            //if instead it's just {type : "object", required : []}, keys = type, required 
+            //notice that the top has non-keyword keys, and the bottom example does not 
+            //we're looking for the bottom example and rejecting it
+            var bHasNonKeywords = hasNonKeywords(this.keys);
+            
+            //if you ONLY have keywords -- you don't have any other object types
+            //you are a violation of win spec and you allow any object or array to be passed in
+            if(!bHasNonKeywords){
+              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
+              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'object' type with no inner properties";
+              checkErrors.length++;
+            }
+          }
+          else if(this.node.type == "array")
+          {
+            //if you are an array and you have no items -- not allowed!
+            if(!this.node.items){
+              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
+              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no inner items";
+              checkErrors.length++;
+            }
+            else
+            {
+              //if you have a ref -- you're okay for us!
+              var bIemsHaveNonKey = this.node.items["$ref"] || this.node.items["type"] || hasNonKeywords(this.node.items.properties || {});
+               if(!bIemsHaveNonKey){
+                // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
+                checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no non-keyword inner items";
+                checkErrors.length++;
+              }
+            }
+          }
+        
+        }
+        //if you're an array
+        if(this.node.type == "array")
+        {
+          //grab your items
+          var items = this.node.items;
+          if(!items && !self.allowAnyObjects)
+          {
+             checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off for arrays, therefore you cannot simple have an 'array' type with no inner items";
+              checkErrors.length++;
+          }
+          else
+          {
+            items = items || {};
+            //we have items -- we shouldn't have a reference type && other items
+            if(items.properties && items["$ref"])
+            {
+              checkErrors[this.path.join(pathDelim)] = "Array items in WIN cannot have properties AND a reference type. One or the other.";
+              checkErrors.length++;
+            }
+          }
+        }
+
+
+       });
+
+       if(checkErrors.length || checkWarnings.length)
+        return {errors: checkErrors, warnings: checkWarnings};
+      else
+        return null;
+
+    }
+
+    self.stripObjectPath = function(path)
+    {
+      //obj path will be returned
+      var objectPath = [];
+
+      //travere this path, yo
+      traverse(path).forEach(function()
+      {
+        //no routes including properties or items -- made up schema info!
+        if(!this.isRoot && (this.node != "properties" && this.node != "items"))
+          objectPath.push(this.node);
+      });
+
+      return objectPath.join(pathDelim);
+    }
+
+    //storing the references inside of a schema object (if we don't already know them)
+    function parseSchemaReferences(schemaJSON)
+    {
+    	//first we wrap our object with traverse methods
+    	var tJSON = traverse(schemaJSON);
+
+    	var references = {};
+
+    	self.log('--  Parsing refs -- ');
+      // self.log(schemaJSON);
+    	//now we step through pulling the path whenever we hit a reference
+    	tJSON.forEach(function(node)
+    	{
+    		//we are at a reference point
+        //we make an exception for arrays -- since the items object can hold references!
+        if(this.node["$ref"] && (this.key == "items" || !self.keywordRegExp.test(this.key)))
+    		// if(this.isLeaf && this.key == "$ref")
+    		{
+    			//todo logic for when it's "oneOf" or other valid JSON schema things
+    			var fullPath = this.path.join(pathDelim);//this.path.slice(0, this.path.length-1).join(pathDelim);
+    			var referenceType = this.node["$ref"];
+
+          
+          var objectPath = self.stripObjectPath(this.path);
+
+          //pull the "items" piece out of the path -- otherwise, if you're just a normal object -- it's the same as fullPath
+          var typePath = this.key == "items" ? this.path.slice(0, this.path.length-1).join(pathDelim) : fullPath;
+
+
+
+    			if(references[fullPath])
+    			{
+    				throw new Error("Not yet supported reference behavior, arrays of references: ", fullPath);
+    			}
+
+          //assuming type is defined here!
+    			references[fullPath] = {schemaType: referenceType, schemaPath: fullPath, objectPath: objectPath, typePath: typePath};
+          self.log(self.log.testing, 'Reference detected @ '+fullPath+': ', references[fullPath]);
+    		}
+    	});
+
+    	self.log("-- Full refs -- ", references);
+
+    	return references;
+    } 
+
+    function storeSchemaReferences(type, schemaJSON)
+    {
+    	self.schemaReferences[type] = parseSchemaReferences(schemaJSON);
+
+      self.requiredReferences[type] = {};
+
+      for(var path in self.schemaReferences[type])
+      {
+        var schemaInfo = self.schemaReferences[type][path];
+        var refType = schemaInfo.schemaType;
+        var aReqRefs = self.requiredReferences[type][refType];
+
+        if(!aReqRefs)
+        {
+          aReqRefs = [];
+          self.requiredReferences[type][refType] = aReqRefs;
+        }
+        //value is the reference type 
+        aReqRefs.push(schemaInfo);
+      }
+
+
+      //now we know all the references, their paths, and what type needs what references
+    }
+    function moveAllToProperties(tJSON)
+    {
+       tJSON.forEach(function(node)
+       {          
+
+          // self.log("Investigating: ", this.key, " @ ", this.path.join(pathDelim), " all keys: ", this.keys);
+          //for all non-arrays and non-leafs and non-properties object -- move to a properties object if not a keyword!
+          if(!this.isLeaf && this.key != "properties" && !Array.isArray(this.node))
+          {
+
+            //movement dpeends on what type you are -- arrays move to items, while objects move to properties
+            var moveLocation = "properties";
+            if(this.node.type == "array")
+              moveLocation = "items";
+
+            // self.log('Movement: ', this.key, " @ ", this.path.join(pathDelim) + " : ", this.node);
+            // self.log("Move to : ".green + moveLocation);
+
+
+            // self.log("Move innitiated: ".magenta, this.node);
+            // self.log('Original node: '.green, node);
+            var empty = true;
+            var move = {};
+            //any key that isn't one of our keywords is getting moved inside!
+            for(var key in this.node){
+                if(!self.keywordRegExp.test(key)){
+                  // self.log('Moving key @ ', this.path.join(pathDelim) || "Is root? ", " : ", this.key || this.isRoot); 
+                  move[key] = this.node[key];
+                  empty = false;
+                }
+            }
+
+            //don't move nothing derrr
+            if(!empty)
+            {
+               // self.log('Moving: '.red, move);
+
+              //create proeprties if it doesn't exist
+              node[moveLocation] = node[moveLocation] || {};
+
+              for(var key in move)
+              {
+                //move to its new home
+                node[moveLocation][key] = move[key];
+                //remove from previous location 
+                delete node[key];
+              }
+
+              //make sure to update, thank you
+              this.update(node);
+
+              //we need to investigate the newly created properties/items object -- to continue down the rabbit hole
+              this.keys.push(moveLocation);
+            }
+           
+
+          }
+       });
+    }
+    function addWINTypes(schemaJSON, options)
+    {
+      for(var key in defaultWINAdd)
+      {
+        var winAdd = defaultWINAdd[key];
+        
+        //if it's just a shallow string -- add it directly
+        if(typeof winAdd == "string")
+          schemaJSON[key] = winAdd;
+        else //otehrwise, we should clone the larger object
+          schemaJSON[key] = traverse(defaultWINAdd[key]).clone();
+      }
+    }
+    function appendSchemaInformation(schemaJSON, options)
+    {
+      //add in default win types
+      if(!options.skipWINAdditions)
+        addWINTypes(schemaJSON, options);
+
+      //build a traverse object for navigating and updating the object
+      var tJSON = traverse(schemaJSON);
+
+      //step one convert string to types
+      tJSON.forEach(function(node)
+      {
+        var needsUpdate = false;
+          //if you are a leaf -- and you only dictate the type e.g. string/number/array etc -- we'll convert you to proper type
+        if(this.isLeaf && typeof this.node == "string")
+        {
+          //if the key is not a known keyword, and the node string is a proper type
+          if(!self.keywordRegExp.test(this.key) && self.typeRegExp.test(node.toLowerCase()))
+          {
+            //node is a type! make sure it's a lower case type being stored.
+            node = {type: node.toLowerCase()};
+            needsUpdate = true;
+          }
+        }
+
+        if(this.node)
+        {
+
+         if(this.node.items && !this.node.type)
+          {
+            this.node.type = "array";
+            needsUpdate = true;
+          }
+
+          //rewrite {type : "array", "$ref" : "something"} => {type : "array", items : {"$ref" : "something"}}
+          if(this.node.type == "array" && this.node["$ref"])
+          {
+            this.node.items = this.node.items || {};
+            this.node.items["$ref"] = this.node["$ref"];
+            delete this.node["$ref"];
+            needsUpdate = true;
+          }
+
+        }
+
+
+        if(needsUpdate)
+          this.update(node);
+
+      })
+
+      //update location of objects to match validation issues
+      //json schema won't validate outside of properties object -- which some people may forget
+      //this is basically a correct method
+      moveAllToProperties(tJSON);
+
+      // var util = require('util');
+      // self.log("Post move schema: ".cyan, util.inspect(schemaJSON, false, 10));
+
+      tJSON.forEach(function(node)
+      {
+        var needsUpdate = false;
+
+
+       
+          //if we aren't a leaf object, we are a full object
+          //therefore, we must have required (since we're in default mode)
+          //since we cover the properties object inside, we don't need to go indepth for that key too!
+        if(self.requireByDefault && !this.isLeaf && !this.node.required && !Array.isArray(this.node))
+        {
+          //the require needs to be filled iwth all the properties of this thing, except
+          //for anything defined by v4 json schema -- so we run a regex to reject those keys
+          var reqProps = [];
+
+          // self.log("Not leaf: ".magenta, this.node, " Key : ", this.key);
+
+          //do not do this if you're in the properties object
+          //since the prop keys belong to the PARENT not the node
+          if(this.key != "properties")
+          {
+            for(var key in this.node){
+              if(!self.keywordRegExp.test(key)){
+              // self.log('Key added: '.red, key);
+
+                reqProps.push(key);
+              }
+            }
+            // self.log('Post not props: '.blue, reqProps);
+          }
+          
+          //for every object, you can also have a properties object too
+          //required applies to the subling property object as well
+          //so we loop through the properties object as well
+         for(var key in this.node.properties){
+            if(!self.keywordRegExp.test(key)){
+              reqProps.push(key);
+            }
+          }
+
+          if(reqProps.length)
+          {
+            node.required = reqProps;
+            needsUpdate = true;
+          }        
+        }
+
+     
+       if(needsUpdate){
+          // self.log('New required - : ', this.node, ' : ', reqProps);
+          this.update(node);
+        }
+      });
+
+
+
+        // self.log("--post traverse -- ", schemaJSON);
+
+    }
+
+	return self;
+}
+
+
+
+
+});
+
+require.register("optimuslime~win-schema@master/lib/schemaSpec.js", function (exports, module) {
+module.exports = 
+{
+    "id": "http://json-schema.org/draft-04/schema#",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "description": "Core schema meta-schema",
+    "definitions": {
+        "schemaArray": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#" }
+        },
+        "positiveInteger": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "positiveIntegerDefault0": {
+            "allOf": [ { "$ref": "#/definitions/positiveInteger" }, { "default": 0 } ]
+        },
+        "simpleTypes": {
+            "enum": [ "array", "boolean", "integer", "null", "number", "object", "string" ]
+        },
+        "stringArray": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "uniqueItems": true
+        }
+    },
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "string",
+            "format": "uri"
+        },
+        "$schema": {
+            "type": "string",
+            "format": "uri"
+        },
+        "title": {
+            "type": "string"
+        },
+        "description": {
+            "type": "string"
+        },
+        "default": {},
+        "multipleOf": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+        },
+        "maximum": {
+            "type": "number"
+        },
+        "exclusiveMaximum": {
+            "type": "boolean",
+            "default": false
+        },
+        "minimum": {
+            "type": "number"
+        },
+        "exclusiveMinimum": {
+            "type": "boolean",
+            "default": false
+        },
+        "maxLength": { "$ref": "#/definitions/positiveInteger" },
+        "minLength": { "$ref": "#/definitions/positiveIntegerDefault0" },
+        "pattern": {
+            "type": "string",
+            "format": "regex"
+        },
+        "additionalItems": {
+            "anyOf": [
+                { "type": "boolean" },
+                { "$ref": "#" }
+            ],
+            "default": {}
+        },
+        "items": {
+            "anyOf": [
+                { "$ref": "#" },
+                { "$ref": "#/definitions/schemaArray" }
+            ],
+            "default": {}
+        },
+        "maxItems": { "$ref": "#/definitions/positiveInteger" },
+        "minItems": { "$ref": "#/definitions/positiveIntegerDefault0" },
+        "uniqueItems": {
+            "type": "boolean",
+            "default": false
+        },
+        "maxProperties": { "$ref": "#/definitions/positiveInteger" },
+        "minProperties": { "$ref": "#/definitions/positiveIntegerDefault0" },
+        "required": { "$ref": "#/definitions/stringArray" },
+        "additionalProperties": {
+            "anyOf": [
+                { "type": "boolean" },
+                { "$ref": "#" }
+            ],
+            "default": {}
+        },
+        "definitions": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#" },
+            "default": {}
+        },
+        "properties": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#" },
+            "default": {}
+        },
+        "patternProperties": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#" },
+            "default": {}
+        },
+        "dependencies": {
+            "type": "object",
+            "additionalProperties": {
+                "anyOf": [
+                    { "$ref": "#" },
+                    { "$ref": "#/definitions/stringArray" }
+                ]
+            }
+        },
+        "enum": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true
+        },
+        "type": {
+            "anyOf": [
+                { "$ref": "#/definitions/simpleTypes" },
+                {
+                    "type": "array",
+                    "items": { "$ref": "#/definitions/simpleTypes" },
+                    "minItems": 1,
+                    "uniqueItems": true
+                }
+            ]
+        },
+        "allOf": { "$ref": "#/definitions/schemaArray" },
+        "anyOf": { "$ref": "#/definitions/schemaArray" },
+        "oneOf": { "$ref": "#/definitions/schemaArray" },
+        "not": { "$ref": "#" }
+    },
+    "dependencies": {
+        "exclusiveMaximum": [ "maximum" ],
+        "exclusiveMinimum": [ "minimum" ]
+    },
+    "default": {}
+}
+});
+
+require.register("optimuslime~win-schema@master", function (exports, module) {
+//pull in the validating workhorse -- checks schema and stuff
+var tv4 = require('geraintluff~tv4@master');
+//pull in traverse object from the repo please!
+var traverse = require('optimuslime~traverse@master');
+
+//pull in the object that knows what all schema look like!
+var schemaSpec = require('optimuslime~win-schema@master/lib/schemaSpec.js');
+
+var addSchemaSupport = require('optimuslime~win-schema@master/lib/addSchema.js');
+
+module.exports = winSchema;
+
+function winSchema(winback, globalConfiguration, localConfiguration)
+{
+	//load up basic win-module stufffff
+	var self = this;
+  self.winFunction = "schema";
+  self.log = winback.getLogger(self);
+
+  //limited only by global -- or we could limit our own verboseness
+  self.log.logLevel = localConfiguration.logLevel || self.log.normal;
+
+  self.pathDelimiter = "///";
+
+  //this creates "internalAddSchema" to handle the weighty add logic
+  //need to thoroughly test and modify incoming schema to align with 
+  //logical schema setup for WIN
+  addSchemaSupport(self, globalConfiguration, localConfiguration);
+
+	self.validator = tv4.freshApi();
+
+ //set the backbone and our logging function
+  self.bbEmit = winback.getEmitter(self);
+
+  //config setups
+
+  self.multipleErrors = (localConfiguration.multipleErrors == true || localConfiguration.multipleErrors == "true");
+  //by default you can have unknown keys -- the server environment may desire to change this
+  //if you don't want to be storing extra info
+  //by default, on lockdown -- better that way -- no sneaky stuff
+  self.allowUnknownKeys = localConfiguration.allowUnknownKeys || false;
+
+  //all keys are required by default -- this adds in required objects for everything
+  self.requireByDefault = localConfiguration.requireByDefault || true;
+
+  //do we allow properties with just the type "object" or "array"
+  //this would allow ANY data to be fit in there with no validation checks (other than it is an object or array)
+  //shouldn't allow this because people could slip in all sorts of terrible things without validation
+  self.allowAnyObjects = localConfiguration.allowAnyObjects || false;
+
+  self.eventCallbacks = function()
+  {
+        var callbacks = {};
+
+        //add callbacks to the object-- these are the functions called when the full event is emitted
+        callbacks["schema:validate"] = self.validateData;
+        callbacks["schema:validateMany"] = self.validateDataArray;
+        callbacks["schema:addSchema"] = self.addSchema;
+        callbacks["schema:getSchema"] = self.getSchema;
+        callbacks["schema:getSchemaReferences"] = self.getSchemaReferences;
+        callbacks["schema:getFullSchema"] = self.getFullSchema;
+        callbacks["schema:getSchemaProperties"] = self.getSchemaProperties;
+
+        //these are for deealing with pulling references from a specific object -- it's easier done in this module
+        callbacks["schema:getReferencesAndParents"] = self.getReferencesAndParents;
+        callbacks["schema:replaceParentReferences"] = self.replaceParentReferences;
+
+        //send back our callbacks
+        return callbacks;
+  }
+  self.requiredEvents = function()
+  {
+  	//don't need no one for nuffin'
+  	return [];
+  }
+
+  self.initialize = function(done)
+  {
+  	setTimeout(function()
+  	{
+  		done();
+  	}, 0);
+  }
+
+    //cache all our schema by type
+    self.allSchema = {};
+    self.schemaReferences = {};
+    self.requiredReferences = {};
+    self.fullSchema = {};
+    self.primaryPaths = {};
+    self.typeProperties = {};
+
+    self.validTypes = "\\b" + schemaSpec.definitions.simpleTypes.enum.join('\\b|\\b') + "\\b"; //['object', 'array', 'number', 'string', 'boolean', 'null'].join('|');
+    self.typeRegExp = new RegExp(self.validTypes);
+
+    self.specKeywords = ["\\$ref|\\babcdefg"];
+    for(var key in schemaSpec.properties)
+      self.specKeywords.push(key.replace('$', '\\$'));
+
+    //join using exact phrasing checks
+    self.specKeywords = self.specKeywords.join('\\b|\\b') + "\\b";
+    self.keywordRegExp = new RegExp(self.specKeywords);
+
+    self.log(self.log.testing, "--Specced types: ".green, self.validTypes);
+    self.log(self.log.testing, "--Specced keywords: ".green, self.specKeywords);
+
+    self.validateFunction = (self.multipleErrors ? self.validator.validateMultiple : self.validator.validateResult);
+    self.errorKey = self.multipleErrors ? "errors" : "error";
+
+    function listTypeIssues(type)
+    {
+      if(!self.allSchema[type]){
+        return "Schema type not loaded: " + type;
+      }
+
+      //we have to manually detect missing references -- since the validator is not concerned with such things
+      //FOR WHATEVER REASON
+      var missing = self.validator.getMissingUris();
+      for(var i=0; i < missing.length; i++)
+      {
+        //if we have this type inside our refernces for this object, it means we're missing a ref schema for this type!
+        if(self.requiredReferences[type][missing[i]])
+        {
+          return "Missing at least 1 schema definition: " + missing[i];
+        }
+      }
+    }
+
+    function internalValidate(schema, object)
+    {
+      //validate against what type?
+      var result = self.validateFunction.apply(self.validator, [object, schema, true, !self.allowUnknownKeys]);
+
+       //if it's not an array, make it an array
+      //if it's empty, make it a damn array
+      var errors = result[self.errorKey];
+
+      //if you are multiple errors, then you are a non-undefined array, just return as usual
+      //otherwise, you are an error but not in an array
+      //if errors is undefined then this will deefault to []
+      errors = (errors && !Array.isArray(errors)) ? [errors] : errors || [];
+
+      return {valid : result.valid, errors : errors};
+    }
+    self.validateDataArray = function(type, objects, finished)
+    {
+      var typeIssues = listTypeIssues(type);
+
+      //stop if we have type issues
+      if(typeIssues)
+      {
+        finished(typeIssues);
+        return;
+      }
+      else if(typeof type != "string" || !Array.isArray(objects))
+      {
+        finished("ValidateMany requires type [string], objects [array]");
+        return;
+      }
+
+      var schema = self.validator.getSchema(type);
+      // self.log('validate many against: ', schema);
+
+      var allValid = true;
+      var allErrors = [];
+      for(var i=0; i < objects.length; i++)
+      {
+        var result = internalValidate(schema, objects[i]);
+
+        if(!result.valid){
+          allValid = false;
+          allErrors.push(result.errors);
+        }
+        else //no error? just push empty array!
+          allErrors.push([]);
+      }
+
+      //if we have errors during validation, they'll be passed on thank you!
+      //if you're valid, and there are no errors, then don't send nuffin
+      finished(undefined, allValid, (!allValid ? allErrors : undefined));
+    }
+    self.validateData = function(type, object, finished)
+    {
+      var typeIssues = listTypeIssues(type);
+
+      //stop if we have type issues
+      if(typeIssues)
+      {
+        finished(typeIssues);
+        return;
+      }
+
+      //log object being checked
+      self.log("Validate: ", object);
+
+      //now we need to validate, we definitely have all the refs we need
+      var schema = self.validator.getSchema(type);
+
+      //log what's being validated
+      self.log('validate against: ', schema);
+    	 
+      var result = internalValidate(schema, object);
+
+      //if we have errors during validation, they'll be passed on thank you!
+      //if you're valid, and there are no errors, then don't send nuffin
+      finished(undefined, result.valid, (result.errors.length ? result.errors : undefined));
+    }
+
+    //todo: pull reference objects from schema -- make sure those exist as well?
+   	self.addSchema = function(type, schemaJSON, options, finished)
+   	{
+      //pass args into internal adds
+      return self.internalAddSchema.apply(self, arguments);
+   	}
+
+   	    //todo: pull reference objects from schema -- make sure those exist as well?
+   	self.getSchema = function(typeOrArray, finished)
+   	{   	
+      //did we request one or many?
+      var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var refArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+      //failed to get schema for some very odd reason?
+        if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+        //push our reference information as a clone
+        refArray.push(traverse(self.validator.getSchema(sType)).clone());
+        //if you hit an error -send back
+        if(self.validator.error){
+          finished(self.validator.error);
+          return;
+        }
+      }
+
+      //send the schema objects back
+      //send an array regardless of how many requested -- standard behavior
+      finished(undefined, refArray);    
+
+   	}
+
+   	self.getSchemaReferences = function(typeOrArray, finished)
+   	{
+      var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var refArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+        if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+        //push our reference information as a clone
+        refArray.push(traverse(self.requiredReferences[sType]).clone());
+      }
+
+  		//send the refernece objects back
+      //if you are a single object, just send the one -- otherwise send an array
+      finished(undefined, refArray); 		
+   	}
+
+    var buildFullSchema = function(type)
+    {
+      var schema = self.validator.getSchema(type);
+      var tSchema = traverse(schema);
+
+      var clone = tSchema.clone();
+      var tClone = traverse(clone);
+      var references = self.schemaReferences[type];
+
+      for(var path in references)
+      {
+        //we get the type of reference
+        var schemaInfo = references[path];
+        var refType = schemaInfo.schemaType;
+
+        //this is recursive behavior -- itwill call buidl full schema if not finished yet
+        var fullRefSchema = internalGetFullSchema(refType);
+
+        if(!fullRefSchema)
+          throw new Error("No schema could be created for: " + refType + ". Please check it's defined.");
+
+        //now we ahve teh full object to replace
+        var tPath = path.split(self.pathDelimiter);
+
+        // self.log(self.log.testing, 'Path to ref: ', tPath, " replacement: ", fullRefSchema);
+
+        //use traverse to set the path object as our full ref object
+        tClone.set(tPath, fullRefSchema);
+      }
+
+      // self.log(self.log.testing, "Returning schema: ", type, " full: ", clone);
+
+      return clone;
+    }
+    var inprogressSchema = {};
+
+    function internalGetFullSchema(type)
+    {
+      if(inprogressSchema[type])
+      {
+          throw new Error("Infinite schema reference loop: " + JSON.stringify(Object.keys(inprogressSchema)));    
+      }
+
+      inprogressSchema[type] = true;
+
+       //if we don't have a full type yet, we build it
+      if(!self.fullSchema[type])
+      {
+        //need to build a full schema object
+        var fSchema = buildFullSchema(type);
+
+        self.fullSchema[type] = fSchema;
+      }
+
+      //mark the in progress as false!
+      delete inprogressSchema[type];
+
+      return self.fullSchema[type];
+    }
+
+    self.getFullSchema = function(typeOrArray, finished)
+    { 
+      var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var fullArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+         if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+
+        try
+        {
+          //get the full schema from internal function
+          //throws error if something is wrong
+          var fullSchema = internalGetFullSchema(sType);
+         
+          //pull the full object -- guaranteed to exist -- send a clone
+           fullArray.push(traverse(fullSchema).clone());
+        }
+        catch(e)
+        {
+          //send the error if we have one
+          finished(e);
+          return;
+        }
+      }
+
+      //send the refernece objects back
+      //if you are a single object, just send the one -- otherwise send an array
+      finished(undefined, fullArray);
+    }
+
+    self.getSchemaProperties = function(typeOrArray, finished)
+    {
+       var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var propArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+         if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+
+        //get our schema properties
+        propArray.push({type: sType, primaryPaths: traverse(self.primaryPaths[sType]).clone(), properties: traverse(self.typeProperties[sType]).clone()});
+
+      }
+
+
+      //send the refernece objects back
+      //if you are a single object, just send the one -- otherwise send an array
+      finished(undefined, propArray);
+    }
+
+    //we're going to clone the object, then replace all of the reference wids with new an improved parents
+    self.replaceParentReferences = function(type, object, parentMapping, finished)
+    {
+      var tClone = traverse(object).clone();
+
+      traverse(tClone).forEach(function(node)
+      {
+         //if we have a wid object and parents object -- likely we are a tracked reference
+        if(this.node.wid && this.node.parents)
+        {
+          var replaceParents = parentMapping[this.node.wid];
+
+          if(replaceParents)
+          {
+            //straight up replacement therapy yo
+            this.node.parents = replaceParents;
+
+            //then make sure to update and continue onwards!
+            this.update(this.node);
+          }
+        }
+      })
+
+      //we've replaced the innards of the object with a better future!
+      finished(undefined, tClone);
+    }
+
+    self.getReferencesAndParents = function(type, widObjects, finished)
+    {
+
+        //listed by some identifier, then the object, we need to look through the type, and pull references
+        var fSchema = internalGetFullSchema(type);
+        // self.log("Full schema: ", fSchema);
+        if(!fSchema)
+        {
+          finished("Full schema undefined, might be missing a reference type within " + type);
+          return;
+        } 
+        var widToParents = {};
+        var traverseObjects = {};
+
+        for(var wid in widObjects){
+          widToParents[wid] = {};
+          traverseObjects[wid] = traverse(widObjects[wid]);
+        }
+
+        
+        //for every wid object we see, we loop through and pull that 
+        traverse(fSchema).forEach(function(node)
+        {
+          // self.log("Node: ", this.node, "", " key: ", this.key);
+          //if we have a wid object and parents object -- likely we are a tracked reference
+          if(this.node.wid && this.node.parents)
+          {
+            //let's pull these bad boys our of our other objects
+            var pathToObject = self.stripObjectPath(this.path);
+            
+            //if you aren't root, split it up!
+            if(pathToObject != "")
+              pathToObject = pathToObject.split(self.pathDelimiter);
+
+            // self.log("\nKey before :", this.key, " node-p: ", this.parent.node, " path: ", this.path);
+            
+            var isArray = (this.key == "properties" && this.path[this.path.length - 2] == "items");
+            // self.log("Is array? : ", isArray);
+            for(var wid in traverseObjects)
+            {
+
+              var wtp = widToParents[wid];
+              var tob = traverseObjects[wid];
+
+
+              //fetch object from our traverse thing using this path
+              var arrayOrObject = tob.get(pathToObject);
+
+              // self.log("Path to obj: ", pathToObject, " get: ", arrayOrObject);
+
+              //grab wid to parent mappings, always cloning parent arrays
+              if(isArray)
+              {
+                for(var i=0; i < arrayOrObject.length; i++)
+                {
+                  var aobj = arrayOrObject[i];
+                  //map wid objects to parent wids always thank you
+                  wtp[aobj.wid] = aobj.parents.slice(0);
+                }
+              }
+              else
+                wtp[arrayOrObject.wid] = arrayOrObject.parents.slice(0);
+
+              //now we've aded a mapping from the objects wid to the parents for that wid
+
+            }
+          }
         });
+
+        //we send back the wids of the original widObjects mapped to the wid internal reference && the corresponding parents
+        //so many damn layers -- it gets confusing
+        finished(undefined, widToParents);
+
     }
 
 
@@ -9753,94 +5851,1350 @@ function winneat(backbone, globalConfig, localConfig)
 }
 
 
-//define genotypeto/fromjson functions
-winneat.genotypeToJSON = genotypeToJSON;
-winneat.genotypeFromJSON = genotypeFromJSON;
-
-function genotypeToJSON(ng)
-{
-    //need to match the schema
-    var ngJSON = {nodes:ng.nodes, connections: []};
-    for(var i=0; i < ng.connections.length; i++)
-    {   
-        var conJSON = {};
-        var conn = ng.connections[i];
-        for(var key in neatSchema.connections)
-        {
-            if(key != "type")
-            {
-                conJSON[key] = conn[key];
-            }
-        }
-        ngJSON.connections.push(conJSON);
-    }
-    return ngJSON;
-}
-
-function genotypeFromJSON(ngJSON)
-{   
-    var nodes = [];
-
-    var inCount = 0;
-    var outCount = 0;
-
-    for(var i=0; i < ngJSON.nodes.length; i++)
-    {
-        var dbNode = ngJSON.nodes[i];
-
-        switch(dbNode.nodeType)
-        {
-            case NodeType.input:
-                inCount++;
-                break;
-            case NodeType.output:
-                outCount++;
-                break;
-            case NodeType.bias:
-            case NodeType.hidden:
-            case NodeType.other:
-                break;
-            default:
-                // self.log('Erroneous node type: ' + dbNode.nodeType, " Node: ", dbNode);
-                throw new Error("Erroneous node type: " + dbNode.nodeType + " in node: " + JSON.stringify(dbNode));
-                // break;
-        }
-
-        var nNode = new neatNode(dbNode.gid, dbNode.activationFunction, dbNode.layer, {type: dbNode.nodeType});
-        nodes.push(nNode);
-    }
-
-    var connections = [];
-
-    for(var i=0; i < ngJSON.connections.length; i++)
-    {
-        //grab connection from db object
-        var dbConn = ngJSON.connections[i];
-
-        //convert to our neatConnection -- pretty simple
-        var nConn = new neatConnection(dbConn.gid, dbConn.weight, {sourceID: dbConn.sourceID, targetID: dbConn.targetID});
-
-        //push connection object
-        connections.push(nConn);
-    }
-
-    //here we goooooooooo
-    var ng = new neatGenome(ngJSON.wid, nodes, connections, inCount,outCount, false);
-    //note the wid we have from the db object (by default this is added)
-    ng.wid = ngJSON.wid;
-    //we also have parents already set as well -- make sure to transfer this inforas well -- it's very important
-    ng.parents = ngJSON.parents;
-    //we've converted back to ng
-    //we are finished!
-    return ng;
-}
 
 
 });
 
-require.modules["optimuslime-win-neat"] = require.modules["optimuslime~win-neat@0.0.1-9"];
-require.modules["optimuslime~win-neat"] = require.modules["optimuslime~win-neat@0.0.1-9"];
-require.modules["win-neat"] = require.modules["optimuslime~win-neat@0.0.1-9"];
+require.modules["optimuslime-win-schema"] = require.modules["optimuslime~win-schema@master"];
+require.modules["optimuslime~win-schema"] = require.modules["optimuslime~win-schema@master"];
+require.modules["win-schema"] = require.modules["optimuslime~win-schema@master"];
+
+
+require.register("optimuslime~win-schema@0.0.5-4/lib/addSchema.js", function (exports, module) {
+//pull in traverse object for this guy
+var traverse = require('optimuslime~traverse@master');
+var schemaSpec = require('optimuslime~win-schema@0.0.5-4/lib/schemaSpec.js');
+
+
+module.exports = extendAddSchema;
+
+function extendAddSchema(self)
+{
+
+  var pathDelim = self.pathDelimiter;
+
+  var defaultWINAdd = {
+    wid : "string",
+    dbType : "string",
+    parents : {
+      type: "array",
+      items : {
+        type : "string"
+      }
+    }
+  }
+
+  var winTypeRegExp = [];
+  for(var key in defaultWINAdd)
+  {
+    winTypeRegExp.push(key);
+  }
+  self.log("--All WIN keywords: ", winTypeRegExp);
+
+  winTypeRegExp = new RegExp("\\b" + winTypeRegExp.join("\\b|\\b") + "\\b");
+
+  //everything we need to do to add a schema inside
+  //this requires checking if it's properly formatted, pulling references, and moving
+  //around things if it's not formatted but we would like to make it less wordy to make schema
+    self.internalAddSchema = function(type, schemaJSON, options, finished)
+    {
+      if(typeof options == "function")
+      {
+        finished = options;
+        options = {};
+      }
+      else
+        options = options || {};
+
+      if((schemaJSON.type == "array" || schemaJSON.items) && !options.skipWINAdditions)
+      {
+        finished("Array-types for schema cannot have WIN additions. It doesn't make any sense. The object must be an array, but also have a wid property? Failed: " + type);
+        return;
+      }
+
+      //make a clone of the object 
+      schemaJSON = JSON.parse(JSON.stringify(schemaJSON)); 
+
+      //force all types to lower case -- always -- deal with weird validation errors otherwise
+      traverse(schemaJSON).forEach(function(node)
+      {
+          if(this.key == "type" && typeof this.node == "string")
+            this.update(this.node.toLowerCase());
+      })
+
+      //we add or move objects inside the schema to make it conform to expected v4 JSON schema validation
+      appendSchemaInformation(schemaJSON, options);      
+
+      //check our schema for wacky errors!
+      var schemaCheck = checkSchemaErrors(schemaJSON);
+      if(schemaCheck && schemaCheck.errors)
+      {
+        finished("Improper schema format for " + type + " - " + JSON.stringify(schemaCheck));
+        return;
+      }
+
+      if(schemaCheck && schemaCheck.warnings)
+      {
+        self.log("Warnings: ".yellow, schemaCheck.warnings);
+      }
+
+      //save it in our map
+      self.allSchema[type] = schemaJSON;
+
+      if(!schemaJSON.id || schemaJSON.id != type)
+        schemaJSON.id = type;
+
+      if(!schemaJSON['$schema'])
+        schemaJSON['$schema'] = "http://json-schema.org/draft-04/schema#";
+      
+      if(!schemaJSON.type)
+        schemaJSON.type = "object";
+
+      //add the schema to our validator -- this does most heavy lifting for us
+      self.validator.addSchema(schemaJSON);
+
+      //failed to add schema for some reason?
+      if(self.validator.error){
+        finished(self.validator.error);
+      }
+      else
+      {
+        //no error from validator, store the references inside
+        storeSchemaReferences(type, schemaJSON);
+
+        //when we create it 
+        setSchemaProperties(type, schemaJSON, options);
+        //take what you want, and give nothing back! The pirates way for us!
+        finished();
+      }
+    }
+    function setSchemaProperties(type, schemaJSON, options)
+    {
+      var props = {};
+      if(options.skipWINAdditions)
+        props.isWIN = false;
+      else
+        props.isWIN = true;
+      
+      var primePaths = {};
+
+      var tJSON = traverse(schemaJSON);
+
+      var references = self.requiredReferences[type];
+      var refMap = {};
+
+      for(var refType in references)
+      {
+          var locations = references[refType];
+          for(var l =0; l < locations.length; l++)
+          {
+              var refInfo = locations[l];
+              refMap[refInfo.typePath] = refInfo;
+          }
+      }
+      // self.log("Refmap: ", refMap);
+      function isRef(path){ return refMap[path.join(pathDelim)]}
+
+      tJSON.forEach(function(node)
+      {
+        if(this.isRoot || this.isLeaf)
+          return;
+
+        //kill the future investigation of references
+        if(isRef(this.path))
+            this.keys = [];
+
+          //if we are a known keyword -- that's not properties or items, we skip you!
+        if(this.key != "properties" && this.key != "items" && self.keywordRegExp.test(this.key))
+          this.keys = [];
+
+        //we also ignore this as well
+        if(winTypeRegExp.test(this.key))
+          this.keys = [];
+
+        // self.log("Isref?".green, isRef(this.path));
+
+        // if(this.keys.length)
+          // self.log("Potential PrimePath: ".green, this.key, " node: ", this.node);
+
+        if(this.keys.length){
+
+          var objPath = self.stripObjectPath(this.path);
+
+          //we're an array, or we're inisde an array!
+          if(this.node.type == "array" || this.node.items || this.key =="items")
+          {
+              //we are an array, we'll pull the array info -- and then we close off this array -- forever!
+              //remember, primary paths are all about the objects, and the FIRST layer of array
+              primePaths[objPath] = {type: "array"};
+              this.keys = [];
+          }
+          else
+          {
+            //you must be a properties object
+            //either you have a type, or you're an object
+            primePaths[objPath] = {type: this.node.type || "object"};
+          }
+        }
+        
+
+      })
+
+      // self.log("\n\tprimaryPaths: ".cyan, primePaths);
+
+      self.primaryPaths[type] = primePaths;
+      self.typeProperties[type] = props;
+
+    }
+    function hasNonKeywords(obj)
+    {
+      var hasNonKeywords = false;
+        
+      if(Array.isArray(obj))
+      {
+        //loop through object to grab keys
+        for(var i=0; i < obj.length; i++)
+        {
+          var iKey = obj[i];
+          //check if you're not a keyword
+          if(!self.keywordRegExp.test(iKey))
+          {
+            //just one is enough
+            hasNonKeywords = true;
+            break;
+          }
+        }
+      }
+      else
+      {
+        for(var iKey in obj)
+        {
+          if(!self.keywordRegExp.test(iKey))
+          {
+            //just one is enough
+            hasNonKeywords = true;
+            break;
+          }
+        }
+      }
+
+      return hasNonKeywords;           
+    }
+
+  //handle everything associated with adding a schema
+    function checkSchemaErrors(schemaJSON)
+    {
+
+      //check against the proper schema definition
+      // var vck = self.validator.validateMultiple(schemaJSON, schemaSpec, true);
+       var valCheck = self.validateFunction.apply(self.validator, [schemaJSON, schemaSpec, true]);
+       
+       //grab all possible errors
+       var checkErrors = {length: 0};
+       var checkWarnings = {length: 0};
+
+       //if we're valid -- which we almost certainly are -- just keep going
+       if(!valCheck.valid)
+       {
+          //let it be known -- this is a weird error
+          self.log("Invalid from v4 JSON schema perspective: ", valCheck[errorKey]);
+
+          checkErrors["root"] = valCheck[errorKey];
+          checkErrors.length++;
+
+          //not valid, throw it back
+          return checkErrors;
+       }
+
+
+       //make sure we have some properties -- otherwise there is literally no validation/
+       //during the move process, this is overridden, but it's a good check nonetheless
+       if(!schemaJSON.properties && !schemaJSON.items)
+       {
+          checkErrors["root"] = "No properties/items defined at root. Schema has no validation without properties!";
+          checkErrors.length++;
+       }
+
+       //going to need to traverse our schema object
+       var tJSON = traverse(schemaJSON);
+
+       tJSON.forEach(function(node)
+       {
+        //skip the root please
+        if(this.isRoot || this.path.join(pathDelim).indexOf('required') != -1)
+          return;
+
+        //this should be a warning
+        if(!self.requireByDefault && !this.isLeaf && !this.node.required)
+        {
+            //if you don't have a required object, then you're gonna have a bad time
+            //this is a warning
+            checkWarnings[this.path.join(pathDelim)] = "warning: if you disable requireByDefault and don't put require arrays, validation will ignore those properties.";
+            checkWarnings.length++;
+
+        }
+        if(this.key == "properties" && this.node.properties)
+        {
+           checkErrors[this.path.join(pathDelim)] = "Properties inside properties is meaningless.";
+           checkErrors.length++;
+        }
+        if(this.key == "type" && typeof this.node != "string")
+        {
+            //for whatever reason, there is a type defined, but not a string in it's place? Waa?
+            checkErrors[this.path.join(pathDelim)] = "Types must be string";
+            checkErrors.length++;
+        }
+        if(this.key == "type" && !self.typeRegExp.test(this.node.toLowerCase()))
+        {
+           checkErrors[this.path.join(pathDelim)] = "Types must be one of " + self.validTypes + " not " + this.node;
+           checkErrors.length++;
+        }
+        if(this.isLeaf)
+        {
+          //if you don't have a type, and there is no ref object
+          if(!this.parent.node.properties && (this.key != "type" && this.key != "$ref") && !this.parent.node.type && !this.parent.node["$ref"])
+          {
+              checkErrors[this.path.join(pathDelim)] = "Object doesn't have any properties, a valid type, or a reference, therefore it is invalid in the WIN spec.";
+              checkErrors.length++;
+          }
+        }
+        //not a leaf, you don't have a reference
+        if(!self.allowAnyObjects && !this.isLeaf && !this.node["$ref"] )
+        {
+          //special case for items -- doesn't apply
+          if(this.node.type == "object" && this.key != "items")
+          {
+            //we're going to check if the list of keys to follow have any non keywords
+            //for instance if {type: "object", otherThing: "string"} keys = type, otherThing
+            //if instead it's just {type : "object", required : []}, keys = type, required 
+            //notice that the top has non-keyword keys, and the bottom example does not 
+            //we're looking for the bottom example and rejecting it
+            var bHasNonKeywords = hasNonKeywords(this.keys);
+            
+            //if you ONLY have keywords -- you don't have any other object types
+            //you are a violation of win spec and you allow any object or array to be passed in
+            if(!bHasNonKeywords){
+              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
+              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'object' type with no inner properties";
+              checkErrors.length++;
+            }
+          }
+          else if(this.node.type == "array")
+          {
+            //if you are an array and you have no items -- not allowed!
+            if(!this.node.items){
+              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
+              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no inner items";
+              checkErrors.length++;
+            }
+            else
+            {
+              //if you have a ref -- you're okay for us!
+              var bIemsHaveNonKey = this.node.items["$ref"] || this.node.items["type"] || hasNonKeywords(this.node.items.properties || {});
+               if(!bIemsHaveNonKey){
+                // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
+                checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no non-keyword inner items";
+                checkErrors.length++;
+              }
+            }
+          }
+        
+        }
+        //if you're an array
+        if(this.node.type == "array")
+        {
+          //grab your items
+          var items = this.node.items;
+          if(!items && !self.allowAnyObjects)
+          {
+             checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off for arrays, therefore you cannot simple have an 'array' type with no inner items";
+              checkErrors.length++;
+          }
+          else
+          {
+            items = items || {};
+            //we have items -- we shouldn't have a reference type && other items
+            if(items.properties && items["$ref"])
+            {
+              checkErrors[this.path.join(pathDelim)] = "Array items in WIN cannot have properties AND a reference type. One or the other.";
+              checkErrors.length++;
+            }
+          }
+        }
+
+
+       });
+
+       if(checkErrors.length || checkWarnings.length)
+        return {errors: checkErrors, warnings: checkWarnings};
+      else
+        return null;
+
+    }
+
+    self.stripObjectPath = function(path)
+    {
+      //obj path will be returned
+      var objectPath = [];
+
+      //travere this path, yo
+      traverse(path).forEach(function()
+      {
+        //no routes including properties or items -- made up schema info!
+        if(!this.isRoot && (this.node != "properties" && this.node != "items"))
+          objectPath.push(this.node);
+      });
+
+      return objectPath.join(pathDelim);
+    }
+
+    //storing the references inside of a schema object (if we don't already know them)
+    function parseSchemaReferences(schemaJSON)
+    {
+    	//first we wrap our object with traverse methods
+    	var tJSON = traverse(schemaJSON);
+
+    	var references = {};
+
+    	self.log('--  Parsing refs -- ');
+      // self.log(schemaJSON);
+    	//now we step through pulling the path whenever we hit a reference
+    	tJSON.forEach(function(node)
+    	{
+    		//we are at a reference point
+        //we make an exception for arrays -- since the items object can hold references!
+        if(this.node["$ref"] && (this.key == "items" || !self.keywordRegExp.test(this.key)))
+    		// if(this.isLeaf && this.key == "$ref")
+    		{
+    			//todo logic for when it's "oneOf" or other valid JSON schema things
+    			var fullPath = this.path.join(pathDelim);//this.path.slice(0, this.path.length-1).join(pathDelim);
+    			var referenceType = this.node["$ref"];
+
+          
+          var objectPath = self.stripObjectPath(this.path);
+
+          //pull the "items" piece out of the path -- otherwise, if you're just a normal object -- it's the same as fullPath
+          var typePath = this.key == "items" ? this.path.slice(0, this.path.length-1).join(pathDelim) : fullPath;
+
+
+
+    			if(references[fullPath])
+    			{
+    				throw new Error("Not yet supported reference behavior, arrays of references: ", fullPath);
+    			}
+
+          //assuming type is defined here!
+    			references[fullPath] = {schemaType: referenceType, schemaPath: fullPath, objectPath: objectPath, typePath: typePath};
+          self.log(self.log.testing, 'Reference detected @ '+fullPath+': ', references[fullPath]);
+    		}
+    	});
+
+    	self.log("-- Full refs -- ", references);
+
+    	return references;
+    } 
+
+    function storeSchemaReferences(type, schemaJSON)
+    {
+    	self.schemaReferences[type] = parseSchemaReferences(schemaJSON);
+
+      self.requiredReferences[type] = {};
+
+      for(var path in self.schemaReferences[type])
+      {
+        var schemaInfo = self.schemaReferences[type][path];
+        var refType = schemaInfo.schemaType;
+        var aReqRefs = self.requiredReferences[type][refType];
+
+        if(!aReqRefs)
+        {
+          aReqRefs = [];
+          self.requiredReferences[type][refType] = aReqRefs;
+        }
+        //value is the reference type 
+        aReqRefs.push(schemaInfo);
+      }
+
+
+      //now we know all the references, their paths, and what type needs what references
+    }
+    function moveAllToProperties(tJSON)
+    {
+       tJSON.forEach(function(node)
+       {          
+
+          // self.log("Investigating: ", this.key, " @ ", this.path.join(pathDelim), " all keys: ", this.keys);
+          //for all non-arrays and non-leafs and non-properties object -- move to a properties object if not a keyword!
+          if(!this.isLeaf && this.key != "properties" && !Array.isArray(this.node))
+          {
+
+            //movement dpeends on what type you are -- arrays move to items, while objects move to properties
+            var moveLocation = "properties";
+            if(this.node.type == "array")
+              moveLocation = "items";
+
+            // self.log('Movement: ', this.key, " @ ", this.path.join(pathDelim) + " : ", this.node);
+            // self.log("Move to : ".green + moveLocation);
+
+
+            // self.log("Move innitiated: ".magenta, this.node);
+            // self.log('Original node: '.green, node);
+            var empty = true;
+            var move = {};
+            //any key that isn't one of our keywords is getting moved inside!
+            for(var key in this.node){
+                if(!self.keywordRegExp.test(key)){
+                  // self.log('Moving key @ ', this.path.join(pathDelim) || "Is root? ", " : ", this.key || this.isRoot); 
+                  move[key] = this.node[key];
+                  empty = false;
+                }
+            }
+
+            //don't move nothing derrr
+            if(!empty)
+            {
+               // self.log('Moving: '.red, move);
+
+              //create proeprties if it doesn't exist
+              node[moveLocation] = node[moveLocation] || {};
+
+              for(var key in move)
+              {
+                //move to its new home
+                node[moveLocation][key] = move[key];
+                //remove from previous location 
+                delete node[key];
+              }
+
+              //make sure to update, thank you
+              this.update(node);
+
+              //we need to investigate the newly created properties/items object -- to continue down the rabbit hole
+              this.keys.push(moveLocation);
+            }
+           
+
+          }
+       });
+    }
+    function addWINTypes(schemaJSON, options)
+    {
+      for(var key in defaultWINAdd)
+      {
+        var winAdd = defaultWINAdd[key];
+        
+        //if it's just a shallow string -- add it directly
+        if(typeof winAdd == "string")
+          schemaJSON[key] = winAdd;
+        else //otehrwise, we should clone the larger object
+          schemaJSON[key] = traverse(defaultWINAdd[key]).clone();
+      }
+    }
+    function appendSchemaInformation(schemaJSON, options)
+    {
+      //add in default win types
+      if(!options.skipWINAdditions)
+        addWINTypes(schemaJSON, options);
+
+      //build a traverse object for navigating and updating the object
+      var tJSON = traverse(schemaJSON);
+
+      //step one convert string to types
+      tJSON.forEach(function(node)
+      {
+        var needsUpdate = false;
+          //if you are a leaf -- and you only dictate the type e.g. string/number/array etc -- we'll convert you to proper type
+        if(this.isLeaf && typeof this.node == "string")
+        {
+          //if the key is not a known keyword, and the node string is a proper type
+          if(!self.keywordRegExp.test(this.key) && self.typeRegExp.test(node.toLowerCase()))
+          {
+            //node is a type! make sure it's a lower case type being stored.
+            node = {type: node.toLowerCase()};
+            needsUpdate = true;
+          }
+        }
+
+        if(this.node)
+        {
+
+         if(this.node.items && !this.node.type)
+          {
+            this.node.type = "array";
+            needsUpdate = true;
+          }
+
+          //rewrite {type : "array", "$ref" : "something"} => {type : "array", items : {"$ref" : "something"}}
+          if(this.node.type == "array" && this.node["$ref"])
+          {
+            this.node.items = this.node.items || {};
+            this.node.items["$ref"] = this.node["$ref"];
+            delete this.node["$ref"];
+            needsUpdate = true;
+          }
+
+        }
+
+
+        if(needsUpdate)
+          this.update(node);
+
+      })
+
+      //update location of objects to match validation issues
+      //json schema won't validate outside of properties object -- which some people may forget
+      //this is basically a correct method
+      moveAllToProperties(tJSON);
+
+      // var util = require('util');
+      // self.log("Post move schema: ".cyan, util.inspect(schemaJSON, false, 10));
+
+      tJSON.forEach(function(node)
+      {
+        var needsUpdate = false;
+
+
+       
+          //if we aren't a leaf object, we are a full object
+          //therefore, we must have required (since we're in default mode)
+          //since we cover the properties object inside, we don't need to go indepth for that key too!
+        if(self.requireByDefault && !this.isLeaf && !this.node.required && !Array.isArray(this.node))
+        {
+          //the require needs to be filled iwth all the properties of this thing, except
+          //for anything defined by v4 json schema -- so we run a regex to reject those keys
+          var reqProps = [];
+
+          // self.log("Not leaf: ".magenta, this.node, " Key : ", this.key);
+
+          //do not do this if you're in the properties object
+          //since the prop keys belong to the PARENT not the node
+          if(this.key != "properties")
+          {
+            for(var key in this.node){
+              if(!self.keywordRegExp.test(key)){
+              // self.log('Key added: '.red, key);
+
+                reqProps.push(key);
+              }
+            }
+            // self.log('Post not props: '.blue, reqProps);
+          }
+          
+          //for every object, you can also have a properties object too
+          //required applies to the subling property object as well
+          //so we loop through the properties object as well
+         for(var key in this.node.properties){
+            if(!self.keywordRegExp.test(key)){
+              reqProps.push(key);
+            }
+          }
+
+          if(reqProps.length)
+          {
+            node.required = reqProps;
+            needsUpdate = true;
+          }        
+        }
+
+     
+       if(needsUpdate){
+          // self.log('New required - : ', this.node, ' : ', reqProps);
+          this.update(node);
+        }
+      });
+
+
+
+        // self.log("--post traverse -- ", schemaJSON);
+
+    }
+
+	return self;
+}
+
+
+
+
+});
+
+require.register("optimuslime~win-schema@0.0.5-4/lib/schemaSpec.js", function (exports, module) {
+module.exports = 
+{
+    "id": "http://json-schema.org/draft-04/schema#",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "description": "Core schema meta-schema",
+    "definitions": {
+        "schemaArray": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#" }
+        },
+        "positiveInteger": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "positiveIntegerDefault0": {
+            "allOf": [ { "$ref": "#/definitions/positiveInteger" }, { "default": 0 } ]
+        },
+        "simpleTypes": {
+            "enum": [ "array", "boolean", "integer", "null", "number", "object", "string" ]
+        },
+        "stringArray": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "uniqueItems": true
+        }
+    },
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "string",
+            "format": "uri"
+        },
+        "$schema": {
+            "type": "string",
+            "format": "uri"
+        },
+        "title": {
+            "type": "string"
+        },
+        "description": {
+            "type": "string"
+        },
+        "default": {},
+        "multipleOf": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+        },
+        "maximum": {
+            "type": "number"
+        },
+        "exclusiveMaximum": {
+            "type": "boolean",
+            "default": false
+        },
+        "minimum": {
+            "type": "number"
+        },
+        "exclusiveMinimum": {
+            "type": "boolean",
+            "default": false
+        },
+        "maxLength": { "$ref": "#/definitions/positiveInteger" },
+        "minLength": { "$ref": "#/definitions/positiveIntegerDefault0" },
+        "pattern": {
+            "type": "string",
+            "format": "regex"
+        },
+        "additionalItems": {
+            "anyOf": [
+                { "type": "boolean" },
+                { "$ref": "#" }
+            ],
+            "default": {}
+        },
+        "items": {
+            "anyOf": [
+                { "$ref": "#" },
+                { "$ref": "#/definitions/schemaArray" }
+            ],
+            "default": {}
+        },
+        "maxItems": { "$ref": "#/definitions/positiveInteger" },
+        "minItems": { "$ref": "#/definitions/positiveIntegerDefault0" },
+        "uniqueItems": {
+            "type": "boolean",
+            "default": false
+        },
+        "maxProperties": { "$ref": "#/definitions/positiveInteger" },
+        "minProperties": { "$ref": "#/definitions/positiveIntegerDefault0" },
+        "required": { "$ref": "#/definitions/stringArray" },
+        "additionalProperties": {
+            "anyOf": [
+                { "type": "boolean" },
+                { "$ref": "#" }
+            ],
+            "default": {}
+        },
+        "definitions": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#" },
+            "default": {}
+        },
+        "properties": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#" },
+            "default": {}
+        },
+        "patternProperties": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#" },
+            "default": {}
+        },
+        "dependencies": {
+            "type": "object",
+            "additionalProperties": {
+                "anyOf": [
+                    { "$ref": "#" },
+                    { "$ref": "#/definitions/stringArray" }
+                ]
+            }
+        },
+        "enum": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true
+        },
+        "type": {
+            "anyOf": [
+                { "$ref": "#/definitions/simpleTypes" },
+                {
+                    "type": "array",
+                    "items": { "$ref": "#/definitions/simpleTypes" },
+                    "minItems": 1,
+                    "uniqueItems": true
+                }
+            ]
+        },
+        "allOf": { "$ref": "#/definitions/schemaArray" },
+        "anyOf": { "$ref": "#/definitions/schemaArray" },
+        "oneOf": { "$ref": "#/definitions/schemaArray" },
+        "not": { "$ref": "#" }
+    },
+    "dependencies": {
+        "exclusiveMaximum": [ "maximum" ],
+        "exclusiveMinimum": [ "minimum" ]
+    },
+    "default": {}
+}
+});
+
+require.register("optimuslime~win-schema@0.0.5-4", function (exports, module) {
+//pull in the validating workhorse -- checks schema and stuff
+var tv4 = require('geraintluff~tv4@master');
+//pull in traverse object from the repo please!
+var traverse = require('optimuslime~traverse@master');
+
+//pull in the object that knows what all schema look like!
+var schemaSpec = require('optimuslime~win-schema@0.0.5-4/lib/schemaSpec.js');
+
+var addSchemaSupport = require('optimuslime~win-schema@0.0.5-4/lib/addSchema.js');
+
+module.exports = winSchema;
+
+function winSchema(winback, globalConfiguration, localConfiguration)
+{
+	//load up basic win-module stufffff
+	var self = this;
+  self.winFunction = "schema";
+  self.log = winback.getLogger(self);
+
+  //limited only by global -- or we could limit our own verboseness
+  self.log.logLevel = localConfiguration.logLevel || self.log.normal;
+
+  self.pathDelimiter = "///";
+
+  //this creates "internalAddSchema" to handle the weighty add logic
+  //need to thoroughly test and modify incoming schema to align with 
+  //logical schema setup for WIN
+  addSchemaSupport(self, globalConfiguration, localConfiguration);
+
+	self.validator = tv4.freshApi();
+
+ //set the backbone and our logging function
+  self.bbEmit = winback.getEmitter(self);
+
+  //config setups
+
+  self.multipleErrors = (localConfiguration.multipleErrors == true || localConfiguration.multipleErrors == "true");
+  //by default you can have unknown keys -- the server environment may desire to change this
+  //if you don't want to be storing extra info
+  //by default, on lockdown -- better that way -- no sneaky stuff
+  self.allowUnknownKeys = localConfiguration.allowUnknownKeys || false;
+
+  //all keys are required by default -- this adds in required objects for everything
+  self.requireByDefault = localConfiguration.requireByDefault || true;
+
+  //do we allow properties with just the type "object" or "array"
+  //this would allow ANY data to be fit in there with no validation checks (other than it is an object or array)
+  //shouldn't allow this because people could slip in all sorts of terrible things without validation
+  self.allowAnyObjects = localConfiguration.allowAnyObjects || false;
+
+  self.eventCallbacks = function()
+  {
+        var callbacks = {};
+
+        //add callbacks to the object-- these are the functions called when the full event is emitted
+        callbacks["schema:validate"] = self.validateData;
+        callbacks["schema:validateMany"] = self.validateDataArray;
+        callbacks["schema:addSchema"] = self.addSchema;
+        callbacks["schema:getSchema"] = self.getSchema;
+        callbacks["schema:getSchemaReferences"] = self.getSchemaReferences;
+        callbacks["schema:getFullSchema"] = self.getFullSchema;
+        callbacks["schema:getSchemaProperties"] = self.getSchemaProperties;
+
+        //these are for deealing with pulling references from a specific object -- it's easier done in this module
+        callbacks["schema:getReferencesAndParents"] = self.getReferencesAndParents;
+        callbacks["schema:replaceParentReferences"] = self.replaceParentReferences;
+
+        //send back our callbacks
+        return callbacks;
+  }
+  self.requiredEvents = function()
+  {
+  	//don't need no one for nuffin'
+  	return [];
+  }
+
+  self.initialize = function(done)
+  {
+  	setTimeout(function()
+  	{
+  		done();
+  	}, 0);
+  }
+
+    //cache all our schema by type
+    self.allSchema = {};
+    self.schemaReferences = {};
+    self.requiredReferences = {};
+    self.fullSchema = {};
+    self.primaryPaths = {};
+    self.typeProperties = {};
+
+    self.validTypes = "\\b" + schemaSpec.definitions.simpleTypes.enum.join('\\b|\\b') + "\\b"; //['object', 'array', 'number', 'string', 'boolean', 'null'].join('|');
+    self.typeRegExp = new RegExp(self.validTypes);
+
+    self.specKeywords = ["\\$ref|\\babcdefg"];
+    for(var key in schemaSpec.properties)
+      self.specKeywords.push(key.replace('$', '\\$'));
+
+    //join using exact phrasing checks
+    self.specKeywords = self.specKeywords.join('\\b|\\b') + "\\b";
+    self.keywordRegExp = new RegExp(self.specKeywords);
+
+    self.log(self.log.testing, "--Specced types: ".green, self.validTypes);
+    self.log(self.log.testing, "--Specced keywords: ".green, self.specKeywords);
+
+    self.validateFunction = (self.multipleErrors ? self.validator.validateMultiple : self.validator.validateResult);
+    self.errorKey = self.multipleErrors ? "errors" : "error";
+
+    function listTypeIssues(type)
+    {
+      if(!self.allSchema[type]){
+        return "Schema type not loaded: " + type;
+      }
+
+      //we have to manually detect missing references -- since the validator is not concerned with such things
+      //FOR WHATEVER REASON
+      var missing = self.validator.getMissingUris();
+      for(var i=0; i < missing.length; i++)
+      {
+        //if we have this type inside our refernces for this object, it means we're missing a ref schema for this type!
+        if(self.requiredReferences[type][missing[i]])
+        {
+          return "Missing at least 1 schema definition: " + missing[i];
+        }
+      }
+    }
+
+    function internalValidate(schema, object)
+    {
+      //validate against what type?
+      var result = self.validateFunction.apply(self.validator, [object, schema, true, !self.allowUnknownKeys]);
+
+       //if it's not an array, make it an array
+      //if it's empty, make it a damn array
+      var errors = result[self.errorKey];
+
+      //if you are multiple errors, then you are a non-undefined array, just return as usual
+      //otherwise, you are an error but not in an array
+      //if errors is undefined then this will deefault to []
+      errors = (errors && !Array.isArray(errors)) ? [errors] : errors || [];
+
+      return {valid : result.valid, errors : errors};
+    }
+    self.validateDataArray = function(type, objects, finished)
+    {
+      var typeIssues = listTypeIssues(type);
+
+      //stop if we have type issues
+      if(typeIssues)
+      {
+        finished(typeIssues);
+        return;
+      }
+      else if(typeof type != "string" || !Array.isArray(objects))
+      {
+        finished("ValidateMany requires type [string], objects [array]");
+        return;
+      }
+
+      var schema = self.validator.getSchema(type);
+      // self.log('validate many against: ', schema);
+
+      var allValid = true;
+      var allErrors = [];
+      for(var i=0; i < objects.length; i++)
+      {
+        var result = internalValidate(schema, objects[i]);
+
+        if(!result.valid){
+          allValid = false;
+          allErrors.push(result.errors);
+        }
+        else //no error? just push empty array!
+          allErrors.push([]);
+      }
+
+      //if we have errors during validation, they'll be passed on thank you!
+      //if you're valid, and there are no errors, then don't send nuffin
+      finished(undefined, allValid, (!allValid ? allErrors : undefined));
+    }
+    self.validateData = function(type, object, finished)
+    {
+      var typeIssues = listTypeIssues(type);
+
+      //stop if we have type issues
+      if(typeIssues)
+      {
+        finished(typeIssues);
+        return;
+      }
+
+      //log object being checked
+      self.log("Validate: ", object);
+
+      //now we need to validate, we definitely have all the refs we need
+      var schema = self.validator.getSchema(type);
+
+      //log what's being validated
+      self.log('validate against: ', schema);
+    	 
+      var result = internalValidate(schema, object);
+
+      //if we have errors during validation, they'll be passed on thank you!
+      //if you're valid, and there are no errors, then don't send nuffin
+      finished(undefined, result.valid, (result.errors.length ? result.errors : undefined));
+    }
+
+    //todo: pull reference objects from schema -- make sure those exist as well?
+   	self.addSchema = function(type, schemaJSON, options, finished)
+   	{
+      //pass args into internal adds
+      return self.internalAddSchema.apply(self, arguments);
+   	}
+
+   	    //todo: pull reference objects from schema -- make sure those exist as well?
+   	self.getSchema = function(typeOrArray, finished)
+   	{   	
+      //did we request one or many?
+      var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var refArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+      //failed to get schema for some very odd reason?
+        if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+        //push our reference information as a clone
+        refArray.push(traverse(self.validator.getSchema(sType)).clone());
+        //if you hit an error -send back
+        if(self.validator.error){
+          finished(self.validator.error);
+          return;
+        }
+      }
+
+      //send the schema objects back
+      //send an array regardless of how many requested -- standard behavior
+      finished(undefined, refArray);    
+
+   	}
+
+   	self.getSchemaReferences = function(typeOrArray, finished)
+   	{
+      var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var refArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+        if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+        //push our reference information as a clone
+        refArray.push(traverse(self.requiredReferences[sType]).clone());
+      }
+
+  		//send the refernece objects back
+      //if you are a single object, just send the one -- otherwise send an array
+      finished(undefined, refArray); 		
+   	}
+
+    var buildFullSchema = function(type)
+    {
+      var schema = self.validator.getSchema(type);
+      var tSchema = traverse(schema);
+
+      var clone = tSchema.clone();
+      var tClone = traverse(clone);
+      var references = self.schemaReferences[type];
+
+      for(var path in references)
+      {
+        //we get the type of reference
+        var schemaInfo = references[path];
+        var refType = schemaInfo.schemaType;
+
+        //this is recursive behavior -- itwill call buidl full schema if not finished yet
+        var fullRefSchema = internalGetFullSchema(refType);
+
+        if(!fullRefSchema)
+          throw new Error("No schema could be created for: " + refType + ". Please check it's defined.");
+
+        //now we ahve teh full object to replace
+        var tPath = path.split(self.pathDelimiter);
+
+        // self.log(self.log.testing, 'Path to ref: ', tPath, " replacement: ", fullRefSchema);
+
+        //use traverse to set the path object as our full ref object
+        tClone.set(tPath, fullRefSchema);
+      }
+
+      // self.log(self.log.testing, "Returning schema: ", type, " full: ", clone);
+
+      return clone;
+    }
+    var inprogressSchema = {};
+
+    function internalGetFullSchema(type)
+    {
+      if(inprogressSchema[type])
+      {
+          throw new Error("Infinite schema reference loop: " + JSON.stringify(Object.keys(inprogressSchema)));    
+      }
+
+      inprogressSchema[type] = true;
+
+       //if we don't have a full type yet, we build it
+      if(!self.fullSchema[type])
+      {
+        //need to build a full schema object
+        var fSchema = buildFullSchema(type);
+
+        self.fullSchema[type] = fSchema;
+      }
+
+      //mark the in progress as false!
+      delete inprogressSchema[type];
+
+      return self.fullSchema[type];
+    }
+
+    self.getFullSchema = function(typeOrArray, finished)
+    { 
+      var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var fullArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+         if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+
+        try
+        {
+          //get the full schema from internal function
+          //throws error if something is wrong
+          var fullSchema = internalGetFullSchema(sType);
+         
+          //pull the full object -- guaranteed to exist -- send a clone
+           fullArray.push(traverse(fullSchema).clone());
+        }
+        catch(e)
+        {
+          //send the error if we have one
+          finished(e);
+          return;
+        }
+      }
+
+      //send the refernece objects back
+      //if you are a single object, just send the one -- otherwise send an array
+      finished(undefined, fullArray);
+    }
+
+    self.getSchemaProperties = function(typeOrArray, finished)
+    {
+       var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var propArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+         if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+
+        //get our schema properties
+        propArray.push({type: sType, primaryPaths: traverse(self.primaryPaths[sType]).clone(), properties: traverse(self.typeProperties[sType]).clone()});
+
+      }
+
+
+      //send the refernece objects back
+      //if you are a single object, just send the one -- otherwise send an array
+      finished(undefined, propArray);
+    }
+
+    //we're going to clone the object, then replace all of the reference wids with new an improved parents
+    self.replaceParentReferences = function(type, object, parentMapping, finished)
+    {
+      var tClone = traverse(object).clone();
+
+      traverse(tClone).forEach(function(node)
+      {
+         //if we have a wid object and parents object -- likely we are a tracked reference
+        if(this.node.wid && this.node.parents)
+        {
+          var replaceParents = parentMapping[this.node.wid];
+
+          if(replaceParents)
+          {
+            //straight up replacement therapy yo
+            this.node.parents = replaceParents;
+
+            //then make sure to update and continue onwards!
+            this.update(this.node);
+          }
+        }
+      })
+
+      //we've replaced the innards of the object with a better future!
+      finished(undefined, tClone);
+    }
+
+    self.getReferencesAndParents = function(type, widObjects, finished)
+    {
+
+        //listed by some identifier, then the object, we need to look through the type, and pull references
+        var fSchema = internalGetFullSchema(type);
+        // self.log("Full schema: ", fSchema);
+        if(!fSchema)
+        {
+          finished("Full schema undefined, might be missing a reference type within " + type);
+          return;
+        } 
+        var widToParents = {};
+        var traverseObjects = {};
+
+        for(var wid in widObjects){
+          widToParents[wid] = {};
+          traverseObjects[wid] = traverse(widObjects[wid]);
+        }
+
+        
+        //for every wid object we see, we loop through and pull that 
+        traverse(fSchema).forEach(function(node)
+        {
+          // self.log("Node: ", this.node, "", " key: ", this.key);
+          //if we have a wid object and parents object -- likely we are a tracked reference
+          if(this.node.wid && this.node.parents)
+          {
+            //let's pull these bad boys our of our other objects
+            var pathToObject = self.stripObjectPath(this.path);
+            
+            //if you aren't root, split it up!
+            if(pathToObject != "")
+              pathToObject = pathToObject.split(self.pathDelimiter);
+
+            // self.log("\nKey before :", this.key, " node-p: ", this.parent.node, " path: ", this.path);
+            
+            var isArray = (this.key == "properties" && this.path[this.path.length - 2] == "items");
+            // self.log("Is array? : ", isArray);
+            for(var wid in traverseObjects)
+            {
+
+              var wtp = widToParents[wid];
+              var tob = traverseObjects[wid];
+
+
+              //fetch object from our traverse thing using this path
+              var arrayOrObject = tob.get(pathToObject);
+
+              // self.log("Path to obj: ", pathToObject, " get: ", arrayOrObject);
+
+              //grab wid to parent mappings, always cloning parent arrays
+              if(isArray)
+              {
+                for(var i=0; i < arrayOrObject.length; i++)
+                {
+                  var aobj = arrayOrObject[i];
+                  //map wid objects to parent wids always thank you
+                  wtp[aobj.wid] = aobj.parents.slice(0);
+                }
+              }
+              else
+                wtp[arrayOrObject.wid] = arrayOrObject.parents.slice(0);
+
+              //now we've aded a mapping from the objects wid to the parents for that wid
+
+            }
+          }
+        });
+
+        //we send back the wids of the original widObjects mapped to the wid internal reference && the corresponding parents
+        //so many damn layers -- it gets confusing
+        finished(undefined, widToParents);
+
+    }
+
+
+	return self;
+}
+
+
+
+
+});
+
+require.modules["optimuslime-win-schema"] = require.modules["optimuslime~win-schema@0.0.5-4"];
+require.modules["optimuslime~win-schema"] = require.modules["optimuslime~win-schema@0.0.5-4"];
+require.modules["win-schema"] = require.modules["optimuslime~win-schema@0.0.5-4"];
 
 
 require.register("techjacker~q@master", function (exports, module) {
@@ -11780,8 +9134,8 @@ require.modules["q"] = require.modules["techjacker~q@master"];
 require.register("optimuslime~win-backbone@0.0.4-5", function (exports, module) {
 
 //Control all the win module! Need emitter for basic usage. 
-var Emitter = (typeof process != "undefined" ?  require("component~emitter@master") : require("component~emitter@master"));
-var Q = require("techjacker~q@master");
+var Emitter = (typeof process != "undefined" ?  require('component~emitter@master') : require('component~emitter@master'));
+var Q = require('techjacker~q@master');
 //
 
 module.exports = winBB;
@@ -12054,7 +9408,7 @@ function winBB(homeDirectory)
 		var jsonModules = inputNameOrObject;
 		if(typeof inputNameOrObject == "string")
 		{
-			var fs = require("fs");
+			var fs = require('fs');
 			var fBuffer = fs.readFileSync(inputNameOrObject);
 			jsonModules = JSON.parse(fBuffer);
 		}
@@ -12591,4351 +9945,418 @@ require.modules["optimuslime~win-backbone"] = require.modules["optimuslime~win-b
 require.modules["win-backbone"] = require.modules["optimuslime~win-backbone@0.0.4-5"];
 
 
-require.register("geraintluff~tv4@master/lang/de.js", function (exports, module) {
-(function (global) {
-	var lang = {
-		INVALID_TYPE: "Ungültiger Typ: {type} (erwartet wurde: {expected})",
-		ENUM_MISMATCH: "Keine Übereinstimmung mit der Aufzählung (enum) für: {value}",
-		ANY_OF_MISSING: "Daten stimmen nicht überein mit einem der Schemas von \"anyOf\"",
-		ONE_OF_MISSING: "Daten stimmen nicht überein mit einem der Schemas von \"oneOf\"",
-		ONE_OF_MULTIPLE: "Daten sind valid in Bezug auf mehreren Schemas von \"oneOf\": index {index1} und {index2}",
-		NOT_PASSED: "Daten stimmen mit dem \"not\" Schema überein",
-		// Numeric errors
-		NUMBER_MULTIPLE_OF: "Wert {value} ist kein Vielfaches von {multipleOf}",
-		NUMBER_MINIMUM: "Wert {value} ist kleiner als das Minimum {minimum}",
-		NUMBER_MINIMUM_EXCLUSIVE: "Wert {value} ist gleich dem Exklusiven Minimum {minimum}",
-		NUMBER_MAXIMUM: "Wert {value} ist größer als das Maximum {maximum}",
-		NUMBER_MAXIMUM_EXCLUSIVE: "Wert {value} ist gleich dem Exklusiven Maximum {maximum}",
-		// String errors
-		STRING_LENGTH_SHORT: "Zeichenkette zu kurz ({length} chars), minimum {minimum}",
-		STRING_LENGTH_LONG: "Zeichenkette zu lang ({length} chars), maximum {maximum}",
-		STRING_PATTERN: "Zeichenkette entspricht nicht dem Muster: {pattern}",
-		// Object errors
-		OBJECT_PROPERTIES_MINIMUM: "Zu wenige Attribute definiert ({propertyCount}), minimum {minimum}",
-		OBJECT_PROPERTIES_MAXIMUM: "Zu viele Attribute definiert ({propertyCount}), maximum {maximum}",
-		OBJECT_REQUIRED: "Notwendiges Attribut fehlt: {key}",
-		OBJECT_ADDITIONAL_PROPERTIES: "Zusätzliche Attribute nicht erlaubt",
-		OBJECT_DEPENDENCY_KEY: "Abhängigkeit fehlt - Schlüssel nicht vorhanden: {missing} (wegen Schlüssel: {key})",
-		// Array errors
-		ARRAY_LENGTH_SHORT: "Array zu kurz ({length}), minimum {minimum}",
-		ARRAY_LENGTH_LONG: "Array zu lang ({length}), maximum {maximum}",
-		ARRAY_UNIQUE: "Array Einträge nicht eindeutig (Index {match1} und {match2})",
-		ARRAY_ADDITIONAL_ITEMS: "Zusätzliche Einträge nicht erlaubt"
-	};
+require.register("optimuslime~win-utils@master", function (exports, module) {
 
-	if (typeof define === 'function' && define.amd) {
-		// AMD. Register as an anonymous module.
-		define(['../tv4'], function(tv4) {
-			tv4.addLanguage('de', lang);
-			return tv4;
-		});
-	} else if (typeof module !== 'undefined' && module.exports){
-		// CommonJS. Define export.
-		var tv4 = require("geraintluff~tv4@master");
-		tv4.addLanguage('de', lang);
-		module.exports = tv4;
-	} else {
-		// Browser globals
-		global.tv4.addLanguage('de', lang);
-	}
-})(this);
+var winutils = {};
+
+module.exports = winutils;
+
+//right now, it's all we have setup -- later there will be more utilities
+winutils.cuid = require('optimuslime~win-utils@master/uuid/cuid.js');
+
+winutils.math = require('optimuslime~win-utils@master/math/winmath.js');
+
 
 });
 
-require.register("geraintluff~tv4@master", function (exports, module) {
-/*
-Author: Geraint Luff and others
-Year: 2013
-
-This code is released into the "public domain" by its author(s).  Anybody may use, alter and distribute the code without restriction.  The author makes no guarantees, and takes no liability of any kind for use of this code.
-
-If you find a bug or make an improvement, it would be courteous to let the author know, but it is not compulsory.
-*/
-(function (global, factory) {
-  if (typeof define === 'function' && define.amd) {
-    // AMD. Register as an anonymous module.
-    define([], factory);
-  } else if (typeof module !== 'undefined' && module.exports){
-    // CommonJS. Define export.
-    module.exports = factory();
-  } else {
-    // Browser globals
-    global.tv4 = factory();
-  }
-}(this, function () {
-
-// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys?redirectlocale=en-US&redirectslug=JavaScript%2FReference%2FGlobal_Objects%2FObject%2Fkeys
-if (!Object.keys) {
-	Object.keys = (function () {
-		var hasOwnProperty = Object.prototype.hasOwnProperty,
-			hasDontEnumBug = !({toString: null}).propertyIsEnumerable('toString'),
-			dontEnums = [
-				'toString',
-				'toLocaleString',
-				'valueOf',
-				'hasOwnProperty',
-				'isPrototypeOf',
-				'propertyIsEnumerable',
-				'constructor'
-			],
-			dontEnumsLength = dontEnums.length;
-
-		return function (obj) {
-			if (typeof obj !== 'object' && typeof obj !== 'function' || obj === null) {
-				throw new TypeError('Object.keys called on non-object');
-			}
-
-			var result = [];
-
-			for (var prop in obj) {
-				if (hasOwnProperty.call(obj, prop)) {
-					result.push(prop);
-				}
-			}
-
-			if (hasDontEnumBug) {
-				for (var i=0; i < dontEnumsLength; i++) {
-					if (hasOwnProperty.call(obj, dontEnums[i])) {
-						result.push(dontEnums[i]);
-					}
-				}
-			}
-			return result;
-		};
-	})();
-}
-// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/create
-if (!Object.create) {
-	Object.create = (function(){
-		function F(){}
-
-		return function(o){
-			if (arguments.length !== 1) {
-				throw new Error('Object.create implementation only accepts one parameter.');
-			}
-			F.prototype = o;
-			return new F();
-		};
-	})();
-}
-// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/isArray?redirectlocale=en-US&redirectslug=JavaScript%2FReference%2FGlobal_Objects%2FArray%2FisArray
-if(!Array.isArray) {
-	Array.isArray = function (vArg) {
-		return Object.prototype.toString.call(vArg) === "[object Array]";
-	};
-}
-// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/indexOf?redirectlocale=en-US&redirectslug=JavaScript%2FReference%2FGlobal_Objects%2FArray%2FindexOf
-if (!Array.prototype.indexOf) {
-	Array.prototype.indexOf = function (searchElement /*, fromIndex */ ) {
-		if (this === null) {
-			throw new TypeError();
-		}
-		var t = Object(this);
-		var len = t.length >>> 0;
-
-		if (len === 0) {
-			return -1;
-		}
-		var n = 0;
-		if (arguments.length > 1) {
-			n = Number(arguments[1]);
-			if (n !== n) { // shortcut for verifying if it's NaN
-				n = 0;
-			} else if (n !== 0 && n !== Infinity && n !== -Infinity) {
-				n = (n > 0 || -1) * Math.floor(Math.abs(n));
-			}
-		}
-		if (n >= len) {
-			return -1;
-		}
-		var k = n >= 0 ? n : Math.max(len - Math.abs(n), 0);
-		for (; k < len; k++) {
-			if (k in t && t[k] === searchElement) {
-				return k;
-			}
-		}
-		return -1;
-	};
-}
-
-// Grungey Object.isFrozen hack
-if (!Object.isFrozen) {
-	Object.isFrozen = function (obj) {
-		var key = "tv4_test_frozen_key";
-		while (obj.hasOwnProperty(key)) {
-			key += Math.random();
-		}
-		try {
-			obj[key] = true;
-			delete obj[key];
-			return false;
-		} catch (e) {
-			return true;
-		}
-	};
-}
-// Based on: https://github.com/geraintluff/uri-templates, but with all the de-substitution stuff removed
-
-var uriTemplateGlobalModifiers = {
-	"+": true,
-	"#": true,
-	".": true,
-	"/": true,
-	";": true,
-	"?": true,
-	"&": true
-};
-var uriTemplateSuffices = {
-	"*": true
-};
-
-function notReallyPercentEncode(string) {
-	return encodeURI(string).replace(/%25[0-9][0-9]/g, function (doubleEncoded) {
-		return "%" + doubleEncoded.substring(3);
-	});
-}
-
-function uriTemplateSubstitution(spec) {
-	var modifier = "";
-	if (uriTemplateGlobalModifiers[spec.charAt(0)]) {
-		modifier = spec.charAt(0);
-		spec = spec.substring(1);
-	}
-	var separator = "";
-	var prefix = "";
-	var shouldEscape = true;
-	var showVariables = false;
-	var trimEmptyString = false;
-	if (modifier === '+') {
-		shouldEscape = false;
-	} else if (modifier === ".") {
-		prefix = ".";
-		separator = ".";
-	} else if (modifier === "/") {
-		prefix = "/";
-		separator = "/";
-	} else if (modifier === '#') {
-		prefix = "#";
-		shouldEscape = false;
-	} else if (modifier === ';') {
-		prefix = ";";
-		separator = ";";
-		showVariables = true;
-		trimEmptyString = true;
-	} else if (modifier === '?') {
-		prefix = "?";
-		separator = "&";
-		showVariables = true;
-	} else if (modifier === '&') {
-		prefix = "&";
-		separator = "&";
-		showVariables = true;
-	}
-
-	var varNames = [];
-	var varList = spec.split(",");
-	var varSpecs = [];
-	var varSpecMap = {};
-	for (var i = 0; i < varList.length; i++) {
-		var varName = varList[i];
-		var truncate = null;
-		if (varName.indexOf(":") !== -1) {
-			var parts = varName.split(":");
-			varName = parts[0];
-			truncate = parseInt(parts[1], 10);
-		}
-		var suffices = {};
-		while (uriTemplateSuffices[varName.charAt(varName.length - 1)]) {
-			suffices[varName.charAt(varName.length - 1)] = true;
-			varName = varName.substring(0, varName.length - 1);
-		}
-		var varSpec = {
-			truncate: truncate,
-			name: varName,
-			suffices: suffices
-		};
-		varSpecs.push(varSpec);
-		varSpecMap[varName] = varSpec;
-		varNames.push(varName);
-	}
-	var subFunction = function (valueFunction) {
-		var result = "";
-		var startIndex = 0;
-		for (var i = 0; i < varSpecs.length; i++) {
-			var varSpec = varSpecs[i];
-			var value = valueFunction(varSpec.name);
-			if (value === null || value === undefined || (Array.isArray(value) && value.length === 0) || (typeof value === 'object' && Object.keys(value).length === 0)) {
-				startIndex++;
-				continue;
-			}
-			if (i === startIndex) {
-				result += prefix;
-			} else {
-				result += (separator || ",");
-			}
-			if (Array.isArray(value)) {
-				if (showVariables) {
-					result += varSpec.name + "=";
-				}
-				for (var j = 0; j < value.length; j++) {
-					if (j > 0) {
-						result += varSpec.suffices['*'] ? (separator || ",") : ",";
-						if (varSpec.suffices['*'] && showVariables) {
-							result += varSpec.name + "=";
-						}
-					}
-					result += shouldEscape ? encodeURIComponent(value[j]).replace(/!/g, "%21") : notReallyPercentEncode(value[j]);
-				}
-			} else if (typeof value === "object") {
-				if (showVariables && !varSpec.suffices['*']) {
-					result += varSpec.name + "=";
-				}
-				var first = true;
-				for (var key in value) {
-					if (!first) {
-						result += varSpec.suffices['*'] ? (separator || ",") : ",";
-					}
-					first = false;
-					result += shouldEscape ? encodeURIComponent(key).replace(/!/g, "%21") : notReallyPercentEncode(key);
-					result += varSpec.suffices['*'] ? '=' : ",";
-					result += shouldEscape ? encodeURIComponent(value[key]).replace(/!/g, "%21") : notReallyPercentEncode(value[key]);
-				}
-			} else {
-				if (showVariables) {
-					result += varSpec.name;
-					if (!trimEmptyString || value !== "") {
-						result += "=";
-					}
-				}
-				if (varSpec.truncate != null) {
-					value = value.substring(0, varSpec.truncate);
-				}
-				result += shouldEscape ? encodeURIComponent(value).replace(/!/g, "%21"): notReallyPercentEncode(value);
-			}
-		}
-		return result;
-	};
-	subFunction.varNames = varNames;
-	return {
-		prefix: prefix,
-		substitution: subFunction,
-	};
-}
-
-function UriTemplate(template) {
-	if (!(this instanceof UriTemplate)) {
-		return new UriTemplate(template);
-	}
-	var parts = template.split("{");
-	var textParts = [parts.shift()];
-	var prefixes = [];
-	var substitutions = [];
-	var varNames = [];
-	while (parts.length > 0) {
-		var part = parts.shift();
-		var spec = part.split("}")[0];
-		var remainder = part.substring(spec.length + 1);
-		var funcs = uriTemplateSubstitution(spec);
-		substitutions.push(funcs.substitution);
-		prefixes.push(funcs.prefix);
-		textParts.push(remainder);
-		varNames = varNames.concat(funcs.substitution.varNames);
-	}
-	this.fill = function (valueFunction) {
-		var result = textParts[0];
-		for (var i = 0; i < substitutions.length; i++) {
-			var substitution = substitutions[i];
-			result += substitution(valueFunction);
-			result += textParts[i + 1];
-		}
-		return result;
-	};
-	this.varNames = varNames;
-	this.template = template;
-}
-UriTemplate.prototype = {
-	toString: function () {
-		return this.template;
-	},
-	fillFromObject: function (obj) {
-		return this.fill(function (varName) {
-			return obj[varName];
-		});
-	}
-};
-var ValidatorContext = function ValidatorContext(parent, collectMultiple, errorMessages, checkRecursive, trackUnknownProperties) {
-	this.missing = [];
-	this.missingMap = {};
-	this.formatValidators = parent ? Object.create(parent.formatValidators) : {};
-	this.schemas = parent ? Object.create(parent.schemas) : {};
-	this.collectMultiple = collectMultiple;
-	this.errors = [];
-	this.handleError = collectMultiple ? this.collectError : this.returnError;
-	if (checkRecursive) {
-		this.checkRecursive = true;
-		this.scanned = [];
-		this.scannedFrozen = [];
-		this.scannedFrozenSchemas = [];
-		this.scannedFrozenValidationErrors = [];
-		this.validatedSchemasKey = 'tv4_validation_id';
-		this.validationErrorsKey = 'tv4_validation_errors_id';
-	}
-	if (trackUnknownProperties) {
-		this.trackUnknownProperties = true;
-		this.knownPropertyPaths = {};
-		this.unknownPropertyPaths = {};
-	}
-	this.errorMessages = errorMessages;
-	this.definedKeywords = {};
-	if (parent) {
-		for (var key in parent.definedKeywords) {
-			this.definedKeywords[key] = parent.definedKeywords[key].slice(0);
-		}
-	}
-};
-ValidatorContext.prototype.defineKeyword = function (keyword, keywordFunction) {
-	this.definedKeywords[keyword] = this.definedKeywords[keyword] || [];
-	this.definedKeywords[keyword].push(keywordFunction);
-};
-ValidatorContext.prototype.createError = function (code, messageParams, dataPath, schemaPath, subErrors) {
-	var messageTemplate = this.errorMessages[code] || ErrorMessagesDefault[code];
-	if (typeof messageTemplate !== 'string') {
-		return new ValidationError(code, "Unknown error code " + code + ": " + JSON.stringify(messageParams), dataPath, schemaPath, subErrors);
-	}
-	// Adapted from Crockford's supplant()
-	var message = messageTemplate.replace(/\{([^{}]*)\}/g, function (whole, varName) {
-		var subValue = messageParams[varName];
-		return typeof subValue === 'string' || typeof subValue === 'number' ? subValue : whole;
-	});
-	return new ValidationError(code, message, dataPath, schemaPath, subErrors);
-};
-ValidatorContext.prototype.returnError = function (error) {
-	return error;
-};
-ValidatorContext.prototype.collectError = function (error) {
-	if (error) {
-		this.errors.push(error);
-	}
-	return null;
-};
-ValidatorContext.prototype.prefixErrors = function (startIndex, dataPath, schemaPath) {
-	for (var i = startIndex; i < this.errors.length; i++) {
-		this.errors[i] = this.errors[i].prefixWith(dataPath, schemaPath);
-	}
-	return this;
-};
-ValidatorContext.prototype.banUnknownProperties = function () {
-	for (var unknownPath in this.unknownPropertyPaths) {
-		var error = this.createError(ErrorCodes.UNKNOWN_PROPERTY, {path: unknownPath}, unknownPath, "");
-		var result = this.handleError(error);
-		if (result) {
-			return result;
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.addFormat = function (format, validator) {
-	if (typeof format === 'object') {
-		for (var key in format) {
-			this.addFormat(key, format[key]);
-		}
-		return this;
-	}
-	this.formatValidators[format] = validator;
-};
-ValidatorContext.prototype.resolveRefs = function (schema, urlHistory) {
-	if (schema['$ref'] !== undefined) {
-		urlHistory = urlHistory || {};
-		if (urlHistory[schema['$ref']]) {
-			return this.createError(ErrorCodes.CIRCULAR_REFERENCE, {urls: Object.keys(urlHistory).join(', ')}, '', '');
-		}
-		urlHistory[schema['$ref']] = true;
-		schema = this.getSchema(schema['$ref'], urlHistory);
-	}
-	return schema;
-};
-ValidatorContext.prototype.getSchema = function (url, urlHistory) {
-	var schema;
-	if (this.schemas[url] !== undefined) {
-		schema = this.schemas[url];
-		return this.resolveRefs(schema, urlHistory);
-	}
-	var baseUrl = url;
-	var fragment = "";
-	if (url.indexOf('#') !== -1) {
-		fragment = url.substring(url.indexOf("#") + 1);
-		baseUrl = url.substring(0, url.indexOf("#"));
-	}
-	if (typeof this.schemas[baseUrl] === 'object') {
-		schema = this.schemas[baseUrl];
-		var pointerPath = decodeURIComponent(fragment);
-		if (pointerPath === "") {
-			return this.resolveRefs(schema, urlHistory);
-		} else if (pointerPath.charAt(0) !== "/") {
-			return undefined;
-		}
-		var parts = pointerPath.split("/").slice(1);
-		for (var i = 0; i < parts.length; i++) {
-			var component = parts[i].replace(/~1/g, "/").replace(/~0/g, "~");
-			if (schema[component] === undefined) {
-				schema = undefined;
-				break;
-			}
-			schema = schema[component];
-		}
-		if (schema !== undefined) {
-			return this.resolveRefs(schema, urlHistory);
-		}
-	}
-	if (this.missing[baseUrl] === undefined) {
-		this.missing.push(baseUrl);
-		this.missing[baseUrl] = baseUrl;
-		this.missingMap[baseUrl] = baseUrl;
-	}
-};
-ValidatorContext.prototype.searchSchemas = function (schema, url) {
-	if (schema && typeof schema === "object") {
-		if (typeof schema.id === "string") {
-			if (isTrustedUrl(url, schema.id)) {
-				if (this.schemas[schema.id] === undefined) {
-					this.schemas[schema.id] = schema;
-				}
-			}
-		}
-		for (var key in schema) {
-			if (key !== "enum") {
-				if (typeof schema[key] === "object") {
-					this.searchSchemas(schema[key], url);
-				} else if (key === "$ref") {
-					var uri = getDocumentUri(schema[key]);
-					if (uri && this.schemas[uri] === undefined && this.missingMap[uri] === undefined) {
-						this.missingMap[uri] = uri;
-					}
-				}
-			}
-		}
-	}
-};
-ValidatorContext.prototype.addSchema = function (url, schema) {
-	//overload
-	if (typeof url !== 'string' || typeof schema === 'undefined') {
-		if (typeof url === 'object' && typeof url.id === 'string') {
-			schema = url;
-			url = schema.id;
-		}
-		else {
-			return;
-		}
-	}
-	if (url === getDocumentUri(url) + "#") {
-		// Remove empty fragment
-		url = getDocumentUri(url);
-	}
-	this.schemas[url] = schema;
-	delete this.missingMap[url];
-	normSchema(schema, url);
-	this.searchSchemas(schema, url);
-};
-
-ValidatorContext.prototype.getSchemaMap = function () {
-	var map = {};
-	for (var key in this.schemas) {
-		map[key] = this.schemas[key];
-	}
-	return map;
-};
-
-ValidatorContext.prototype.getSchemaUris = function (filterRegExp) {
-	var list = [];
-	for (var key in this.schemas) {
-		if (!filterRegExp || filterRegExp.test(key)) {
-			list.push(key);
-		}
-	}
-	return list;
-};
-
-ValidatorContext.prototype.getMissingUris = function (filterRegExp) {
-	var list = [];
-	for (var key in this.missingMap) {
-		if (!filterRegExp || filterRegExp.test(key)) {
-			list.push(key);
-		}
-	}
-	return list;
-};
-
-ValidatorContext.prototype.dropSchemas = function () {
-	this.schemas = {};
-	this.reset();
-};
-ValidatorContext.prototype.reset = function () {
-	this.missing = [];
-	this.missingMap = {};
-	this.errors = [];
-};
-
-ValidatorContext.prototype.validateAll = function (data, schema, dataPathParts, schemaPathParts, dataPointerPath) {
-	var topLevel;
-	schema = this.resolveRefs(schema);
-	if (!schema) {
-		return null;
-	} else if (schema instanceof ValidationError) {
-		this.errors.push(schema);
-		return schema;
-	}
-
-	var startErrorCount = this.errors.length;
-	var frozenIndex, scannedFrozenSchemaIndex = null, scannedSchemasIndex = null;
-	if (this.checkRecursive && data && typeof data === 'object') {
-		topLevel = !this.scanned.length;
-		if (data[this.validatedSchemasKey]) {
-			var schemaIndex = data[this.validatedSchemasKey].indexOf(schema);
-			if (schemaIndex !== -1) {
-				this.errors = this.errors.concat(data[this.validationErrorsKey][schemaIndex]);
-				return null;
-			}
-		}
-		if (Object.isFrozen(data)) {
-			frozenIndex = this.scannedFrozen.indexOf(data);
-			if (frozenIndex !== -1) {
-				var frozenSchemaIndex = this.scannedFrozenSchemas[frozenIndex].indexOf(schema);
-				if (frozenSchemaIndex !== -1) {
-					this.errors = this.errors.concat(this.scannedFrozenValidationErrors[frozenIndex][frozenSchemaIndex]);
-					return null;
-				}
-			}
-		}
-		this.scanned.push(data);
-		if (Object.isFrozen(data)) {
-			if (frozenIndex === -1) {
-				frozenIndex = this.scannedFrozen.length;
-				this.scannedFrozen.push(data);
-				this.scannedFrozenSchemas.push([]);
-			}
-			scannedFrozenSchemaIndex = this.scannedFrozenSchemas[frozenIndex].length;
-			this.scannedFrozenSchemas[frozenIndex][scannedFrozenSchemaIndex] = schema;
-			this.scannedFrozenValidationErrors[frozenIndex][scannedFrozenSchemaIndex] = [];
-		} else {
-			if (!data[this.validatedSchemasKey]) {
-				try {
-					Object.defineProperty(data, this.validatedSchemasKey, {
-						value: [],
-						configurable: true
-					});
-					Object.defineProperty(data, this.validationErrorsKey, {
-						value: [],
-						configurable: true
-					});
-				} catch (e) {
-					//IE 7/8 workaround
-					data[this.validatedSchemasKey] = [];
-					data[this.validationErrorsKey] = [];
-				}
-			}
-			scannedSchemasIndex = data[this.validatedSchemasKey].length;
-			data[this.validatedSchemasKey][scannedSchemasIndex] = schema;
-			data[this.validationErrorsKey][scannedSchemasIndex] = [];
-		}
-	}
-
-	var errorCount = this.errors.length;
-	var error = this.validateBasic(data, schema, dataPointerPath)
-		|| this.validateNumeric(data, schema, dataPointerPath)
-		|| this.validateString(data, schema, dataPointerPath)
-		|| this.validateArray(data, schema, dataPointerPath)
-		|| this.validateObject(data, schema, dataPointerPath)
-		|| this.validateCombinations(data, schema, dataPointerPath)
-		|| this.validateHypermedia(data, schema, dataPointerPath)
-		|| this.validateFormat(data, schema, dataPointerPath)
-		|| this.validateDefinedKeywords(data, schema, dataPointerPath)
-		|| null;
-
-	if (topLevel) {
-		while (this.scanned.length) {
-			var item = this.scanned.pop();
-			delete item[this.validatedSchemasKey];
-		}
-		this.scannedFrozen = [];
-		this.scannedFrozenSchemas = [];
-	}
-
-	if (error || errorCount !== this.errors.length) {
-		while ((dataPathParts && dataPathParts.length) || (schemaPathParts && schemaPathParts.length)) {
-			var dataPart = (dataPathParts && dataPathParts.length) ? "" + dataPathParts.pop() : null;
-			var schemaPart = (schemaPathParts && schemaPathParts.length) ? "" + schemaPathParts.pop() : null;
-			if (error) {
-				error = error.prefixWith(dataPart, schemaPart);
-			}
-			this.prefixErrors(errorCount, dataPart, schemaPart);
-		}
-	}
-	
-	if (scannedFrozenSchemaIndex !== null) {
-		this.scannedFrozenValidationErrors[frozenIndex][scannedFrozenSchemaIndex] = this.errors.slice(startErrorCount);
-	} else if (scannedSchemasIndex !== null) {
-		data[this.validationErrorsKey][scannedSchemasIndex] = this.errors.slice(startErrorCount);
-	}
-
-	return this.handleError(error);
-};
-ValidatorContext.prototype.validateFormat = function (data, schema) {
-	if (typeof schema.format !== 'string' || !this.formatValidators[schema.format]) {
-		return null;
-	}
-	var errorMessage = this.formatValidators[schema.format].call(null, data, schema);
-	if (typeof errorMessage === 'string' || typeof errorMessage === 'number') {
-		return this.createError(ErrorCodes.FORMAT_CUSTOM, {message: errorMessage}).prefixWith(null, "format");
-	} else if (errorMessage && typeof errorMessage === 'object') {
-		return this.createError(ErrorCodes.FORMAT_CUSTOM, {message: errorMessage.message || "?"}, errorMessage.dataPath || null, errorMessage.schemaPath || "/format");
-	}
-	return null;
-};
-ValidatorContext.prototype.validateDefinedKeywords = function (data, schema) {
-	for (var key in this.definedKeywords) {
-		if (typeof schema[key] === 'undefined') {
-			continue;
-		}
-		var validationFunctions = this.definedKeywords[key];
-		for (var i = 0; i < validationFunctions.length; i++) {
-			var func = validationFunctions[i];
-			var result = func(data, schema[key], schema);
-			if (typeof result === 'string' || typeof result === 'number') {
-				return this.createError(ErrorCodes.KEYWORD_CUSTOM, {key: key, message: result}).prefixWith(null, "format");
-			} else if (result && typeof result === 'object') {
-				var code = result.code || ErrorCodes.KEYWORD_CUSTOM;
-				if (typeof code === 'string') {
-					if (!ErrorCodes[code]) {
-						throw new Error('Undefined error code (use defineError): ' + code);
-					}
-					code = ErrorCodes[code];
-				}
-				var messageParams = (typeof result.message === 'object') ? result.message : {key: key, message: result.message || "?"};
-				var schemaPath = result.schemaPath ||( "/" + key.replace(/~/g, '~0').replace(/\//g, '~1'));
-				return this.createError(code, messageParams, result.dataPath || null, schemaPath);
-			}
-		}
-	}
-	return null;
-};
-
-function recursiveCompare(A, B) {
-	if (A === B) {
-		return true;
-	}
-	if (typeof A === "object" && typeof B === "object") {
-		if (Array.isArray(A) !== Array.isArray(B)) {
-			return false;
-		} else if (Array.isArray(A)) {
-			if (A.length !== B.length) {
-				return false;
-			}
-			for (var i = 0; i < A.length; i++) {
-				if (!recursiveCompare(A[i], B[i])) {
-					return false;
-				}
-			}
-		} else {
-			var key;
-			for (key in A) {
-				if (B[key] === undefined && A[key] !== undefined) {
-					return false;
-				}
-			}
-			for (key in B) {
-				if (A[key] === undefined && B[key] !== undefined) {
-					return false;
-				}
-			}
-			for (key in A) {
-				if (!recursiveCompare(A[key], B[key])) {
-					return false;
-				}
-			}
-		}
-		return true;
-	}
-	return false;
-}
-
-ValidatorContext.prototype.validateBasic = function validateBasic(data, schema, dataPointerPath) {
-	var error;
-	if (error = this.validateType(data, schema, dataPointerPath)) {
-		return error.prefixWith(null, "type");
-	}
-	if (error = this.validateEnum(data, schema, dataPointerPath)) {
-		return error.prefixWith(null, "type");
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateType = function validateType(data, schema) {
-	if (schema.type === undefined) {
-		return null;
-	}
-	var dataType = typeof data;
-	if (data === null) {
-		dataType = "null";
-	} else if (Array.isArray(data)) {
-		dataType = "array";
-	}
-	var allowedTypes = schema.type;
-	if (typeof allowedTypes !== "object") {
-		allowedTypes = [allowedTypes];
-	}
-
-	for (var i = 0; i < allowedTypes.length; i++) {
-		var type = allowedTypes[i];
-		if (type === dataType || (type === "integer" && dataType === "number" && (data % 1 === 0))) {
-			return null;
-		}
-	}
-	return this.createError(ErrorCodes.INVALID_TYPE, {type: dataType, expected: allowedTypes.join("/")});
-};
-
-ValidatorContext.prototype.validateEnum = function validateEnum(data, schema) {
-	if (schema["enum"] === undefined) {
-		return null;
-	}
-	for (var i = 0; i < schema["enum"].length; i++) {
-		var enumVal = schema["enum"][i];
-		if (recursiveCompare(data, enumVal)) {
-			return null;
-		}
-	}
-	return this.createError(ErrorCodes.ENUM_MISMATCH, {value: (typeof JSON !== 'undefined') ? JSON.stringify(data) : data});
-};
-
-ValidatorContext.prototype.validateNumeric = function validateNumeric(data, schema, dataPointerPath) {
-	return this.validateMultipleOf(data, schema, dataPointerPath)
-		|| this.validateMinMax(data, schema, dataPointerPath)
-		|| null;
-};
-
-ValidatorContext.prototype.validateMultipleOf = function validateMultipleOf(data, schema) {
-	var multipleOf = schema.multipleOf || schema.divisibleBy;
-	if (multipleOf === undefined) {
-		return null;
-	}
-	if (typeof data === "number") {
-		if (data % multipleOf !== 0) {
-			return this.createError(ErrorCodes.NUMBER_MULTIPLE_OF, {value: data, multipleOf: multipleOf});
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateMinMax = function validateMinMax(data, schema) {
-	if (typeof data !== "number") {
-		return null;
-	}
-	if (schema.minimum !== undefined) {
-		if (data < schema.minimum) {
-			return this.createError(ErrorCodes.NUMBER_MINIMUM, {value: data, minimum: schema.minimum}).prefixWith(null, "minimum");
-		}
-		if (schema.exclusiveMinimum && data === schema.minimum) {
-			return this.createError(ErrorCodes.NUMBER_MINIMUM_EXCLUSIVE, {value: data, minimum: schema.minimum}).prefixWith(null, "exclusiveMinimum");
-		}
-	}
-	if (schema.maximum !== undefined) {
-		if (data > schema.maximum) {
-			return this.createError(ErrorCodes.NUMBER_MAXIMUM, {value: data, maximum: schema.maximum}).prefixWith(null, "maximum");
-		}
-		if (schema.exclusiveMaximum && data === schema.maximum) {
-			return this.createError(ErrorCodes.NUMBER_MAXIMUM_EXCLUSIVE, {value: data, maximum: schema.maximum}).prefixWith(null, "exclusiveMaximum");
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateString = function validateString(data, schema, dataPointerPath) {
-	return this.validateStringLength(data, schema, dataPointerPath)
-		|| this.validateStringPattern(data, schema, dataPointerPath)
-		|| null;
-};
-
-ValidatorContext.prototype.validateStringLength = function validateStringLength(data, schema) {
-	if (typeof data !== "string") {
-		return null;
-	}
-	if (schema.minLength !== undefined) {
-		if (data.length < schema.minLength) {
-			return this.createError(ErrorCodes.STRING_LENGTH_SHORT, {length: data.length, minimum: schema.minLength}).prefixWith(null, "minLength");
-		}
-	}
-	if (schema.maxLength !== undefined) {
-		if (data.length > schema.maxLength) {
-			return this.createError(ErrorCodes.STRING_LENGTH_LONG, {length: data.length, maximum: schema.maxLength}).prefixWith(null, "maxLength");
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateStringPattern = function validateStringPattern(data, schema) {
-	if (typeof data !== "string" || schema.pattern === undefined) {
-		return null;
-	}
-	var regexp = new RegExp(schema.pattern);
-	if (!regexp.test(data)) {
-		return this.createError(ErrorCodes.STRING_PATTERN, {pattern: schema.pattern}).prefixWith(null, "pattern");
-	}
-	return null;
-};
-ValidatorContext.prototype.validateArray = function validateArray(data, schema, dataPointerPath) {
-	if (!Array.isArray(data)) {
-		return null;
-	}
-	return this.validateArrayLength(data, schema, dataPointerPath)
-		|| this.validateArrayUniqueItems(data, schema, dataPointerPath)
-		|| this.validateArrayItems(data, schema, dataPointerPath)
-		|| null;
-};
-
-ValidatorContext.prototype.validateArrayLength = function validateArrayLength(data, schema) {
-	var error;
-	if (schema.minItems !== undefined) {
-		if (data.length < schema.minItems) {
-			error = (this.createError(ErrorCodes.ARRAY_LENGTH_SHORT, {length: data.length, minimum: schema.minItems})).prefixWith(null, "minItems");
-			if (this.handleError(error)) {
-				return error;
-			}
-		}
-	}
-	if (schema.maxItems !== undefined) {
-		if (data.length > schema.maxItems) {
-			error = (this.createError(ErrorCodes.ARRAY_LENGTH_LONG, {length: data.length, maximum: schema.maxItems})).prefixWith(null, "maxItems");
-			if (this.handleError(error)) {
-				return error;
-			}
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateArrayUniqueItems = function validateArrayUniqueItems(data, schema) {
-	if (schema.uniqueItems) {
-		for (var i = 0; i < data.length; i++) {
-			for (var j = i + 1; j < data.length; j++) {
-				if (recursiveCompare(data[i], data[j])) {
-					var error = (this.createError(ErrorCodes.ARRAY_UNIQUE, {match1: i, match2: j})).prefixWith(null, "uniqueItems");
-					if (this.handleError(error)) {
-						return error;
-					}
-				}
-			}
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateArrayItems = function validateArrayItems(data, schema, dataPointerPath) {
-	if (schema.items === undefined) {
-		return null;
-	}
-	var error, i;
-	if (Array.isArray(schema.items)) {
-		for (i = 0; i < data.length; i++) {
-			if (i < schema.items.length) {
-				if (error = this.validateAll(data[i], schema.items[i], [i], ["items", i], dataPointerPath + "/" + i)) {
-					return error;
-				}
-			} else if (schema.additionalItems !== undefined) {
-				if (typeof schema.additionalItems === "boolean") {
-					if (!schema.additionalItems) {
-						error = (this.createError(ErrorCodes.ARRAY_ADDITIONAL_ITEMS, {})).prefixWith("" + i, "additionalItems");
-						if (this.handleError(error)) {
-							return error;
-						}
-					}
-				} else if (error = this.validateAll(data[i], schema.additionalItems, [i], ["additionalItems"], dataPointerPath + "/" + i)) {
-					return error;
-				}
-			}
-		}
-	} else {
-		for (i = 0; i < data.length; i++) {
-			if (error = this.validateAll(data[i], schema.items, [i], ["items"], dataPointerPath + "/" + i)) {
-				return error;
-			}
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateObject = function validateObject(data, schema, dataPointerPath) {
-	if (typeof data !== "object" || data === null || Array.isArray(data)) {
-		return null;
-	}
-	return this.validateObjectMinMaxProperties(data, schema, dataPointerPath)
-		|| this.validateObjectRequiredProperties(data, schema, dataPointerPath)
-		|| this.validateObjectProperties(data, schema, dataPointerPath)
-		|| this.validateObjectDependencies(data, schema, dataPointerPath)
-		|| null;
-};
-
-ValidatorContext.prototype.validateObjectMinMaxProperties = function validateObjectMinMaxProperties(data, schema) {
-	var keys = Object.keys(data);
-	var error;
-	if (schema.minProperties !== undefined) {
-		if (keys.length < schema.minProperties) {
-			error = this.createError(ErrorCodes.OBJECT_PROPERTIES_MINIMUM, {propertyCount: keys.length, minimum: schema.minProperties}).prefixWith(null, "minProperties");
-			if (this.handleError(error)) {
-				return error;
-			}
-		}
-	}
-	if (schema.maxProperties !== undefined) {
-		if (keys.length > schema.maxProperties) {
-			error = this.createError(ErrorCodes.OBJECT_PROPERTIES_MAXIMUM, {propertyCount: keys.length, maximum: schema.maxProperties}).prefixWith(null, "maxProperties");
-			if (this.handleError(error)) {
-				return error;
-			}
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateObjectRequiredProperties = function validateObjectRequiredProperties(data, schema) {
-	if (schema.required !== undefined) {
-		for (var i = 0; i < schema.required.length; i++) {
-			var key = schema.required[i];
-			if (data[key] === undefined) {
-				var error = this.createError(ErrorCodes.OBJECT_REQUIRED, {key: key}).prefixWith(null, "" + i).prefixWith(null, "required");
-				if (this.handleError(error)) {
-					return error;
-				}
-			}
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateObjectProperties = function validateObjectProperties(data, schema, dataPointerPath) {
-	var error;
-	for (var key in data) {
-		var keyPointerPath = dataPointerPath + "/" + key.replace(/~/g, '~0').replace(/\//g, '~1');
-		var foundMatch = false;
-		if (schema.properties !== undefined && schema.properties[key] !== undefined) {
-			foundMatch = true;
-			if (error = this.validateAll(data[key], schema.properties[key], [key], ["properties", key], keyPointerPath)) {
-				return error;
-			}
-		}
-		if (schema.patternProperties !== undefined) {
-			for (var patternKey in schema.patternProperties) {
-				var regexp = new RegExp(patternKey);
-				if (regexp.test(key)) {
-					foundMatch = true;
-					if (error = this.validateAll(data[key], schema.patternProperties[patternKey], [key], ["patternProperties", patternKey], keyPointerPath)) {
-						return error;
-					}
-				}
-			}
-		}
-		if (!foundMatch) {
-			if (schema.additionalProperties !== undefined) {
-				if (this.trackUnknownProperties) {
-					this.knownPropertyPaths[keyPointerPath] = true;
-					delete this.unknownPropertyPaths[keyPointerPath];
-				}
-				if (typeof schema.additionalProperties === "boolean") {
-					if (!schema.additionalProperties) {
-						error = this.createError(ErrorCodes.OBJECT_ADDITIONAL_PROPERTIES, {}).prefixWith(key, "additionalProperties");
-						if (this.handleError(error)) {
-							return error;
-						}
-					}
-				} else {
-					if (error = this.validateAll(data[key], schema.additionalProperties, [key], ["additionalProperties"], keyPointerPath)) {
-						return error;
-					}
-				}
-			} else if (this.trackUnknownProperties && !this.knownPropertyPaths[keyPointerPath]) {
-				this.unknownPropertyPaths[keyPointerPath] = true;
-			}
-		} else if (this.trackUnknownProperties) {
-			this.knownPropertyPaths[keyPointerPath] = true;
-			delete this.unknownPropertyPaths[keyPointerPath];
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateObjectDependencies = function validateObjectDependencies(data, schema, dataPointerPath) {
-	var error;
-	if (schema.dependencies !== undefined) {
-		for (var depKey in schema.dependencies) {
-			if (data[depKey] !== undefined) {
-				var dep = schema.dependencies[depKey];
-				if (typeof dep === "string") {
-					if (data[dep] === undefined) {
-						error = this.createError(ErrorCodes.OBJECT_DEPENDENCY_KEY, {key: depKey, missing: dep}).prefixWith(null, depKey).prefixWith(null, "dependencies");
-						if (this.handleError(error)) {
-							return error;
-						}
-					}
-				} else if (Array.isArray(dep)) {
-					for (var i = 0; i < dep.length; i++) {
-						var requiredKey = dep[i];
-						if (data[requiredKey] === undefined) {
-							error = this.createError(ErrorCodes.OBJECT_DEPENDENCY_KEY, {key: depKey, missing: requiredKey}).prefixWith(null, "" + i).prefixWith(null, depKey).prefixWith(null, "dependencies");
-							if (this.handleError(error)) {
-								return error;
-							}
-						}
-					}
-				} else {
-					if (error = this.validateAll(data, dep, [], ["dependencies", depKey], dataPointerPath)) {
-						return error;
-					}
-				}
-			}
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateCombinations = function validateCombinations(data, schema, dataPointerPath) {
-	return this.validateAllOf(data, schema, dataPointerPath)
-		|| this.validateAnyOf(data, schema, dataPointerPath)
-		|| this.validateOneOf(data, schema, dataPointerPath)
-		|| this.validateNot(data, schema, dataPointerPath)
-		|| null;
-};
-
-ValidatorContext.prototype.validateAllOf = function validateAllOf(data, schema, dataPointerPath) {
-	if (schema.allOf === undefined) {
-		return null;
-	}
-	var error;
-	for (var i = 0; i < schema.allOf.length; i++) {
-		var subSchema = schema.allOf[i];
-		if (error = this.validateAll(data, subSchema, [], ["allOf", i], dataPointerPath)) {
-			return error;
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateAnyOf = function validateAnyOf(data, schema, dataPointerPath) {
-	if (schema.anyOf === undefined) {
-		return null;
-	}
-	var errors = [];
-	var startErrorCount = this.errors.length;
-	var oldUnknownPropertyPaths, oldKnownPropertyPaths;
-	if (this.trackUnknownProperties) {
-		oldUnknownPropertyPaths = this.unknownPropertyPaths;
-		oldKnownPropertyPaths = this.knownPropertyPaths;
-	}
-	var errorAtEnd = true;
-	for (var i = 0; i < schema.anyOf.length; i++) {
-		if (this.trackUnknownProperties) {
-			this.unknownPropertyPaths = {};
-			this.knownPropertyPaths = {};
-		}
-		var subSchema = schema.anyOf[i];
-
-		var errorCount = this.errors.length;
-		var error = this.validateAll(data, subSchema, [], ["anyOf", i], dataPointerPath);
-
-		if (error === null && errorCount === this.errors.length) {
-			this.errors = this.errors.slice(0, startErrorCount);
-
-			if (this.trackUnknownProperties) {
-				for (var knownKey in this.knownPropertyPaths) {
-					oldKnownPropertyPaths[knownKey] = true;
-					delete oldUnknownPropertyPaths[knownKey];
-				}
-				for (var unknownKey in this.unknownPropertyPaths) {
-					if (!oldKnownPropertyPaths[unknownKey]) {
-						oldUnknownPropertyPaths[unknownKey] = true;
-					}
-				}
-				// We need to continue looping so we catch all the property definitions, but we don't want to return an error
-				errorAtEnd = false;
-				continue;
-			}
-
-			return null;
-		}
-		if (error) {
-			errors.push(error.prefixWith(null, "" + i).prefixWith(null, "anyOf"));
-		}
-	}
-	if (this.trackUnknownProperties) {
-		this.unknownPropertyPaths = oldUnknownPropertyPaths;
-		this.knownPropertyPaths = oldKnownPropertyPaths;
-	}
-	if (errorAtEnd) {
-		errors = errors.concat(this.errors.slice(startErrorCount));
-		this.errors = this.errors.slice(0, startErrorCount);
-		return this.createError(ErrorCodes.ANY_OF_MISSING, {}, "", "/anyOf", errors);
-	}
-};
-
-ValidatorContext.prototype.validateOneOf = function validateOneOf(data, schema, dataPointerPath) {
-	if (schema.oneOf === undefined) {
-		return null;
-	}
-	var validIndex = null;
-	var errors = [];
-	var startErrorCount = this.errors.length;
-	var oldUnknownPropertyPaths, oldKnownPropertyPaths;
-	if (this.trackUnknownProperties) {
-		oldUnknownPropertyPaths = this.unknownPropertyPaths;
-		oldKnownPropertyPaths = this.knownPropertyPaths;
-	}
-	for (var i = 0; i < schema.oneOf.length; i++) {
-		if (this.trackUnknownProperties) {
-			this.unknownPropertyPaths = {};
-			this.knownPropertyPaths = {};
-		}
-		var subSchema = schema.oneOf[i];
-
-		var errorCount = this.errors.length;
-		var error = this.validateAll(data, subSchema, [], ["oneOf", i], dataPointerPath);
-
-		if (error === null && errorCount === this.errors.length) {
-			if (validIndex === null) {
-				validIndex = i;
-			} else {
-				this.errors = this.errors.slice(0, startErrorCount);
-				return this.createError(ErrorCodes.ONE_OF_MULTIPLE, {index1: validIndex, index2: i}, "", "/oneOf");
-			}
-			if (this.trackUnknownProperties) {
-				for (var knownKey in this.knownPropertyPaths) {
-					oldKnownPropertyPaths[knownKey] = true;
-					delete oldUnknownPropertyPaths[knownKey];
-				}
-				for (var unknownKey in this.unknownPropertyPaths) {
-					if (!oldKnownPropertyPaths[unknownKey]) {
-						oldUnknownPropertyPaths[unknownKey] = true;
-					}
-				}
-			}
-		} else if (error) {
-			errors.push(error);
-		}
-	}
-	if (this.trackUnknownProperties) {
-		this.unknownPropertyPaths = oldUnknownPropertyPaths;
-		this.knownPropertyPaths = oldKnownPropertyPaths;
-	}
-	if (validIndex === null) {
-		errors = errors.concat(this.errors.slice(startErrorCount));
-		this.errors = this.errors.slice(0, startErrorCount);
-		return this.createError(ErrorCodes.ONE_OF_MISSING, {}, "", "/oneOf", errors);
-	} else {
-		this.errors = this.errors.slice(0, startErrorCount);
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateNot = function validateNot(data, schema, dataPointerPath) {
-	if (schema.not === undefined) {
-		return null;
-	}
-	var oldErrorCount = this.errors.length;
-	var oldUnknownPropertyPaths, oldKnownPropertyPaths;
-	if (this.trackUnknownProperties) {
-		oldUnknownPropertyPaths = this.unknownPropertyPaths;
-		oldKnownPropertyPaths = this.knownPropertyPaths;
-		this.unknownPropertyPaths = {};
-		this.knownPropertyPaths = {};
-	}
-	var error = this.validateAll(data, schema.not, null, null, dataPointerPath);
-	var notErrors = this.errors.slice(oldErrorCount);
-	this.errors = this.errors.slice(0, oldErrorCount);
-	if (this.trackUnknownProperties) {
-		this.unknownPropertyPaths = oldUnknownPropertyPaths;
-		this.knownPropertyPaths = oldKnownPropertyPaths;
-	}
-	if (error === null && notErrors.length === 0) {
-		return this.createError(ErrorCodes.NOT_PASSED, {}, "", "/not");
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateHypermedia = function validateCombinations(data, schema, dataPointerPath) {
-	if (!schema.links) {
-		return null;
-	}
-	var error;
-	for (var i = 0; i < schema.links.length; i++) {
-		var ldo = schema.links[i];
-		if (ldo.rel === "describedby") {
-			var template = new UriTemplate(ldo.href);
-			var allPresent = true;
-			for (var j = 0; j < template.varNames.length; j++) {
-				if (!(template.varNames[j] in data)) {
-					allPresent = false;
-					break;
-				}
-			}
-			if (allPresent) {
-				var schemaUrl = template.fillFromObject(data);
-				var subSchema = {"$ref": schemaUrl};
-				if (error = this.validateAll(data, subSchema, [], ["links", i], dataPointerPath)) {
-					return error;
-				}
-			}
-		}
-	}
-};
-
-// parseURI() and resolveUrl() are from https://gist.github.com/1088850
-//   -  released as public domain by author ("Yaffle") - see comments on gist
-
-function parseURI(url) {
-	var m = String(url).replace(/^\s+|\s+$/g, '').match(/^([^:\/?#]+:)?(\/\/(?:[^:@]*(?::[^:@]*)?@)?(([^:\/?#]*)(?::(\d*))?))?([^?#]*)(\?[^#]*)?(#[\s\S]*)?/);
-	// authority = '//' + user + ':' + pass '@' + hostname + ':' port
-	return (m ? {
-		href     : m[0] || '',
-		protocol : m[1] || '',
-		authority: m[2] || '',
-		host     : m[3] || '',
-		hostname : m[4] || '',
-		port     : m[5] || '',
-		pathname : m[6] || '',
-		search   : m[7] || '',
-		hash     : m[8] || ''
-	} : null);
-}
-
-function resolveUrl(base, href) {// RFC 3986
-
-	function removeDotSegments(input) {
-		var output = [];
-		input.replace(/^(\.\.?(\/|$))+/, '')
-			.replace(/\/(\.(\/|$))+/g, '/')
-			.replace(/\/\.\.$/, '/../')
-			.replace(/\/?[^\/]*/g, function (p) {
-				if (p === '/..') {
-					output.pop();
-				} else {
-					output.push(p);
-				}
-		});
-		return output.join('').replace(/^\//, input.charAt(0) === '/' ? '/' : '');
-	}
-
-	href = parseURI(href || '');
-	base = parseURI(base || '');
-
-	return !href || !base ? null : (href.protocol || base.protocol) +
-		(href.protocol || href.authority ? href.authority : base.authority) +
-		removeDotSegments(href.protocol || href.authority || href.pathname.charAt(0) === '/' ? href.pathname : (href.pathname ? ((base.authority && !base.pathname ? '/' : '') + base.pathname.slice(0, base.pathname.lastIndexOf('/') + 1) + href.pathname) : base.pathname)) +
-		(href.protocol || href.authority || href.pathname ? href.search : (href.search || base.search)) +
-		href.hash;
-}
-
-function getDocumentUri(uri) {
-	return uri.split('#')[0];
-}
-function normSchema(schema, baseUri) {
-	if (schema && typeof schema === "object") {
-		if (baseUri === undefined) {
-			baseUri = schema.id;
-		} else if (typeof schema.id === "string") {
-			baseUri = resolveUrl(baseUri, schema.id);
-			schema.id = baseUri;
-		}
-		if (Array.isArray(schema)) {
-			for (var i = 0; i < schema.length; i++) {
-				normSchema(schema[i], baseUri);
-			}
-		} else {
-			if (typeof schema['$ref'] === "string") {
-				schema['$ref'] = resolveUrl(baseUri, schema['$ref']);
-			}
-			for (var key in schema) {
-				if (key !== "enum") {
-					normSchema(schema[key], baseUri);
-				}
-			}
-		}
-	}
-}
-
-var ErrorCodes = {
-	INVALID_TYPE: 0,
-	ENUM_MISMATCH: 1,
-	ANY_OF_MISSING: 10,
-	ONE_OF_MISSING: 11,
-	ONE_OF_MULTIPLE: 12,
-	NOT_PASSED: 13,
-	// Numeric errors
-	NUMBER_MULTIPLE_OF: 100,
-	NUMBER_MINIMUM: 101,
-	NUMBER_MINIMUM_EXCLUSIVE: 102,
-	NUMBER_MAXIMUM: 103,
-	NUMBER_MAXIMUM_EXCLUSIVE: 104,
-	// String errors
-	STRING_LENGTH_SHORT: 200,
-	STRING_LENGTH_LONG: 201,
-	STRING_PATTERN: 202,
-	// Object errors
-	OBJECT_PROPERTIES_MINIMUM: 300,
-	OBJECT_PROPERTIES_MAXIMUM: 301,
-	OBJECT_REQUIRED: 302,
-	OBJECT_ADDITIONAL_PROPERTIES: 303,
-	OBJECT_DEPENDENCY_KEY: 304,
-	// Array errors
-	ARRAY_LENGTH_SHORT: 400,
-	ARRAY_LENGTH_LONG: 401,
-	ARRAY_UNIQUE: 402,
-	ARRAY_ADDITIONAL_ITEMS: 403,
-	// Custom/user-defined errors
-	FORMAT_CUSTOM: 500,
-	KEYWORD_CUSTOM: 501,
-	// Schema structure
-	CIRCULAR_REFERENCE: 600,
-	// Non-standard validation options
-	UNKNOWN_PROPERTY: 1000
-};
-var ErrorCodeLookup = {};
-for (var key in ErrorCodes) {
-	ErrorCodeLookup[ErrorCodes[key]] = key;
-}
-var ErrorMessagesDefault = {
-	INVALID_TYPE: "invalid type: {type} (expected {expected})",
-	ENUM_MISMATCH: "No enum match for: {value}",
-	ANY_OF_MISSING: "Data does not match any schemas from \"anyOf\"",
-	ONE_OF_MISSING: "Data does not match any schemas from \"oneOf\"",
-	ONE_OF_MULTIPLE: "Data is valid against more than one schema from \"oneOf\": indices {index1} and {index2}",
-	NOT_PASSED: "Data matches schema from \"not\"",
-	// Numeric errors
-	NUMBER_MULTIPLE_OF: "Value {value} is not a multiple of {multipleOf}",
-	NUMBER_MINIMUM: "Value {value} is less than minimum {minimum}",
-	NUMBER_MINIMUM_EXCLUSIVE: "Value {value} is equal to exclusive minimum {minimum}",
-	NUMBER_MAXIMUM: "Value {value} is greater than maximum {maximum}",
-	NUMBER_MAXIMUM_EXCLUSIVE: "Value {value} is equal to exclusive maximum {maximum}",
-	// String errors
-	STRING_LENGTH_SHORT: "String is too short ({length} chars), minimum {minimum}",
-	STRING_LENGTH_LONG: "String is too long ({length} chars), maximum {maximum}",
-	STRING_PATTERN: "String does not match pattern: {pattern}",
-	// Object errors
-	OBJECT_PROPERTIES_MINIMUM: "Too few properties defined ({propertyCount}), minimum {minimum}",
-	OBJECT_PROPERTIES_MAXIMUM: "Too many properties defined ({propertyCount}), maximum {maximum}",
-	OBJECT_REQUIRED: "Missing required property: {key}",
-	OBJECT_ADDITIONAL_PROPERTIES: "Additional properties not allowed",
-	OBJECT_DEPENDENCY_KEY: "Dependency failed - key must exist: {missing} (due to key: {key})",
-	// Array errors
-	ARRAY_LENGTH_SHORT: "Array is too short ({length}), minimum {minimum}",
-	ARRAY_LENGTH_LONG: "Array is too long ({length}), maximum {maximum}",
-	ARRAY_UNIQUE: "Array items are not unique (indices {match1} and {match2})",
-	ARRAY_ADDITIONAL_ITEMS: "Additional items not allowed",
-	// Format errors
-	FORMAT_CUSTOM: "Format validation failed ({message})",
-	KEYWORD_CUSTOM: "Keyword failed: {key} ({message})",
-	// Schema structure
-	CIRCULAR_REFERENCE: "Circular $refs: {urls}",
-	// Non-standard validation options
-	UNKNOWN_PROPERTY: "Unknown property (not in schema)"
-};
-
-function ValidationError(code, message, dataPath, schemaPath, subErrors) {
-	Error.call(this);
-	if (code === undefined) {
-		throw new Error ("No code supplied for error: "+ message);
-	}
-	this.message = message;
-	this.code = code;
-	this.dataPath = dataPath || "";
-	this.schemaPath = schemaPath || "";
-	this.subErrors = subErrors || null;
-
-	var err = new Error(this.message);
-	this.stack = err.stack || err.stacktrace;
-	if (!this.stack) {
-		try {
-			throw err;
-		}
-		catch(err) {
-			this.stack = err.stack || err.stacktrace;
-		}
-	}
-}
-ValidationError.prototype = Object.create(Error.prototype);
-ValidationError.prototype.constructor = ValidationError;
-ValidationError.prototype.name = 'ValidationError';
-
-ValidationError.prototype.prefixWith = function (dataPrefix, schemaPrefix) {
-	if (dataPrefix !== null) {
-		dataPrefix = dataPrefix.replace(/~/g, "~0").replace(/\//g, "~1");
-		this.dataPath = "/" + dataPrefix + this.dataPath;
-	}
-	if (schemaPrefix !== null) {
-		schemaPrefix = schemaPrefix.replace(/~/g, "~0").replace(/\//g, "~1");
-		this.schemaPath = "/" + schemaPrefix + this.schemaPath;
-	}
-	if (this.subErrors !== null) {
-		for (var i = 0; i < this.subErrors.length; i++) {
-			this.subErrors[i].prefixWith(dataPrefix, schemaPrefix);
-		}
-	}
-	return this;
-};
-
-function isTrustedUrl(baseUrl, testUrl) {
-	if(testUrl.substring(0, baseUrl.length) === baseUrl){
-		var remainder = testUrl.substring(baseUrl.length);
-		if ((testUrl.length > 0 && testUrl.charAt(baseUrl.length - 1) === "/")
-			|| remainder.charAt(0) === "#"
-			|| remainder.charAt(0) === "?") {
-			return true;
-		}
-	}
-	return false;
-}
-
-var languages = {};
-function createApi(language) {
-	var globalContext = new ValidatorContext();
-	var currentLanguage = language || 'en';
-	var api = {
-		addFormat: function () {
-			globalContext.addFormat.apply(globalContext, arguments);
-		},
-		language: function (code) {
-			if (!code) {
-				return currentLanguage;
-			}
-			if (!languages[code]) {
-				code = code.split('-')[0]; // fall back to base language
-			}
-			if (languages[code]) {
-				currentLanguage = code;
-				return code; // so you can tell if fall-back has happened
-			}
-			return false;
-		},
-		addLanguage: function (code, messageMap) {
-			var key;
-			for (key in ErrorCodes) {
-				if (messageMap[key] && !messageMap[ErrorCodes[key]]) {
-					messageMap[ErrorCodes[key]] = messageMap[key];
-				}
-			}
-			var rootCode = code.split('-')[0];
-			if (!languages[rootCode]) { // use for base language if not yet defined
-				languages[code] = messageMap;
-				languages[rootCode] = messageMap;
-			} else {
-				languages[code] = Object.create(languages[rootCode]);
-				for (key in messageMap) {
-					if (typeof languages[rootCode][key] === 'undefined') {
-						languages[rootCode][key] = messageMap[key];
-					}
-					languages[code][key] = messageMap[key];
-				}
-			}
-			return this;
-		},
-		freshApi: function (language) {
-			var result = createApi();
-			if (language) {
-				result.language(language);
-			}
-			return result;
-		},
-		validate: function (data, schema, checkRecursive, banUnknownProperties) {
-			var context = new ValidatorContext(globalContext, false, languages[currentLanguage], checkRecursive, banUnknownProperties);
-			if (typeof schema === "string") {
-				schema = {"$ref": schema};
-			}
-			context.addSchema("", schema);
-			var error = context.validateAll(data, schema, null, null, "");
-			if (!error && banUnknownProperties) {
-				error = context.banUnknownProperties();
-			}
-			this.error = error;
-			this.missing = context.missing;
-			this.valid = (error === null);
-			return this.valid;
-		},
-		validateResult: function () {
-			var result = {};
-			this.validate.apply(result, arguments);
-			return result;
-		},
-		validateMultiple: function (data, schema, checkRecursive, banUnknownProperties) {
-			var context = new ValidatorContext(globalContext, true, languages[currentLanguage], checkRecursive, banUnknownProperties);
-			if (typeof schema === "string") {
-				schema = {"$ref": schema};
-			}
-			context.addSchema("", schema);
-			context.validateAll(data, schema, null, null, "");
-			if (banUnknownProperties) {
-				context.banUnknownProperties();
-			}
-			var result = {};
-			result.errors = context.errors;
-			result.missing = context.missing;
-			result.valid = (result.errors.length === 0);
-			return result;
-		},
-		addSchema: function () {
-			return globalContext.addSchema.apply(globalContext, arguments);
-		},
-		getSchema: function () {
-			return globalContext.getSchema.apply(globalContext, arguments);
-		},
-		getSchemaMap: function () {
-			return globalContext.getSchemaMap.apply(globalContext, arguments);
-		},
-		getSchemaUris: function () {
-			return globalContext.getSchemaUris.apply(globalContext, arguments);
-		},
-		getMissingUris: function () {
-			return globalContext.getMissingUris.apply(globalContext, arguments);
-		},
-		dropSchemas: function () {
-			globalContext.dropSchemas.apply(globalContext, arguments);
-		},
-		defineKeyword: function () {
-			globalContext.defineKeyword.apply(globalContext, arguments);
-		},
-		defineError: function (codeName, codeNumber, defaultMessage) {
-			if (typeof codeName !== 'string' || !/^[A-Z]+(_[A-Z]+)*$/.test(codeName)) {
-				throw new Error('Code name must be a string in UPPER_CASE_WITH_UNDERSCORES');
-			}
-			if (typeof codeNumber !== 'number' || codeNumber%1 !== 0 || codeNumber < 10000) {
-				throw new Error('Code number must be an integer > 10000');
-			}
-			if (typeof ErrorCodes[codeName] !== 'undefined') {
-				throw new Error('Error already defined: ' + codeName + ' as ' + ErrorCodes[codeName]);
-			}
-			if (typeof ErrorCodeLookup[codeNumber] !== 'undefined') {
-				throw new Error('Error code already used: ' + ErrorCodeLookup[codeNumber] + ' as ' + codeNumber);
-			}
-			ErrorCodes[codeName] = codeNumber;
-			ErrorCodeLookup[codeNumber] = codeName;
-			ErrorMessagesDefault[codeName] = ErrorMessagesDefault[codeNumber] = defaultMessage;
-			for (var langCode in languages) {
-				var language = languages[langCode];
-				if (language[codeName]) {
-					language[codeNumber] = language[codeNumber] || language[codeName];
-				}
-			}
-		},
-		reset: function () {
-			globalContext.reset();
-			this.error = null;
-			this.missing = [];
-			this.valid = true;
-		},
-		missing: [],
-		error: null,
-		valid: true,
-		normSchema: normSchema,
-		resolveUrl: resolveUrl,
-		getDocumentUri: getDocumentUri,
-		errorCodes: ErrorCodes
-	};
-	return api;
-}
-
-var tv4 = createApi();
-tv4.addLanguage('en-gb', ErrorMessagesDefault);
-
-//legacy property
-tv4.tv4 = tv4;
-
-return tv4; // used by _header.js to globalise.
-
-}));
-});
-
-require.modules["geraintluff-tv4"] = require.modules["geraintluff~tv4@master"];
-require.modules["geraintluff~tv4"] = require.modules["geraintluff~tv4@master"];
-require.modules["tv4"] = require.modules["geraintluff~tv4@master"];
-
-
-require.register("optimuslime~win-schema@master/lib/addSchema.js", function (exports, module) {
-//pull in traverse object for this guy
-var traverse = require("optimuslime~traverse@master");
-var schemaSpec = require("optimuslime~win-schema@master/lib/schemaSpec.js");
-
-
-module.exports = extendAddSchema;
-
-function extendAddSchema(self)
-{
-
-  var pathDelim = self.pathDelimiter;
-
-  var defaultWINAdd = {
-    wid : "string",
-    dbType : "string",
-    parents : {
-      type: "array",
-      items : {
-        type : "string"
-      }
-    }
-  }
-
-  var winTypeRegExp = [];
-  for(var key in defaultWINAdd)
-  {
-    winTypeRegExp.push(key);
-  }
-  self.log("--All WIN keywords: ", winTypeRegExp);
-
-  winTypeRegExp = new RegExp("\\b" + winTypeRegExp.join("\\b|\\b") + "\\b");
-
-  //everything we need to do to add a schema inside
-  //this requires checking if it's properly formatted, pulling references, and moving
-  //around things if it's not formatted but we would like to make it less wordy to make schema
-    self.internalAddSchema = function(type, schemaJSON, options, finished)
-    {
-      if(typeof options == "function")
-      {
-        finished = options;
-        options = {};
-      }
-      else
-        options = options || {};
-
-      if((schemaJSON.type == "array" || schemaJSON.items) && !options.skipWINAdditions)
-      {
-        finished("Array-types for schema cannot have WIN additions. It doesn't make any sense. The object must be an array, but also have a wid property? Failed: " + type);
-        return;
-      }
-
-      //make a clone of the object 
-      schemaJSON = JSON.parse(JSON.stringify(schemaJSON)); 
-
-      //force all types to lower case -- always -- deal with weird validation errors otherwise
-      traverse(schemaJSON).forEach(function(node)
-      {
-          if(this.key == "type" && typeof this.node == "string")
-            this.update(this.node.toLowerCase());
-      })
-
-      //we add or move objects inside the schema to make it conform to expected v4 JSON schema validation
-      appendSchemaInformation(schemaJSON, options);      
-
-      //check our schema for wacky errors!
-      var schemaCheck = checkSchemaErrors(schemaJSON);
-      if(schemaCheck && schemaCheck.errors)
-      {
-        finished("Improper schema format for " + type + " - " + JSON.stringify(schemaCheck));
-        return;
-      }
-
-      if(schemaCheck && schemaCheck.warnings)
-      {
-        self.log("Warnings: ".yellow, schemaCheck.warnings);
-      }
-
-      //save it in our map
-      self.allSchema[type] = schemaJSON;
-
-      if(!schemaJSON.id || schemaJSON.id != type)
-        schemaJSON.id = type;
-
-      if(!schemaJSON['$schema'])
-        schemaJSON['$schema'] = "http://json-schema.org/draft-04/schema#";
-      
-      if(!schemaJSON.type)
-        schemaJSON.type = "object";
-
-      //add the schema to our validator -- this does most heavy lifting for us
-      self.validator.addSchema(schemaJSON);
-
-      //failed to add schema for some reason?
-      if(self.validator.error){
-        finished(self.validator.error);
-      }
-      else
-      {
-        //no error from validator, store the references inside
-        storeSchemaReferences(type, schemaJSON);
-
-        //when we create it 
-        setSchemaProperties(type, schemaJSON, options);
-        //take what you want, and give nothing back! The pirates way for us!
-        finished();
-      }
-    }
-    function setSchemaProperties(type, schemaJSON, options)
-    {
-      var props = {};
-      if(options.skipWINAdditions)
-        props.isWIN = false;
-      else
-        props.isWIN = true;
-      
-      var primePaths = {};
-
-      var tJSON = traverse(schemaJSON);
-
-      var references = self.requiredReferences[type];
-      var refMap = {};
-
-      for(var refType in references)
-      {
-          var locations = references[refType];
-          for(var l =0; l < locations.length; l++)
-          {
-              var refInfo = locations[l];
-              refMap[refInfo.typePath] = refInfo;
-          }
-      }
-      // self.log("Refmap: ", refMap);
-      function isRef(path){ return refMap[path.join(pathDelim)]}
-
-      tJSON.forEach(function(node)
-      {
-        if(this.isRoot || this.isLeaf)
-          return;
-
-        //kill the future investigation of references
-        if(isRef(this.path))
-            this.keys = [];
-
-          //if we are a known keyword -- that's not properties or items, we skip you!
-        if(this.key != "properties" && this.key != "items" && self.keywordRegExp.test(this.key))
-          this.keys = [];
-
-        //we also ignore this as well
-        if(winTypeRegExp.test(this.key))
-          this.keys = [];
-
-        // self.log("Isref?".green, isRef(this.path));
-
-        // if(this.keys.length)
-          // self.log("Potential PrimePath: ".green, this.key, " node: ", this.node);
-
-        if(this.keys.length){
-
-          var objPath = self.stripObjectPath(this.path);
-
-          //we're an array, or we're inisde an array!
-          if(this.node.type == "array" || this.node.items || this.key =="items")
-          {
-              //we are an array, we'll pull the array info -- and then we close off this array -- forever!
-              //remember, primary paths are all about the objects, and the FIRST layer of array
-              primePaths[objPath] = {type: "array"};
-              this.keys = [];
-          }
-          else
-          {
-            //you must be a properties object
-            //either you have a type, or you're an object
-            primePaths[objPath] = {type: this.node.type || "object"};
-          }
-        }
-        
-
-      })
-
-      // self.log("\n\tprimaryPaths: ".cyan, primePaths);
-
-      self.primaryPaths[type] = primePaths;
-      self.typeProperties[type] = props;
-
-    }
-    function hasNonKeywords(obj)
-    {
-      var hasNonKeywords = false;
-        
-      if(Array.isArray(obj))
-      {
-        //loop through object to grab keys
-        for(var i=0; i < obj.length; i++)
-        {
-          var iKey = obj[i];
-          //check if you're not a keyword
-          if(!self.keywordRegExp.test(iKey))
-          {
-            //just one is enough
-            hasNonKeywords = true;
-            break;
-          }
-        }
-      }
-      else
-      {
-        for(var iKey in obj)
-        {
-          if(!self.keywordRegExp.test(iKey))
-          {
-            //just one is enough
-            hasNonKeywords = true;
-            break;
-          }
-        }
-      }
-
-      return hasNonKeywords;           
-    }
-
-  //handle everything associated with adding a schema
-    function checkSchemaErrors(schemaJSON)
-    {
-
-      //check against the proper schema definition
-      // var vck = self.validator.validateMultiple(schemaJSON, schemaSpec, true);
-       var valCheck = self.validateFunction.apply(self.validator, [schemaJSON, schemaSpec, true]);
-       
-       //grab all possible errors
-       var checkErrors = {length: 0};
-       var checkWarnings = {length: 0};
-
-       //if we're valid -- which we almost certainly are -- just keep going
-       if(!valCheck.valid)
-       {
-          //let it be known -- this is a weird error
-          self.log("Invalid from v4 JSON schema perspective: ", valCheck[errorKey]);
-
-          checkErrors["root"] = valCheck[errorKey];
-          checkErrors.length++;
-
-          //not valid, throw it back
-          return checkErrors;
-       }
-
-
-       //make sure we have some properties -- otherwise there is literally no validation/
-       //during the move process, this is overridden, but it's a good check nonetheless
-       if(!schemaJSON.properties && !schemaJSON.items)
-       {
-          checkErrors["root"] = "No properties/items defined at root. Schema has no validation without properties!";
-          checkErrors.length++;
-       }
-
-       //going to need to traverse our schema object
-       var tJSON = traverse(schemaJSON);
-
-       tJSON.forEach(function(node)
-       {
-        //skip the root please
-        if(this.isRoot || this.path.join(pathDelim).indexOf('required') != -1)
-          return;
-
-        //this should be a warning
-        if(!self.requireByDefault && !this.isLeaf && !this.node.required)
-        {
-            //if you don't have a required object, then you're gonna have a bad time
-            //this is a warning
-            checkWarnings[this.path.join(pathDelim)] = "warning: if you disable requireByDefault and don't put require arrays, validation will ignore those properties.";
-            checkWarnings.length++;
-
-        }
-        if(this.key == "properties" && this.node.properties)
-        {
-           checkErrors[this.path.join(pathDelim)] = "Properties inside properties is meaningless.";
-           checkErrors.length++;
-        }
-        if(this.key == "type" && typeof this.node != "string")
-        {
-            //for whatever reason, there is a type defined, but not a string in it's place? Waa?
-            checkErrors[this.path.join(pathDelim)] = "Types must be string";
-            checkErrors.length++;
-        }
-        if(this.key == "type" && !self.typeRegExp.test(this.node.toLowerCase()))
-        {
-           checkErrors[this.path.join(pathDelim)] = "Types must be one of " + self.validTypes + " not " + this.node;
-           checkErrors.length++;
-        }
-        if(this.isLeaf)
-        {
-          //if you don't have a type, and there is no ref object
-          if(!this.parent.node.properties && (this.key != "type" && this.key != "$ref") && !this.parent.node.type && !this.parent.node["$ref"])
-          {
-              checkErrors[this.path.join(pathDelim)] = "Object doesn't have any properties, a valid type, or a reference, therefore it is invalid in the WIN spec.";
-              checkErrors.length++;
-          }
-        }
-        //not a leaf, you don't have a reference
-        if(!self.allowAnyObjects && !this.isLeaf && !this.node["$ref"] )
-        {
-          //special case for items -- doesn't apply
-          if(this.node.type == "object" && this.key != "items")
-          {
-            //we're going to check if the list of keys to follow have any non keywords
-            //for instance if {type: "object", otherThing: "string"} keys = type, otherThing
-            //if instead it's just {type : "object", required : []}, keys = type, required 
-            //notice that the top has non-keyword keys, and the bottom example does not 
-            //we're looking for the bottom example and rejecting it
-            var bHasNonKeywords = hasNonKeywords(this.keys);
-            
-            //if you ONLY have keywords -- you don't have any other object types
-            //you are a violation of win spec and you allow any object or array to be passed in
-            if(!bHasNonKeywords){
-              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
-              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'object' type with no inner properties";
-              checkErrors.length++;
-            }
-          }
-          else if(this.node.type == "array")
-          {
-            //if you are an array and you have no items -- not allowed!
-            if(!this.node.items){
-              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
-              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no inner items";
-              checkErrors.length++;
-            }
-            else
-            {
-              //if you have a ref -- you're okay for us!
-              var bIemsHaveNonKey = this.node.items["$ref"] || this.node.items["type"] || hasNonKeywords(this.node.items.properties || {});
-               if(!bIemsHaveNonKey){
-                // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
-                checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no non-keyword inner items";
-                checkErrors.length++;
-              }
-            }
-          }
-        
-        }
-        //if you're an array
-        if(this.node.type == "array")
-        {
-          //grab your items
-          var items = this.node.items;
-          if(!items && !self.allowAnyObjects)
-          {
-             checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off for arrays, therefore you cannot simple have an 'array' type with no inner items";
-              checkErrors.length++;
-          }
-          else
-          {
-            items = items || {};
-            //we have items -- we shouldn't have a reference type && other items
-            if(items.properties && items["$ref"])
-            {
-              checkErrors[this.path.join(pathDelim)] = "Array items in WIN cannot have properties AND a reference type. One or the other.";
-              checkErrors.length++;
-            }
-          }
-        }
-
-
-       });
-
-       if(checkErrors.length || checkWarnings.length)
-        return {errors: checkErrors, warnings: checkWarnings};
-      else
-        return null;
-
-    }
-
-    self.stripObjectPath = function(path)
-    {
-      //obj path will be returned
-      var objectPath = [];
-
-      //travere this path, yo
-      traverse(path).forEach(function()
-      {
-        //no routes including properties or items -- made up schema info!
-        if(!this.isRoot && (this.node != "properties" && this.node != "items"))
-          objectPath.push(this.node);
-      });
-
-      return objectPath.join(pathDelim);
-    }
-
-    //storing the references inside of a schema object (if we don't already know them)
-    function parseSchemaReferences(schemaJSON)
-    {
-    	//first we wrap our object with traverse methods
-    	var tJSON = traverse(schemaJSON);
-
-    	var references = {};
-
-    	self.log('--  Parsing refs -- ');
-      // self.log(schemaJSON);
-    	//now we step through pulling the path whenever we hit a reference
-    	tJSON.forEach(function(node)
-    	{
-    		//we are at a reference point
-        //we make an exception for arrays -- since the items object can hold references!
-        if(this.node["$ref"] && (this.key == "items" || !self.keywordRegExp.test(this.key)))
-    		// if(this.isLeaf && this.key == "$ref")
-    		{
-    			//todo logic for when it's "oneOf" or other valid JSON schema things
-    			var fullPath = this.path.join(pathDelim);//this.path.slice(0, this.path.length-1).join(pathDelim);
-    			var referenceType = this.node["$ref"];
-
-          
-          var objectPath = self.stripObjectPath(this.path);
-
-          //pull the "items" piece out of the path -- otherwise, if you're just a normal object -- it's the same as fullPath
-          var typePath = this.key == "items" ? this.path.slice(0, this.path.length-1).join(pathDelim) : fullPath;
-
-
-
-    			if(references[fullPath])
-    			{
-    				throw new Error("Not yet supported reference behavior, arrays of references: ", fullPath);
-    			}
-
-          //assuming type is defined here!
-    			references[fullPath] = {schemaType: referenceType, schemaPath: fullPath, objectPath: objectPath, typePath: typePath};
-          self.log(self.log.testing, 'Reference detected @ '+fullPath+': ', references[fullPath]);
-    		}
-    	});
-
-    	self.log("-- Full refs -- ", references);
-
-    	return references;
-    } 
-
-    function storeSchemaReferences(type, schemaJSON)
-    {
-    	self.schemaReferences[type] = parseSchemaReferences(schemaJSON);
-
-      self.requiredReferences[type] = {};
-
-      for(var path in self.schemaReferences[type])
-      {
-        var schemaInfo = self.schemaReferences[type][path];
-        var refType = schemaInfo.schemaType;
-        var aReqRefs = self.requiredReferences[type][refType];
-
-        if(!aReqRefs)
-        {
-          aReqRefs = [];
-          self.requiredReferences[type][refType] = aReqRefs;
-        }
-        //value is the reference type 
-        aReqRefs.push(schemaInfo);
-      }
-
-
-      //now we know all the references, their paths, and what type needs what references
-    }
-    function moveAllToProperties(tJSON)
-    {
-       tJSON.forEach(function(node)
-       {          
-
-          // self.log("Investigating: ", this.key, " @ ", this.path.join(pathDelim), " all keys: ", this.keys);
-          //for all non-arrays and non-leafs and non-properties object -- move to a properties object if not a keyword!
-          if(!this.isLeaf && this.key != "properties" && !Array.isArray(this.node))
-          {
-
-            //movement dpeends on what type you are -- arrays move to items, while objects move to properties
-            var moveLocation = "properties";
-            if(this.node.type == "array")
-              moveLocation = "items";
-
-            // self.log('Movement: ', this.key, " @ ", this.path.join(pathDelim) + " : ", this.node);
-            // self.log("Move to : ".green + moveLocation);
-
-
-            // self.log("Move innitiated: ".magenta, this.node);
-            // self.log('Original node: '.green, node);
-            var empty = true;
-            var move = {};
-            //any key that isn't one of our keywords is getting moved inside!
-            for(var key in this.node){
-                if(!self.keywordRegExp.test(key)){
-                  // self.log('Moving key @ ', this.path.join(pathDelim) || "Is root? ", " : ", this.key || this.isRoot); 
-                  move[key] = this.node[key];
-                  empty = false;
-                }
-            }
-
-            //don't move nothing derrr
-            if(!empty)
-            {
-               // self.log('Moving: '.red, move);
-
-              //create proeprties if it doesn't exist
-              node[moveLocation] = node[moveLocation] || {};
-
-              for(var key in move)
-              {
-                //move to its new home
-                node[moveLocation][key] = move[key];
-                //remove from previous location 
-                delete node[key];
-              }
-
-              //make sure to update, thank you
-              this.update(node);
-
-              //we need to investigate the newly created properties/items object -- to continue down the rabbit hole
-              this.keys.push(moveLocation);
-            }
-           
-
-          }
-       });
-    }
-    function addWINTypes(schemaJSON, options)
-    {
-      for(var key in defaultWINAdd)
-      {
-        var winAdd = defaultWINAdd[key];
-        
-        //if it's just a shallow string -- add it directly
-        if(typeof winAdd == "string")
-          schemaJSON[key] = winAdd;
-        else //otehrwise, we should clone the larger object
-          schemaJSON[key] = traverse(defaultWINAdd[key]).clone();
-      }
-    }
-    function appendSchemaInformation(schemaJSON, options)
-    {
-      //add in default win types
-      if(!options.skipWINAdditions)
-        addWINTypes(schemaJSON, options);
-
-      //build a traverse object for navigating and updating the object
-      var tJSON = traverse(schemaJSON);
-
-      //step one convert string to types
-      tJSON.forEach(function(node)
-      {
-        var needsUpdate = false;
-          //if you are a leaf -- and you only dictate the type e.g. string/number/array etc -- we'll convert you to proper type
-        if(this.isLeaf && typeof this.node == "string")
-        {
-          //if the key is not a known keyword, and the node string is a proper type
-          if(!self.keywordRegExp.test(this.key) && self.typeRegExp.test(node.toLowerCase()))
-          {
-            //node is a type! make sure it's a lower case type being stored.
-            node = {type: node.toLowerCase()};
-            needsUpdate = true;
-          }
-        }
-
-        if(this.node)
-        {
-
-         if(this.node.items && !this.node.type)
-          {
-            this.node.type = "array";
-            needsUpdate = true;
-          }
-
-          //rewrite {type : "array", "$ref" : "something"} => {type : "array", items : {"$ref" : "something"}}
-          if(this.node.type == "array" && this.node["$ref"])
-          {
-            this.node.items = this.node.items || {};
-            this.node.items["$ref"] = this.node["$ref"];
-            delete this.node["$ref"];
-            needsUpdate = true;
-          }
-
-        }
-
-
-        if(needsUpdate)
-          this.update(node);
-
-      })
-
-      //update location of objects to match validation issues
-      //json schema won't validate outside of properties object -- which some people may forget
-      //this is basically a correct method
-      moveAllToProperties(tJSON);
-
-      // var util = require('util');
-      // self.log("Post move schema: ".cyan, util.inspect(schemaJSON, false, 10));
-
-      tJSON.forEach(function(node)
-      {
-        var needsUpdate = false;
-
-
-       
-          //if we aren't a leaf object, we are a full object
-          //therefore, we must have required (since we're in default mode)
-          //since we cover the properties object inside, we don't need to go indepth for that key too!
-        if(self.requireByDefault && !this.isLeaf && !this.node.required && !Array.isArray(this.node))
-        {
-          //the require needs to be filled iwth all the properties of this thing, except
-          //for anything defined by v4 json schema -- so we run a regex to reject those keys
-          var reqProps = [];
-
-          // self.log("Not leaf: ".magenta, this.node, " Key : ", this.key);
-
-          //do not do this if you're in the properties object
-          //since the prop keys belong to the PARENT not the node
-          if(this.key != "properties")
-          {
-            for(var key in this.node){
-              if(!self.keywordRegExp.test(key)){
-              // self.log('Key added: '.red, key);
-
-                reqProps.push(key);
-              }
-            }
-            // self.log('Post not props: '.blue, reqProps);
-          }
-          
-          //for every object, you can also have a properties object too
-          //required applies to the subling property object as well
-          //so we loop through the properties object as well
-         for(var key in this.node.properties){
-            if(!self.keywordRegExp.test(key)){
-              reqProps.push(key);
-            }
-          }
-
-          if(reqProps.length)
-          {
-            node.required = reqProps;
-            needsUpdate = true;
-          }        
-        }
-
-     
-       if(needsUpdate){
-          // self.log('New required - : ', this.node, ' : ', reqProps);
-          this.update(node);
-        }
-      });
-
-
-
-        // self.log("--post traverse -- ", schemaJSON);
-
-    }
-
-	return self;
-}
-
-
-
-
-});
-
-require.register("optimuslime~win-schema@master/lib/schemaSpec.js", function (exports, module) {
-module.exports = 
-{
-    "id": "http://json-schema.org/draft-04/schema#",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "description": "Core schema meta-schema",
-    "definitions": {
-        "schemaArray": {
-            "type": "array",
-            "minItems": 1,
-            "items": { "$ref": "#" }
-        },
-        "positiveInteger": {
-            "type": "integer",
-            "minimum": 0
-        },
-        "positiveIntegerDefault0": {
-            "allOf": [ { "$ref": "#/definitions/positiveInteger" }, { "default": 0 } ]
-        },
-        "simpleTypes": {
-            "enum": [ "array", "boolean", "integer", "null", "number", "object", "string" ]
-        },
-        "stringArray": {
-            "type": "array",
-            "items": { "type": "string" },
-            "minItems": 1,
-            "uniqueItems": true
-        }
+require.register("optimuslime~win-utils@master/uuid/cuid.js", function (exports, module) {
+/**
+ * cuid.js
+ * Collision-resistant UID generator for browsers and node.
+ * Sequential for fast db lookups and recency sorting.
+ * Safe for element IDs and server-side lookups.
+ *
+ * Extracted from CLCTR
+ * 
+ * Copyright (c) Eric Elliott 2012
+ * MIT License
+ */
+//From: https://github.com/dilvie/cuid
+
+//note that module.exports is at the end -- it exports the api variable
+
+/*global window, navigator, document, require, process, module */
+var c = 0,
+    blockSize = 4,
+    base = 36,
+    discreteValues = Math.pow(base, blockSize),
+
+    pad = function pad(num, size) {
+      var s = "000000000" + num;
+      return s.substr(s.length-size);
     },
-    "type": "object",
-    "properties": {
-        "id": {
-            "type": "string",
-            "format": "uri"
-        },
-        "$schema": {
-            "type": "string",
-            "format": "uri"
-        },
-        "title": {
-            "type": "string"
-        },
-        "description": {
-            "type": "string"
-        },
-        "default": {},
-        "multipleOf": {
-            "type": "number",
-            "minimum": 0,
-            "exclusiveMinimum": true
-        },
-        "maximum": {
-            "type": "number"
-        },
-        "exclusiveMaximum": {
-            "type": "boolean",
-            "default": false
-        },
-        "minimum": {
-            "type": "number"
-        },
-        "exclusiveMinimum": {
-            "type": "boolean",
-            "default": false
-        },
-        "maxLength": { "$ref": "#/definitions/positiveInteger" },
-        "minLength": { "$ref": "#/definitions/positiveIntegerDefault0" },
-        "pattern": {
-            "type": "string",
-            "format": "regex"
-        },
-        "additionalItems": {
-            "anyOf": [
-                { "type": "boolean" },
-                { "$ref": "#" }
-            ],
-            "default": {}
-        },
-        "items": {
-            "anyOf": [
-                { "$ref": "#" },
-                { "$ref": "#/definitions/schemaArray" }
-            ],
-            "default": {}
-        },
-        "maxItems": { "$ref": "#/definitions/positiveInteger" },
-        "minItems": { "$ref": "#/definitions/positiveIntegerDefault0" },
-        "uniqueItems": {
-            "type": "boolean",
-            "default": false
-        },
-        "maxProperties": { "$ref": "#/definitions/positiveInteger" },
-        "minProperties": { "$ref": "#/definitions/positiveIntegerDefault0" },
-        "required": { "$ref": "#/definitions/stringArray" },
-        "additionalProperties": {
-            "anyOf": [
-                { "type": "boolean" },
-                { "$ref": "#" }
-            ],
-            "default": {}
-        },
-        "definitions": {
-            "type": "object",
-            "additionalProperties": { "$ref": "#" },
-            "default": {}
-        },
-        "properties": {
-            "type": "object",
-            "additionalProperties": { "$ref": "#" },
-            "default": {}
-        },
-        "patternProperties": {
-            "type": "object",
-            "additionalProperties": { "$ref": "#" },
-            "default": {}
-        },
-        "dependencies": {
-            "type": "object",
-            "additionalProperties": {
-                "anyOf": [
-                    { "$ref": "#" },
-                    { "$ref": "#/definitions/stringArray" }
-                ]
-            }
-        },
-        "enum": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true
-        },
-        "type": {
-            "anyOf": [
-                { "$ref": "#/definitions/simpleTypes" },
-                {
-                    "type": "array",
-                    "items": { "$ref": "#/definitions/simpleTypes" },
-                    "minItems": 1,
-                    "uniqueItems": true
-                }
-            ]
-        },
-        "allOf": { "$ref": "#/definitions/schemaArray" },
-        "anyOf": { "$ref": "#/definitions/schemaArray" },
-        "oneOf": { "$ref": "#/definitions/schemaArray" },
-        "not": { "$ref": "#" }
+
+    randomBlock = function randomBlock() {
+      return pad((Math.random() *
+            discreteValues << 0)
+            .toString(base), blockSize);
     },
-    "dependencies": {
-        "exclusiveMaximum": [ "maximum" ],
-        "exclusiveMinimum": [ "minimum" ]
-    },
-    "default": {}
-}
-});
 
-require.register("optimuslime~win-schema@master", function (exports, module) {
-//pull in the validating workhorse -- checks schema and stuff
-var tv4 = require("geraintluff~tv4@master");
-//pull in traverse object from the repo please!
-var traverse = require("optimuslime~traverse@master");
+    api = function cuid() {
+      // Starting with a lowercase letter makes
+      // it HTML element ID friendly.
+      var letter = 'c', // hard-coded allows for sequential access
 
-//pull in the object that knows what all schema look like!
-var schemaSpec = require("optimuslime~win-schema@master/lib/schemaSpec.js");
+        // timestamp
+        // warning: this exposes the exact date and time
+        // that the uid was created.
+        timestamp = (new Date().getTime()).toString(base),
 
-var addSchemaSupport = require("optimuslime~win-schema@master/lib/addSchema.js");
+        // Prevent same-machine collisions.
+        counter,
 
-module.exports = winSchema;
+        // A few chars to generate distinct ids for different
+        // clients (so different computers are far less
+        // likely to generate the same id)
+        fingerprint = api.fingerprint(),
 
-function winSchema(winback, globalConfiguration, localConfiguration)
+        // Grab some more chars from Math.random()
+        random = randomBlock() + randomBlock() + randomBlock() + randomBlock();
+
+        c = (c < discreteValues) ? c : 0;
+        counter = pad(c.toString(base), blockSize);
+
+      c++; // this is not subliminal
+
+      return  (letter + timestamp + counter + fingerprint + random);
+    };
+
+api.slug = function slug() {
+  var date = new Date().getTime().toString(36),
+    counter = c.toString(36).slice(-1),
+    print = api.fingerprint().slice(0,1) +
+      api.fingerprint().slice(-1),
+    random = randomBlock().slice(-1);
+
+  c++;
+
+  return date.slice(2,4) + date.slice(-2) + 
+    counter + print + random;
+};
+
+//fingerprint changes based on nodejs or component setup
+var isBrowser = (typeof process == 'undefined');
+
+api.fingerprint = isBrowser ?
+  function browserPrint() {
+      return pad((navigator.mimeTypes.length +
+          navigator.userAgent.length).toString(36) +
+          api.globalCount().toString(36), 4);
+  }
+: function nodePrint() {
+  var os = require('os'),
+
+  padding = 2,
+  pid = pad((process.pid).toString(36), padding),
+  hostname = os.hostname(),
+  length = hostname.length,
+  hostId = pad((hostname)
+    .split('')
+    .reduce(function (prev, char) {
+      return +prev + char.charCodeAt(0);
+    }, +length + 36)
+    .toString(36),
+  padding);
+return pid + hostId;
+};
+
+api.globalCount = function globalCount() {
+    // We want to cache the results of this
+    var cache = (function calc() {
+        var i,
+            count = 0;
+
+            //global count only ever called inside browser environment
+            //lets loop through and count the keys in window -- then cahce that as part of our fingerprint
+        for (i in window) {
+            count++;
+        }
+
+        return count;
+    }());
+
+    api.globalCount = function () { return cache; };
+    return cache;
+};
+
+api.isLessThan = function(first, second)
 {
-	//load up basic win-module stufffff
-	var self = this;
-  self.winFunction = "schema";
-  self.log = winback.getLogger(self);
-
-  //limited only by global -- or we could limit our own verboseness
-  self.log.logLevel = localConfiguration.logLevel || self.log.normal;
-
-  self.pathDelimiter = "///";
-
-  //this creates "internalAddSchema" to handle the weighty add logic
-  //need to thoroughly test and modify incoming schema to align with 
-  //logical schema setup for WIN
-  addSchemaSupport(self, globalConfiguration, localConfiguration);
-
-	self.validator = tv4.freshApi();
-
- //set the backbone and our logging function
-  self.bbEmit = winback.getEmitter(self);
-
-  //config setups
-
-  self.multipleErrors = (localConfiguration.multipleErrors == true || localConfiguration.multipleErrors == "true");
-  //by default you can have unknown keys -- the server environment may desire to change this
-  //if you don't want to be storing extra info
-  //by default, on lockdown -- better that way -- no sneaky stuff
-  self.allowUnknownKeys = localConfiguration.allowUnknownKeys || false;
-
-  //all keys are required by default -- this adds in required objects for everything
-  self.requireByDefault = localConfiguration.requireByDefault || true;
-
-  //do we allow properties with just the type "object" or "array"
-  //this would allow ANY data to be fit in there with no validation checks (other than it is an object or array)
-  //shouldn't allow this because people could slip in all sorts of terrible things without validation
-  self.allowAnyObjects = localConfiguration.allowAnyObjects || false;
-
-  self.eventCallbacks = function()
+  var fParse= parseInt(first);
+  var sParse = parseInt(second);
+  if(isNaN(fParse) && isNaN(sParse))
   {
-        var callbacks = {};
+     //tease apart first, second to determine which ID came first
+    //counter + fingerprint + random = 6 blocks of 4 = 24
+    var dateEnd = 6*blockSize;
+    var counterEnd = 5*blockSize;
+    var charStart = 1;
 
-        //add callbacks to the object-- these are the functions called when the full event is emitted
-        callbacks["schema:validate"] = self.validateData;
-        callbacks["schema:validateMany"] = self.validateDataArray;
-        callbacks["schema:addSchema"] = self.addSchema;
-        callbacks["schema:getSchema"] = self.getSchema;
-        callbacks["schema:getSchemaReferences"] = self.getSchemaReferences;
-        callbacks["schema:getFullSchema"] = self.getFullSchema;
-        callbacks["schema:getSchemaProperties"] = self.getSchemaProperties;
+    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
+    var firstTime = parseInt(first.slice(charStart, first.length - dateEnd), base);
+    //ditto for counter
+    var firstCounter = parseInt(first.slice(first.length - dateEnd, first.length - counterEnd),base);
 
-        //these are for deealing with pulling references from a specific object -- it's easier done in this module
-        callbacks["schema:getReferencesAndParents"] = self.getReferencesAndParents;
-        callbacks["schema:replaceParentReferences"] = self.replaceParentReferences;
+    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
+    var secondTime =  parseInt(second.slice(charStart, second.length - dateEnd), base);
+    
+    //ditto for counter 
+    var secondCounter = parseInt(second.slice(second.length - dateEnd, second.length - counterEnd), base);
 
-        //send back our callbacks
-        return callbacks;
+    //either the first time is less than the second time, and we answer this question immediately
+    //or the times are equal -- then we pull the lower counter
+    //techincially counters can wrap, but this won't happen very often AND this is all for measuring disjoint/excess behavior
+    //the time should be enough of an ordering principal for this not to matter
+    return firstTime < secondTime || (firstTime == secondTime && firstCounter < secondCounter);
+
   }
-  self.requiredEvents = function()
+  else if(isNaN(sParse))
   {
-  	//don't need no one for nuffin'
-  	return [];
-  }
-
-  self.initialize = function(done)
+    //if sParse is a string, then the first is a number and the second is a string UUID
+    //to maintain backwards compat -- number come before strings in neatjs ordering
+    return true;
+  }//both are not NaN -- we have two numbers to compare
+  else
   {
-  	setTimeout(function()
-  	{
-  		done();
-  	}, 0);
+    return fParse < sParse;
   }
-
-    //cache all our schema by type
-    self.allSchema = {};
-    self.schemaReferences = {};
-    self.requiredReferences = {};
-    self.fullSchema = {};
-    self.primaryPaths = {};
-    self.typeProperties = {};
-
-    self.validTypes = "\\b" + schemaSpec.definitions.simpleTypes.enum.join('\\b|\\b') + "\\b"; //['object', 'array', 'number', 'string', 'boolean', 'null'].join('|');
-    self.typeRegExp = new RegExp(self.validTypes);
-
-    self.specKeywords = ["\\$ref|\\babcdefg"];
-    for(var key in schemaSpec.properties)
-      self.specKeywords.push(key.replace('$', '\\$'));
-
-    //join using exact phrasing checks
-    self.specKeywords = self.specKeywords.join('\\b|\\b') + "\\b";
-    self.keywordRegExp = new RegExp(self.specKeywords);
-
-    self.log(self.log.testing, "--Specced types: ".green, self.validTypes);
-    self.log(self.log.testing, "--Specced keywords: ".green, self.specKeywords);
-
-    self.validateFunction = (self.multipleErrors ? self.validator.validateMultiple : self.validator.validateResult);
-    self.errorKey = self.multipleErrors ? "errors" : "error";
-
-    function listTypeIssues(type)
-    {
-      if(!self.allSchema[type]){
-        return "Schema type not loaded: " + type;
-      }
-
-      //we have to manually detect missing references -- since the validator is not concerned with such things
-      //FOR WHATEVER REASON
-      var missing = self.validator.getMissingUris();
-      for(var i=0; i < missing.length; i++)
-      {
-        //if we have this type inside our refernces for this object, it means we're missing a ref schema for this type!
-        if(self.requiredReferences[type][missing[i]])
-        {
-          return "Missing at least 1 schema definition: " + missing[i];
-        }
-      }
-    }
-
-    function internalValidate(schema, object)
-    {
-      //validate against what type?
-      var result = self.validateFunction.apply(self.validator, [object, schema, true, !self.allowUnknownKeys]);
-
-       //if it's not an array, make it an array
-      //if it's empty, make it a damn array
-      var errors = result[self.errorKey];
-
-      //if you are multiple errors, then you are a non-undefined array, just return as usual
-      //otherwise, you are an error but not in an array
-      //if errors is undefined then this will deefault to []
-      errors = (errors && !Array.isArray(errors)) ? [errors] : errors || [];
-
-      return {valid : result.valid, errors : errors};
-    }
-    self.validateDataArray = function(type, objects, finished)
-    {
-      var typeIssues = listTypeIssues(type);
-
-      //stop if we have type issues
-      if(typeIssues)
-      {
-        finished(typeIssues);
-        return;
-      }
-      else if(typeof type != "string" || !Array.isArray(objects))
-      {
-        finished("ValidateMany requires type [string], objects [array]");
-        return;
-      }
-
-      var schema = self.validator.getSchema(type);
-      // self.log('validate many against: ', schema);
-
-      var allValid = true;
-      var allErrors = [];
-      for(var i=0; i < objects.length; i++)
-      {
-        var result = internalValidate(schema, objects[i]);
-
-        if(!result.valid){
-          allValid = false;
-          allErrors.push(result.errors);
-        }
-        else //no error? just push empty array!
-          allErrors.push([]);
-      }
-
-      //if we have errors during validation, they'll be passed on thank you!
-      //if you're valid, and there are no errors, then don't send nuffin
-      finished(undefined, allValid, (!allValid ? allErrors : undefined));
-    }
-    self.validateData = function(type, object, finished)
-    {
-      var typeIssues = listTypeIssues(type);
-
-      //stop if we have type issues
-      if(typeIssues)
-      {
-        finished(typeIssues);
-        return;
-      }
-
-      //log object being checked
-      self.log("Validate: ", object);
-
-      //now we need to validate, we definitely have all the refs we need
-      var schema = self.validator.getSchema(type);
-
-      //log what's being validated
-      self.log('validate against: ', schema);
-    	 
-      var result = internalValidate(schema, object);
-
-      //if we have errors during validation, they'll be passed on thank you!
-      //if you're valid, and there are no errors, then don't send nuffin
-      finished(undefined, result.valid, (result.errors.length ? result.errors : undefined));
-    }
-
-    //todo: pull reference objects from schema -- make sure those exist as well?
-   	self.addSchema = function(type, schemaJSON, options, finished)
-   	{
-      //pass args into internal adds
-      return self.internalAddSchema.apply(self, arguments);
-   	}
-
-   	    //todo: pull reference objects from schema -- make sure those exist as well?
-   	self.getSchema = function(typeOrArray, finished)
-   	{   	
-      //did we request one or many?
-      var typeArray = typeOrArray;
-      if(typeof typeOrArray == "string")
-      {
-        //make single type to return
-        typeArray = [typeOrArray];
-      }
-
-      var refArray = [];
-      for(var i=0; i < typeArray.length; i++)
-      {
-        var sType = typeArray[i];
-
-      //failed to get schema for some very odd reason?
-        if(!self.allSchema[sType]){
-          finished("Schema type not loaded: ", sType);
-          return;
-        }
-        //push our reference information as a clone
-        refArray.push(traverse(self.validator.getSchema(sType)).clone());
-        //if you hit an error -send back
-        if(self.validator.error){
-          finished(self.validator.error);
-          return;
-        }
-      }
-
-      //send the schema objects back
-      //send an array regardless of how many requested -- standard behavior
-      finished(undefined, refArray);    
-
-   	}
-
-   	self.getSchemaReferences = function(typeOrArray, finished)
-   	{
-      var typeArray = typeOrArray;
-      if(typeof typeOrArray == "string")
-      {
-        //make single type to return
-        typeArray = [typeOrArray];
-      }
-
-      var refArray = [];
-      for(var i=0; i < typeArray.length; i++)
-      {
-        var sType = typeArray[i];
-
-        if(!self.allSchema[sType]){
-          finished("Schema type not loaded: ", sType);
-          return;
-        }
-        //push our reference information as a clone
-        refArray.push(traverse(self.requiredReferences[sType]).clone());
-      }
-
-  		//send the refernece objects back
-      //if you are a single object, just send the one -- otherwise send an array
-      finished(undefined, refArray); 		
-   	}
-
-    var buildFullSchema = function(type)
-    {
-      var schema = self.validator.getSchema(type);
-      var tSchema = traverse(schema);
-
-      var clone = tSchema.clone();
-      var tClone = traverse(clone);
-      var references = self.schemaReferences[type];
-
-      for(var path in references)
-      {
-        //we get the type of reference
-        var schemaInfo = references[path];
-        var refType = schemaInfo.schemaType;
-
-        //this is recursive behavior -- itwill call buidl full schema if not finished yet
-        var fullRefSchema = internalGetFullSchema(refType);
-
-        if(!fullRefSchema)
-          throw new Error("No schema could be created for: " + refType + ". Please check it's defined.");
-
-        //now we ahve teh full object to replace
-        var tPath = path.split(self.pathDelimiter);
-
-        // self.log(self.log.testing, 'Path to ref: ', tPath, " replacement: ", fullRefSchema);
-
-        //use traverse to set the path object as our full ref object
-        tClone.set(tPath, fullRefSchema);
-      }
-
-      // self.log(self.log.testing, "Returning schema: ", type, " full: ", clone);
-
-      return clone;
-    }
-    var inprogressSchema = {};
-
-    function internalGetFullSchema(type)
-    {
-      if(inprogressSchema[type])
-      {
-          throw new Error("Infinite schema reference loop: " + JSON.stringify(Object.keys(inprogressSchema)));    
-      }
-
-      inprogressSchema[type] = true;
-
-       //if we don't have a full type yet, we build it
-      if(!self.fullSchema[type])
-      {
-        //need to build a full schema object
-        var fSchema = buildFullSchema(type);
-
-        self.fullSchema[type] = fSchema;
-      }
-
-      //mark the in progress as false!
-      delete inprogressSchema[type];
-
-      return self.fullSchema[type];
-    }
-
-    self.getFullSchema = function(typeOrArray, finished)
-    { 
-      var typeArray = typeOrArray;
-      if(typeof typeOrArray == "string")
-      {
-        //make single type to return
-        typeArray = [typeOrArray];
-      }
-
-      var fullArray = [];
-      for(var i=0; i < typeArray.length; i++)
-      {
-        var sType = typeArray[i];
-
-         if(!self.allSchema[sType]){
-          finished("Schema type not loaded: ", sType);
-          return;
-        }
-
-        try
-        {
-          //get the full schema from internal function
-          //throws error if something is wrong
-          var fullSchema = internalGetFullSchema(sType);
-         
-          //pull the full object -- guaranteed to exist -- send a clone
-           fullArray.push(traverse(fullSchema).clone());
-        }
-        catch(e)
-        {
-          //send the error if we have one
-          finished(e);
-          return;
-        }
-      }
-
-      //send the refernece objects back
-      //if you are a single object, just send the one -- otherwise send an array
-      finished(undefined, fullArray);
-    }
-
-    self.getSchemaProperties = function(typeOrArray, finished)
-    {
-       var typeArray = typeOrArray;
-      if(typeof typeOrArray == "string")
-      {
-        //make single type to return
-        typeArray = [typeOrArray];
-      }
-
-      var propArray = [];
-      for(var i=0; i < typeArray.length; i++)
-      {
-        var sType = typeArray[i];
-
-         if(!self.allSchema[sType]){
-          finished("Schema type not loaded: ", sType);
-          return;
-        }
-
-        //get our schema properties
-        propArray.push({type: sType, primaryPaths: traverse(self.primaryPaths[sType]).clone(), properties: traverse(self.typeProperties[sType]).clone()});
-
-      }
-
-
-      //send the refernece objects back
-      //if you are a single object, just send the one -- otherwise send an array
-      finished(undefined, propArray);
-    }
-
-    //we're going to clone the object, then replace all of the reference wids with new an improved parents
-    self.replaceParentReferences = function(type, object, parentMapping, finished)
-    {
-      var tClone = traverse(object).clone();
-
-      traverse(tClone).forEach(function(node)
-      {
-         //if we have a wid object and parents object -- likely we are a tracked reference
-        if(this.node.wid && this.node.parents)
-        {
-          var replaceParents = parentMapping[this.node.wid];
-
-          if(replaceParents)
-          {
-            //straight up replacement therapy yo
-            this.node.parents = replaceParents;
-
-            //then make sure to update and continue onwards!
-            this.update(this.node);
-          }
-        }
-      })
-
-      //we've replaced the innards of the object with a better future!
-      finished(undefined, tClone);
-    }
-
-    self.getReferencesAndParents = function(type, widObjects, finished)
-    {
-
-        //listed by some identifier, then the object, we need to look through the type, and pull references
-        var fSchema = internalGetFullSchema(type);
-        // self.log("Full schema: ", fSchema);
-        if(!fSchema)
-        {
-          finished("Full schema undefined, might be missing a reference type within " + type);
-          return;
-        } 
-        var widToParents = {};
-        var traverseObjects = {};
-
-        for(var wid in widObjects){
-          widToParents[wid] = {};
-          traverseObjects[wid] = traverse(widObjects[wid]);
-        }
-
-        
-        //for every wid object we see, we loop through and pull that 
-        traverse(fSchema).forEach(function(node)
-        {
-          // self.log("Node: ", this.node, "", " key: ", this.key);
-          //if we have a wid object and parents object -- likely we are a tracked reference
-          if(this.node.wid && this.node.parents)
-          {
-            //let's pull these bad boys our of our other objects
-            var pathToObject = self.stripObjectPath(this.path);
-            
-            //if you aren't root, split it up!
-            if(pathToObject != "")
-              pathToObject = pathToObject.split(self.pathDelimiter);
-
-            // self.log("\nKey before :", this.key, " node-p: ", this.parent.node, " path: ", this.path);
-            
-            var isArray = (this.key == "properties" && this.path[this.path.length - 2] == "items");
-            // self.log("Is array? : ", isArray);
-            for(var wid in traverseObjects)
-            {
-
-              var wtp = widToParents[wid];
-              var tob = traverseObjects[wid];
-
-
-              //fetch object from our traverse thing using this path
-              var arrayOrObject = tob.get(pathToObject);
-
-              // self.log("Path to obj: ", pathToObject, " get: ", arrayOrObject);
-
-              //grab wid to parent mappings, always cloning parent arrays
-              if(isArray)
-              {
-                for(var i=0; i < arrayOrObject.length; i++)
-                {
-                  var aobj = arrayOrObject[i];
-                  //map wid objects to parent wids always thank you
-                  wtp[aobj.wid] = aobj.parents.slice(0);
-                }
-              }
-              else
-                wtp[arrayOrObject.wid] = arrayOrObject.parents.slice(0);
-
-              //now we've aded a mapping from the objects wid to the parents for that wid
-
-            }
-          }
-        });
-
-        //we send back the wids of the original widObjects mapped to the wid internal reference && the corresponding parents
-        //so many damn layers -- it gets confusing
-        finished(undefined, widToParents);
-
-    }
-
-
-	return self;
 }
+
+//we send out API
+module.exports = api;
 
 
 
 
 });
 
-require.modules["optimuslime-win-schema"] = require.modules["optimuslime~win-schema@master"];
-require.modules["optimuslime~win-schema"] = require.modules["optimuslime~win-schema@master"];
-require.modules["win-schema"] = require.modules["optimuslime~win-schema@master"];
+require.register("optimuslime~win-utils@master/math/winmath.js", function (exports, module) {
 
+var mathHelper = {};
 
-require.register("optimuslime~win-schema@0.0.5-4/lib/addSchema.js", function (exports, module) {
-//pull in traverse object for this guy
-var traverse = require("optimuslime~traverse@master");
-var schemaSpec = require("optimuslime~win-schema@0.0.5-4/lib/schemaSpec.js");
+module.exports = mathHelper;
 
-
-module.exports = extendAddSchema;
-
-function extendAddSchema(self)
+mathHelper.next = function(max)
 {
+    return Math.floor(Math.random()*max);
+};
 
-  var pathDelim = self.pathDelimiter;
+});
 
-  var defaultWINAdd = {
-    wid : "string",
-    dbType : "string",
-    parents : {
-      type: "array",
-      items : {
-        type : "string"
-      }
-    }
-  }
+require.modules["optimuslime-win-utils"] = require.modules["optimuslime~win-utils@master"];
+require.modules["optimuslime~win-utils"] = require.modules["optimuslime~win-utils@master"];
+require.modules["win-utils"] = require.modules["optimuslime~win-utils@master"];
 
-  var winTypeRegExp = [];
-  for(var key in defaultWINAdd)
-  {
-    winTypeRegExp.push(key);
-  }
-  self.log("--All WIN keywords: ", winTypeRegExp);
 
-  winTypeRegExp = new RegExp("\\b" + winTypeRegExp.join("\\b|\\b") + "\\b");
+require.register("optimuslime~win-utils@0.1.1", function (exports, module) {
 
-  //everything we need to do to add a schema inside
-  //this requires checking if it's properly formatted, pulling references, and moving
-  //around things if it's not formatted but we would like to make it less wordy to make schema
-    self.internalAddSchema = function(type, schemaJSON, options, finished)
-    {
-      if(typeof options == "function")
-      {
-        finished = options;
-        options = {};
-      }
-      else
-        options = options || {};
+var winutils = {};
 
-      if((schemaJSON.type == "array" || schemaJSON.items) && !options.skipWINAdditions)
-      {
-        finished("Array-types for schema cannot have WIN additions. It doesn't make any sense. The object must be an array, but also have a wid property? Failed: " + type);
-        return;
-      }
+module.exports = winutils;
 
-      //make a clone of the object 
-      schemaJSON = JSON.parse(JSON.stringify(schemaJSON)); 
+//right now, it's all we have setup -- later there will be more utilities
+winutils.cuid = require('optimuslime~win-utils@0.1.1/uuid/cuid.js');
 
-      //force all types to lower case -- always -- deal with weird validation errors otherwise
-      traverse(schemaJSON).forEach(function(node)
-      {
-          if(this.key == "type" && typeof this.node == "string")
-            this.update(this.node.toLowerCase());
-      })
-
-      //we add or move objects inside the schema to make it conform to expected v4 JSON schema validation
-      appendSchemaInformation(schemaJSON, options);      
-
-      //check our schema for wacky errors!
-      var schemaCheck = checkSchemaErrors(schemaJSON);
-      if(schemaCheck && schemaCheck.errors)
-      {
-        finished("Improper schema format for " + type + " - " + JSON.stringify(schemaCheck));
-        return;
-      }
-
-      if(schemaCheck && schemaCheck.warnings)
-      {
-        self.log("Warnings: ".yellow, schemaCheck.warnings);
-      }
-
-      //save it in our map
-      self.allSchema[type] = schemaJSON;
-
-      if(!schemaJSON.id || schemaJSON.id != type)
-        schemaJSON.id = type;
-
-      if(!schemaJSON['$schema'])
-        schemaJSON['$schema'] = "http://json-schema.org/draft-04/schema#";
-      
-      if(!schemaJSON.type)
-        schemaJSON.type = "object";
-
-      //add the schema to our validator -- this does most heavy lifting for us
-      self.validator.addSchema(schemaJSON);
-
-      //failed to add schema for some reason?
-      if(self.validator.error){
-        finished(self.validator.error);
-      }
-      else
-      {
-        //no error from validator, store the references inside
-        storeSchemaReferences(type, schemaJSON);
-
-        //when we create it 
-        setSchemaProperties(type, schemaJSON, options);
-        //take what you want, and give nothing back! The pirates way for us!
-        finished();
-      }
-    }
-    function setSchemaProperties(type, schemaJSON, options)
-    {
-      var props = {};
-      if(options.skipWINAdditions)
-        props.isWIN = false;
-      else
-        props.isWIN = true;
-      
-      var primePaths = {};
-
-      var tJSON = traverse(schemaJSON);
-
-      var references = self.requiredReferences[type];
-      var refMap = {};
-
-      for(var refType in references)
-      {
-          var locations = references[refType];
-          for(var l =0; l < locations.length; l++)
-          {
-              var refInfo = locations[l];
-              refMap[refInfo.typePath] = refInfo;
-          }
-      }
-      // self.log("Refmap: ", refMap);
-      function isRef(path){ return refMap[path.join(pathDelim)]}
-
-      tJSON.forEach(function(node)
-      {
-        if(this.isRoot || this.isLeaf)
-          return;
-
-        //kill the future investigation of references
-        if(isRef(this.path))
-            this.keys = [];
-
-          //if we are a known keyword -- that's not properties or items, we skip you!
-        if(this.key != "properties" && this.key != "items" && self.keywordRegExp.test(this.key))
-          this.keys = [];
-
-        //we also ignore this as well
-        if(winTypeRegExp.test(this.key))
-          this.keys = [];
-
-        // self.log("Isref?".green, isRef(this.path));
-
-        // if(this.keys.length)
-          // self.log("Potential PrimePath: ".green, this.key, " node: ", this.node);
-
-        if(this.keys.length){
-
-          var objPath = self.stripObjectPath(this.path);
-
-          //we're an array, or we're inisde an array!
-          if(this.node.type == "array" || this.node.items || this.key =="items")
-          {
-              //we are an array, we'll pull the array info -- and then we close off this array -- forever!
-              //remember, primary paths are all about the objects, and the FIRST layer of array
-              primePaths[objPath] = {type: "array"};
-              this.keys = [];
-          }
-          else
-          {
-            //you must be a properties object
-            //either you have a type, or you're an object
-            primePaths[objPath] = {type: this.node.type || "object"};
-          }
-        }
-        
-
-      })
-
-      // self.log("\n\tprimaryPaths: ".cyan, primePaths);
-
-      self.primaryPaths[type] = primePaths;
-      self.typeProperties[type] = props;
-
-    }
-    function hasNonKeywords(obj)
-    {
-      var hasNonKeywords = false;
-        
-      if(Array.isArray(obj))
-      {
-        //loop through object to grab keys
-        for(var i=0; i < obj.length; i++)
-        {
-          var iKey = obj[i];
-          //check if you're not a keyword
-          if(!self.keywordRegExp.test(iKey))
-          {
-            //just one is enough
-            hasNonKeywords = true;
-            break;
-          }
-        }
-      }
-      else
-      {
-        for(var iKey in obj)
-        {
-          if(!self.keywordRegExp.test(iKey))
-          {
-            //just one is enough
-            hasNonKeywords = true;
-            break;
-          }
-        }
-      }
-
-      return hasNonKeywords;           
-    }
-
-  //handle everything associated with adding a schema
-    function checkSchemaErrors(schemaJSON)
-    {
-
-      //check against the proper schema definition
-      // var vck = self.validator.validateMultiple(schemaJSON, schemaSpec, true);
-       var valCheck = self.validateFunction.apply(self.validator, [schemaJSON, schemaSpec, true]);
-       
-       //grab all possible errors
-       var checkErrors = {length: 0};
-       var checkWarnings = {length: 0};
-
-       //if we're valid -- which we almost certainly are -- just keep going
-       if(!valCheck.valid)
-       {
-          //let it be known -- this is a weird error
-          self.log("Invalid from v4 JSON schema perspective: ", valCheck[errorKey]);
-
-          checkErrors["root"] = valCheck[errorKey];
-          checkErrors.length++;
-
-          //not valid, throw it back
-          return checkErrors;
-       }
-
-
-       //make sure we have some properties -- otherwise there is literally no validation/
-       //during the move process, this is overridden, but it's a good check nonetheless
-       if(!schemaJSON.properties && !schemaJSON.items)
-       {
-          checkErrors["root"] = "No properties/items defined at root. Schema has no validation without properties!";
-          checkErrors.length++;
-       }
-
-       //going to need to traverse our schema object
-       var tJSON = traverse(schemaJSON);
-
-       tJSON.forEach(function(node)
-       {
-        //skip the root please
-        if(this.isRoot || this.path.join(pathDelim).indexOf('required') != -1)
-          return;
-
-        //this should be a warning
-        if(!self.requireByDefault && !this.isLeaf && !this.node.required)
-        {
-            //if you don't have a required object, then you're gonna have a bad time
-            //this is a warning
-            checkWarnings[this.path.join(pathDelim)] = "warning: if you disable requireByDefault and don't put require arrays, validation will ignore those properties.";
-            checkWarnings.length++;
-
-        }
-        if(this.key == "properties" && this.node.properties)
-        {
-           checkErrors[this.path.join(pathDelim)] = "Properties inside properties is meaningless.";
-           checkErrors.length++;
-        }
-        if(this.key == "type" && typeof this.node != "string")
-        {
-            //for whatever reason, there is a type defined, but not a string in it's place? Waa?
-            checkErrors[this.path.join(pathDelim)] = "Types must be string";
-            checkErrors.length++;
-        }
-        if(this.key == "type" && !self.typeRegExp.test(this.node.toLowerCase()))
-        {
-           checkErrors[this.path.join(pathDelim)] = "Types must be one of " + self.validTypes + " not " + this.node;
-           checkErrors.length++;
-        }
-        if(this.isLeaf)
-        {
-          //if you don't have a type, and there is no ref object
-          if(!this.parent.node.properties && (this.key != "type" && this.key != "$ref") && !this.parent.node.type && !this.parent.node["$ref"])
-          {
-              checkErrors[this.path.join(pathDelim)] = "Object doesn't have any properties, a valid type, or a reference, therefore it is invalid in the WIN spec.";
-              checkErrors.length++;
-          }
-        }
-        //not a leaf, you don't have a reference
-        if(!self.allowAnyObjects && !this.isLeaf && !this.node["$ref"] )
-        {
-          //special case for items -- doesn't apply
-          if(this.node.type == "object" && this.key != "items")
-          {
-            //we're going to check if the list of keys to follow have any non keywords
-            //for instance if {type: "object", otherThing: "string"} keys = type, otherThing
-            //if instead it's just {type : "object", required : []}, keys = type, required 
-            //notice that the top has non-keyword keys, and the bottom example does not 
-            //we're looking for the bottom example and rejecting it
-            var bHasNonKeywords = hasNonKeywords(this.keys);
-            
-            //if you ONLY have keywords -- you don't have any other object types
-            //you are a violation of win spec and you allow any object or array to be passed in
-            if(!bHasNonKeywords){
-              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
-              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'object' type with no inner properties";
-              checkErrors.length++;
-            }
-          }
-          else if(this.node.type == "array")
-          {
-            //if you are an array and you have no items -- not allowed!
-            if(!this.node.items){
-              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
-              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no inner items";
-              checkErrors.length++;
-            }
-            else
-            {
-              //if you have a ref -- you're okay for us!
-              var bIemsHaveNonKey = this.node.items["$ref"] || this.node.items["type"] || hasNonKeywords(this.node.items.properties || {});
-               if(!bIemsHaveNonKey){
-                // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
-                checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no non-keyword inner items";
-                checkErrors.length++;
-              }
-            }
-          }
-        
-        }
-        //if you're an array
-        if(this.node.type == "array")
-        {
-          //grab your items
-          var items = this.node.items;
-          if(!items && !self.allowAnyObjects)
-          {
-             checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off for arrays, therefore you cannot simple have an 'array' type with no inner items";
-              checkErrors.length++;
-          }
-          else
-          {
-            items = items || {};
-            //we have items -- we shouldn't have a reference type && other items
-            if(items.properties && items["$ref"])
-            {
-              checkErrors[this.path.join(pathDelim)] = "Array items in WIN cannot have properties AND a reference type. One or the other.";
-              checkErrors.length++;
-            }
-          }
-        }
-
-
-       });
-
-       if(checkErrors.length || checkWarnings.length)
-        return {errors: checkErrors, warnings: checkWarnings};
-      else
-        return null;
-
-    }
-
-    self.stripObjectPath = function(path)
-    {
-      //obj path will be returned
-      var objectPath = [];
-
-      //travere this path, yo
-      traverse(path).forEach(function()
-      {
-        //no routes including properties or items -- made up schema info!
-        if(!this.isRoot && (this.node != "properties" && this.node != "items"))
-          objectPath.push(this.node);
-      });
-
-      return objectPath.join(pathDelim);
-    }
-
-    //storing the references inside of a schema object (if we don't already know them)
-    function parseSchemaReferences(schemaJSON)
-    {
-    	//first we wrap our object with traverse methods
-    	var tJSON = traverse(schemaJSON);
-
-    	var references = {};
-
-    	self.log('--  Parsing refs -- ');
-      // self.log(schemaJSON);
-    	//now we step through pulling the path whenever we hit a reference
-    	tJSON.forEach(function(node)
-    	{
-    		//we are at a reference point
-        //we make an exception for arrays -- since the items object can hold references!
-        if(this.node["$ref"] && (this.key == "items" || !self.keywordRegExp.test(this.key)))
-    		// if(this.isLeaf && this.key == "$ref")
-    		{
-    			//todo logic for when it's "oneOf" or other valid JSON schema things
-    			var fullPath = this.path.join(pathDelim);//this.path.slice(0, this.path.length-1).join(pathDelim);
-    			var referenceType = this.node["$ref"];
-
-          
-          var objectPath = self.stripObjectPath(this.path);
-
-          //pull the "items" piece out of the path -- otherwise, if you're just a normal object -- it's the same as fullPath
-          var typePath = this.key == "items" ? this.path.slice(0, this.path.length-1).join(pathDelim) : fullPath;
-
-
-
-    			if(references[fullPath])
-    			{
-    				throw new Error("Not yet supported reference behavior, arrays of references: ", fullPath);
-    			}
-
-          //assuming type is defined here!
-    			references[fullPath] = {schemaType: referenceType, schemaPath: fullPath, objectPath: objectPath, typePath: typePath};
-          self.log(self.log.testing, 'Reference detected @ '+fullPath+': ', references[fullPath]);
-    		}
-    	});
-
-    	self.log("-- Full refs -- ", references);
-
-    	return references;
-    } 
-
-    function storeSchemaReferences(type, schemaJSON)
-    {
-    	self.schemaReferences[type] = parseSchemaReferences(schemaJSON);
-
-      self.requiredReferences[type] = {};
-
-      for(var path in self.schemaReferences[type])
-      {
-        var schemaInfo = self.schemaReferences[type][path];
-        var refType = schemaInfo.schemaType;
-        var aReqRefs = self.requiredReferences[type][refType];
-
-        if(!aReqRefs)
-        {
-          aReqRefs = [];
-          self.requiredReferences[type][refType] = aReqRefs;
-        }
-        //value is the reference type 
-        aReqRefs.push(schemaInfo);
-      }
-
-
-      //now we know all the references, their paths, and what type needs what references
-    }
-    function moveAllToProperties(tJSON)
-    {
-       tJSON.forEach(function(node)
-       {          
-
-          // self.log("Investigating: ", this.key, " @ ", this.path.join(pathDelim), " all keys: ", this.keys);
-          //for all non-arrays and non-leafs and non-properties object -- move to a properties object if not a keyword!
-          if(!this.isLeaf && this.key != "properties" && !Array.isArray(this.node))
-          {
-
-            //movement dpeends on what type you are -- arrays move to items, while objects move to properties
-            var moveLocation = "properties";
-            if(this.node.type == "array")
-              moveLocation = "items";
-
-            // self.log('Movement: ', this.key, " @ ", this.path.join(pathDelim) + " : ", this.node);
-            // self.log("Move to : ".green + moveLocation);
-
-
-            // self.log("Move innitiated: ".magenta, this.node);
-            // self.log('Original node: '.green, node);
-            var empty = true;
-            var move = {};
-            //any key that isn't one of our keywords is getting moved inside!
-            for(var key in this.node){
-                if(!self.keywordRegExp.test(key)){
-                  // self.log('Moving key @ ', this.path.join(pathDelim) || "Is root? ", " : ", this.key || this.isRoot); 
-                  move[key] = this.node[key];
-                  empty = false;
-                }
-            }
-
-            //don't move nothing derrr
-            if(!empty)
-            {
-               // self.log('Moving: '.red, move);
-
-              //create proeprties if it doesn't exist
-              node[moveLocation] = node[moveLocation] || {};
-
-              for(var key in move)
-              {
-                //move to its new home
-                node[moveLocation][key] = move[key];
-                //remove from previous location 
-                delete node[key];
-              }
-
-              //make sure to update, thank you
-              this.update(node);
-
-              //we need to investigate the newly created properties/items object -- to continue down the rabbit hole
-              this.keys.push(moveLocation);
-            }
-           
-
-          }
-       });
-    }
-    function addWINTypes(schemaJSON, options)
-    {
-      for(var key in defaultWINAdd)
-      {
-        var winAdd = defaultWINAdd[key];
-        
-        //if it's just a shallow string -- add it directly
-        if(typeof winAdd == "string")
-          schemaJSON[key] = winAdd;
-        else //otehrwise, we should clone the larger object
-          schemaJSON[key] = traverse(defaultWINAdd[key]).clone();
-      }
-    }
-    function appendSchemaInformation(schemaJSON, options)
-    {
-      //add in default win types
-      if(!options.skipWINAdditions)
-        addWINTypes(schemaJSON, options);
-
-      //build a traverse object for navigating and updating the object
-      var tJSON = traverse(schemaJSON);
-
-      //step one convert string to types
-      tJSON.forEach(function(node)
-      {
-        var needsUpdate = false;
-          //if you are a leaf -- and you only dictate the type e.g. string/number/array etc -- we'll convert you to proper type
-        if(this.isLeaf && typeof this.node == "string")
-        {
-          //if the key is not a known keyword, and the node string is a proper type
-          if(!self.keywordRegExp.test(this.key) && self.typeRegExp.test(node.toLowerCase()))
-          {
-            //node is a type! make sure it's a lower case type being stored.
-            node = {type: node.toLowerCase()};
-            needsUpdate = true;
-          }
-        }
-
-        if(this.node)
-        {
-
-         if(this.node.items && !this.node.type)
-          {
-            this.node.type = "array";
-            needsUpdate = true;
-          }
-
-          //rewrite {type : "array", "$ref" : "something"} => {type : "array", items : {"$ref" : "something"}}
-          if(this.node.type == "array" && this.node["$ref"])
-          {
-            this.node.items = this.node.items || {};
-            this.node.items["$ref"] = this.node["$ref"];
-            delete this.node["$ref"];
-            needsUpdate = true;
-          }
-
-        }
-
-
-        if(needsUpdate)
-          this.update(node);
-
-      })
-
-      //update location of objects to match validation issues
-      //json schema won't validate outside of properties object -- which some people may forget
-      //this is basically a correct method
-      moveAllToProperties(tJSON);
-
-      // var util = require('util');
-      // self.log("Post move schema: ".cyan, util.inspect(schemaJSON, false, 10));
-
-      tJSON.forEach(function(node)
-      {
-        var needsUpdate = false;
-
-
-       
-          //if we aren't a leaf object, we are a full object
-          //therefore, we must have required (since we're in default mode)
-          //since we cover the properties object inside, we don't need to go indepth for that key too!
-        if(self.requireByDefault && !this.isLeaf && !this.node.required && !Array.isArray(this.node))
-        {
-          //the require needs to be filled iwth all the properties of this thing, except
-          //for anything defined by v4 json schema -- so we run a regex to reject those keys
-          var reqProps = [];
-
-          // self.log("Not leaf: ".magenta, this.node, " Key : ", this.key);
-
-          //do not do this if you're in the properties object
-          //since the prop keys belong to the PARENT not the node
-          if(this.key != "properties")
-          {
-            for(var key in this.node){
-              if(!self.keywordRegExp.test(key)){
-              // self.log('Key added: '.red, key);
-
-                reqProps.push(key);
-              }
-            }
-            // self.log('Post not props: '.blue, reqProps);
-          }
-          
-          //for every object, you can also have a properties object too
-          //required applies to the subling property object as well
-          //so we loop through the properties object as well
-         for(var key in this.node.properties){
-            if(!self.keywordRegExp.test(key)){
-              reqProps.push(key);
-            }
-          }
-
-          if(reqProps.length)
-          {
-            node.required = reqProps;
-            needsUpdate = true;
-          }        
-        }
-
-     
-       if(needsUpdate){
-          // self.log('New required - : ', this.node, ' : ', reqProps);
-          this.update(node);
-        }
-      });
-
-
-
-        // self.log("--post traverse -- ", schemaJSON);
-
-    }
-
-	return self;
-}
-
-
+winutils.math = require('optimuslime~win-utils@0.1.1/math/winmath.js');
 
 
 });
 
-require.register("optimuslime~win-schema@0.0.5-4/lib/schemaSpec.js", function (exports, module) {
-module.exports = 
+require.register("optimuslime~win-utils@0.1.1/uuid/cuid.js", function (exports, module) {
+/**
+ * cuid.js
+ * Collision-resistant UID generator for browsers and node.
+ * Sequential for fast db lookups and recency sorting.
+ * Safe for element IDs and server-side lookups.
+ *
+ * Extracted from CLCTR
+ * 
+ * Copyright (c) Eric Elliott 2012
+ * MIT License
+ */
+//From: https://github.com/dilvie/cuid
+
+//note that module.exports is at the end -- it exports the api variable
+
+/*global window, navigator, document, require, process, module */
+var c = 0,
+    blockSize = 4,
+    base = 36,
+    discreteValues = Math.pow(base, blockSize),
+
+    pad = function pad(num, size) {
+      var s = "000000000" + num;
+      return s.substr(s.length-size);
+    },
+
+    randomBlock = function randomBlock() {
+      return pad((Math.random() *
+            discreteValues << 0)
+            .toString(base), blockSize);
+    },
+
+    api = function cuid() {
+      // Starting with a lowercase letter makes
+      // it HTML element ID friendly.
+      var letter = 'c', // hard-coded allows for sequential access
+
+        // timestamp
+        // warning: this exposes the exact date and time
+        // that the uid was created.
+        timestamp = (new Date().getTime()).toString(base),
+
+        // Prevent same-machine collisions.
+        counter,
+
+        // A few chars to generate distinct ids for different
+        // clients (so different computers are far less
+        // likely to generate the same id)
+        fingerprint = api.fingerprint(),
+
+        // Grab some more chars from Math.random()
+        random = randomBlock() + randomBlock() + randomBlock() + randomBlock();
+
+        c = (c < discreteValues) ? c : 0;
+        counter = pad(c.toString(base), blockSize);
+
+      c++; // this is not subliminal
+
+      return  (letter + timestamp + counter + fingerprint + random);
+    };
+
+api.slug = function slug() {
+  var date = new Date().getTime().toString(36),
+    counter = c.toString(36).slice(-1),
+    print = api.fingerprint().slice(0,1) +
+      api.fingerprint().slice(-1),
+    random = randomBlock().slice(-1);
+
+  c++;
+
+  return date.slice(2,4) + date.slice(-2) + 
+    counter + print + random;
+};
+
+//fingerprint changes based on nodejs or component setup
+var isBrowser = (typeof process == 'undefined');
+
+api.fingerprint = isBrowser ?
+  function browserPrint() {
+      return pad((navigator.mimeTypes.length +
+          navigator.userAgent.length).toString(36) +
+          api.globalCount().toString(36), 4);
+  }
+: function nodePrint() {
+  var os = require('os'),
+
+  padding = 2,
+  pid = pad((process.pid).toString(36), padding),
+  hostname = os.hostname(),
+  length = hostname.length,
+  hostId = pad((hostname)
+    .split('')
+    .reduce(function (prev, char) {
+      return +prev + char.charCodeAt(0);
+    }, +length + 36)
+    .toString(36),
+  padding);
+return pid + hostId;
+};
+
+api.globalCount = function globalCount() {
+    // We want to cache the results of this
+    var cache = (function calc() {
+        var i,
+            count = 0;
+
+            //global count only ever called inside browser environment
+            //lets loop through and count the keys in window -- then cahce that as part of our fingerprint
+        for (i in window) {
+            count++;
+        }
+
+        return count;
+    }());
+
+    api.globalCount = function () { return cache; };
+    return cache;
+};
+
+api.isLessThan = function(first, second)
 {
-    "id": "http://json-schema.org/draft-04/schema#",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "description": "Core schema meta-schema",
-    "definitions": {
-        "schemaArray": {
-            "type": "array",
-            "minItems": 1,
-            "items": { "$ref": "#" }
-        },
-        "positiveInteger": {
-            "type": "integer",
-            "minimum": 0
-        },
-        "positiveIntegerDefault0": {
-            "allOf": [ { "$ref": "#/definitions/positiveInteger" }, { "default": 0 } ]
-        },
-        "simpleTypes": {
-            "enum": [ "array", "boolean", "integer", "null", "number", "object", "string" ]
-        },
-        "stringArray": {
-            "type": "array",
-            "items": { "type": "string" },
-            "minItems": 1,
-            "uniqueItems": true
-        }
-    },
-    "type": "object",
-    "properties": {
-        "id": {
-            "type": "string",
-            "format": "uri"
-        },
-        "$schema": {
-            "type": "string",
-            "format": "uri"
-        },
-        "title": {
-            "type": "string"
-        },
-        "description": {
-            "type": "string"
-        },
-        "default": {},
-        "multipleOf": {
-            "type": "number",
-            "minimum": 0,
-            "exclusiveMinimum": true
-        },
-        "maximum": {
-            "type": "number"
-        },
-        "exclusiveMaximum": {
-            "type": "boolean",
-            "default": false
-        },
-        "minimum": {
-            "type": "number"
-        },
-        "exclusiveMinimum": {
-            "type": "boolean",
-            "default": false
-        },
-        "maxLength": { "$ref": "#/definitions/positiveInteger" },
-        "minLength": { "$ref": "#/definitions/positiveIntegerDefault0" },
-        "pattern": {
-            "type": "string",
-            "format": "regex"
-        },
-        "additionalItems": {
-            "anyOf": [
-                { "type": "boolean" },
-                { "$ref": "#" }
-            ],
-            "default": {}
-        },
-        "items": {
-            "anyOf": [
-                { "$ref": "#" },
-                { "$ref": "#/definitions/schemaArray" }
-            ],
-            "default": {}
-        },
-        "maxItems": { "$ref": "#/definitions/positiveInteger" },
-        "minItems": { "$ref": "#/definitions/positiveIntegerDefault0" },
-        "uniqueItems": {
-            "type": "boolean",
-            "default": false
-        },
-        "maxProperties": { "$ref": "#/definitions/positiveInteger" },
-        "minProperties": { "$ref": "#/definitions/positiveIntegerDefault0" },
-        "required": { "$ref": "#/definitions/stringArray" },
-        "additionalProperties": {
-            "anyOf": [
-                { "type": "boolean" },
-                { "$ref": "#" }
-            ],
-            "default": {}
-        },
-        "definitions": {
-            "type": "object",
-            "additionalProperties": { "$ref": "#" },
-            "default": {}
-        },
-        "properties": {
-            "type": "object",
-            "additionalProperties": { "$ref": "#" },
-            "default": {}
-        },
-        "patternProperties": {
-            "type": "object",
-            "additionalProperties": { "$ref": "#" },
-            "default": {}
-        },
-        "dependencies": {
-            "type": "object",
-            "additionalProperties": {
-                "anyOf": [
-                    { "$ref": "#" },
-                    { "$ref": "#/definitions/stringArray" }
-                ]
-            }
-        },
-        "enum": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true
-        },
-        "type": {
-            "anyOf": [
-                { "$ref": "#/definitions/simpleTypes" },
-                {
-                    "type": "array",
-                    "items": { "$ref": "#/definitions/simpleTypes" },
-                    "minItems": 1,
-                    "uniqueItems": true
-                }
-            ]
-        },
-        "allOf": { "$ref": "#/definitions/schemaArray" },
-        "anyOf": { "$ref": "#/definitions/schemaArray" },
-        "oneOf": { "$ref": "#/definitions/schemaArray" },
-        "not": { "$ref": "#" }
-    },
-    "dependencies": {
-        "exclusiveMaximum": [ "maximum" ],
-        "exclusiveMinimum": [ "minimum" ]
-    },
-    "default": {}
+  var fParse= parseInt(first);
+  var sParse = parseInt(second);
+  if(isNaN(fParse) && isNaN(sParse))
+  {
+     //tease apart first, second to determine which ID came first
+    //counter + fingerprint + random = 6 blocks of 4 = 24
+    var dateEnd = 6*blockSize;
+    var counterEnd = 5*blockSize;
+    var charStart = 1;
+
+    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
+    var firstTime = parseInt(first.slice(charStart, first.length - dateEnd), base);
+    //ditto for counter
+    var firstCounter = parseInt(first.slice(first.length - dateEnd, first.length - counterEnd),base);
+
+    //convert the base-36 time string to base 10 number -- parseint handles this by sending in the original radix
+    var secondTime =  parseInt(second.slice(charStart, second.length - dateEnd), base);
+    
+    //ditto for counter 
+    var secondCounter = parseInt(second.slice(second.length - dateEnd, second.length - counterEnd), base);
+
+    //either the first time is less than the second time, and we answer this question immediately
+    //or the times are equal -- then we pull the lower counter
+    //techincially counters can wrap, but this won't happen very often AND this is all for measuring disjoint/excess behavior
+    //the time should be enough of an ordering principal for this not to matter
+    return firstTime < secondTime || (firstTime == secondTime && firstCounter < secondCounter);
+
+  }
+  else if(isNaN(sParse))
+  {
+    //if sParse is a string, then the first is a number and the second is a string UUID
+    //to maintain backwards compat -- number come before strings in neatjs ordering
+    return true;
+  }//both are not NaN -- we have two numbers to compare
+  else
+  {
+    return fParse < sParse;
+  }
 }
+
+//we send out API
+module.exports = api;
+
+
+
+
 });
 
-require.register("optimuslime~win-schema@0.0.5-4", function (exports, module) {
-//pull in the validating workhorse -- checks schema and stuff
-var tv4 = require("geraintluff~tv4@master");
-//pull in traverse object from the repo please!
-var traverse = require("optimuslime~traverse@master");
+require.register("optimuslime~win-utils@0.1.1/math/winmath.js", function (exports, module) {
 
-//pull in the object that knows what all schema look like!
-var schemaSpec = require("optimuslime~win-schema@0.0.5-4/lib/schemaSpec.js");
+var mathHelper = {};
 
-var addSchemaSupport = require("optimuslime~win-schema@0.0.5-4/lib/addSchema.js");
+module.exports = mathHelper;
 
-module.exports = winSchema;
-
-function winSchema(winback, globalConfiguration, localConfiguration)
+mathHelper.next = function(max)
 {
-	//load up basic win-module stufffff
-	var self = this;
-  self.winFunction = "schema";
-  self.log = winback.getLogger(self);
-
-  //limited only by global -- or we could limit our own verboseness
-  self.log.logLevel = localConfiguration.logLevel || self.log.normal;
-
-  self.pathDelimiter = "///";
-
-  //this creates "internalAddSchema" to handle the weighty add logic
-  //need to thoroughly test and modify incoming schema to align with 
-  //logical schema setup for WIN
-  addSchemaSupport(self, globalConfiguration, localConfiguration);
-
-	self.validator = tv4.freshApi();
-
- //set the backbone and our logging function
-  self.bbEmit = winback.getEmitter(self);
-
-  //config setups
-
-  self.multipleErrors = (localConfiguration.multipleErrors == true || localConfiguration.multipleErrors == "true");
-  //by default you can have unknown keys -- the server environment may desire to change this
-  //if you don't want to be storing extra info
-  //by default, on lockdown -- better that way -- no sneaky stuff
-  self.allowUnknownKeys = localConfiguration.allowUnknownKeys || false;
-
-  //all keys are required by default -- this adds in required objects for everything
-  self.requireByDefault = localConfiguration.requireByDefault || true;
-
-  //do we allow properties with just the type "object" or "array"
-  //this would allow ANY data to be fit in there with no validation checks (other than it is an object or array)
-  //shouldn't allow this because people could slip in all sorts of terrible things without validation
-  self.allowAnyObjects = localConfiguration.allowAnyObjects || false;
-
-  self.eventCallbacks = function()
-  {
-        var callbacks = {};
-
-        //add callbacks to the object-- these are the functions called when the full event is emitted
-        callbacks["schema:validate"] = self.validateData;
-        callbacks["schema:validateMany"] = self.validateDataArray;
-        callbacks["schema:addSchema"] = self.addSchema;
-        callbacks["schema:getSchema"] = self.getSchema;
-        callbacks["schema:getSchemaReferences"] = self.getSchemaReferences;
-        callbacks["schema:getFullSchema"] = self.getFullSchema;
-        callbacks["schema:getSchemaProperties"] = self.getSchemaProperties;
-
-        //these are for deealing with pulling references from a specific object -- it's easier done in this module
-        callbacks["schema:getReferencesAndParents"] = self.getReferencesAndParents;
-        callbacks["schema:replaceParentReferences"] = self.replaceParentReferences;
-
-        //send back our callbacks
-        return callbacks;
-  }
-  self.requiredEvents = function()
-  {
-  	//don't need no one for nuffin'
-  	return [];
-  }
-
-  self.initialize = function(done)
-  {
-  	setTimeout(function()
-  	{
-  		done();
-  	}, 0);
-  }
-
-    //cache all our schema by type
-    self.allSchema = {};
-    self.schemaReferences = {};
-    self.requiredReferences = {};
-    self.fullSchema = {};
-    self.primaryPaths = {};
-    self.typeProperties = {};
-
-    self.validTypes = "\\b" + schemaSpec.definitions.simpleTypes.enum.join('\\b|\\b') + "\\b"; //['object', 'array', 'number', 'string', 'boolean', 'null'].join('|');
-    self.typeRegExp = new RegExp(self.validTypes);
-
-    self.specKeywords = ["\\$ref|\\babcdefg"];
-    for(var key in schemaSpec.properties)
-      self.specKeywords.push(key.replace('$', '\\$'));
-
-    //join using exact phrasing checks
-    self.specKeywords = self.specKeywords.join('\\b|\\b') + "\\b";
-    self.keywordRegExp = new RegExp(self.specKeywords);
-
-    self.log(self.log.testing, "--Specced types: ".green, self.validTypes);
-    self.log(self.log.testing, "--Specced keywords: ".green, self.specKeywords);
-
-    self.validateFunction = (self.multipleErrors ? self.validator.validateMultiple : self.validator.validateResult);
-    self.errorKey = self.multipleErrors ? "errors" : "error";
-
-    function listTypeIssues(type)
-    {
-      if(!self.allSchema[type]){
-        return "Schema type not loaded: " + type;
-      }
-
-      //we have to manually detect missing references -- since the validator is not concerned with such things
-      //FOR WHATEVER REASON
-      var missing = self.validator.getMissingUris();
-      for(var i=0; i < missing.length; i++)
-      {
-        //if we have this type inside our refernces for this object, it means we're missing a ref schema for this type!
-        if(self.requiredReferences[type][missing[i]])
-        {
-          return "Missing at least 1 schema definition: " + missing[i];
-        }
-      }
-    }
-
-    function internalValidate(schema, object)
-    {
-      //validate against what type?
-      var result = self.validateFunction.apply(self.validator, [object, schema, true, !self.allowUnknownKeys]);
-
-       //if it's not an array, make it an array
-      //if it's empty, make it a damn array
-      var errors = result[self.errorKey];
-
-      //if you are multiple errors, then you are a non-undefined array, just return as usual
-      //otherwise, you are an error but not in an array
-      //if errors is undefined then this will deefault to []
-      errors = (errors && !Array.isArray(errors)) ? [errors] : errors || [];
-
-      return {valid : result.valid, errors : errors};
-    }
-    self.validateDataArray = function(type, objects, finished)
-    {
-      var typeIssues = listTypeIssues(type);
-
-      //stop if we have type issues
-      if(typeIssues)
-      {
-        finished(typeIssues);
-        return;
-      }
-      else if(typeof type != "string" || !Array.isArray(objects))
-      {
-        finished("ValidateMany requires type [string], objects [array]");
-        return;
-      }
-
-      var schema = self.validator.getSchema(type);
-      // self.log('validate many against: ', schema);
-
-      var allValid = true;
-      var allErrors = [];
-      for(var i=0; i < objects.length; i++)
-      {
-        var result = internalValidate(schema, objects[i]);
-
-        if(!result.valid){
-          allValid = false;
-          allErrors.push(result.errors);
-        }
-        else //no error? just push empty array!
-          allErrors.push([]);
-      }
-
-      //if we have errors during validation, they'll be passed on thank you!
-      //if you're valid, and there are no errors, then don't send nuffin
-      finished(undefined, allValid, (!allValid ? allErrors : undefined));
-    }
-    self.validateData = function(type, object, finished)
-    {
-      var typeIssues = listTypeIssues(type);
-
-      //stop if we have type issues
-      if(typeIssues)
-      {
-        finished(typeIssues);
-        return;
-      }
-
-      //log object being checked
-      self.log("Validate: ", object);
-
-      //now we need to validate, we definitely have all the refs we need
-      var schema = self.validator.getSchema(type);
-
-      //log what's being validated
-      self.log('validate against: ', schema);
-    	 
-      var result = internalValidate(schema, object);
-
-      //if we have errors during validation, they'll be passed on thank you!
-      //if you're valid, and there are no errors, then don't send nuffin
-      finished(undefined, result.valid, (result.errors.length ? result.errors : undefined));
-    }
-
-    //todo: pull reference objects from schema -- make sure those exist as well?
-   	self.addSchema = function(type, schemaJSON, options, finished)
-   	{
-      //pass args into internal adds
-      return self.internalAddSchema.apply(self, arguments);
-   	}
-
-   	    //todo: pull reference objects from schema -- make sure those exist as well?
-   	self.getSchema = function(typeOrArray, finished)
-   	{   	
-      //did we request one or many?
-      var typeArray = typeOrArray;
-      if(typeof typeOrArray == "string")
-      {
-        //make single type to return
-        typeArray = [typeOrArray];
-      }
-
-      var refArray = [];
-      for(var i=0; i < typeArray.length; i++)
-      {
-        var sType = typeArray[i];
-
-      //failed to get schema for some very odd reason?
-        if(!self.allSchema[sType]){
-          finished("Schema type not loaded: ", sType);
-          return;
-        }
-        //push our reference information as a clone
-        refArray.push(traverse(self.validator.getSchema(sType)).clone());
-        //if you hit an error -send back
-        if(self.validator.error){
-          finished(self.validator.error);
-          return;
-        }
-      }
-
-      //send the schema objects back
-      //send an array regardless of how many requested -- standard behavior
-      finished(undefined, refArray);    
-
-   	}
-
-   	self.getSchemaReferences = function(typeOrArray, finished)
-   	{
-      var typeArray = typeOrArray;
-      if(typeof typeOrArray == "string")
-      {
-        //make single type to return
-        typeArray = [typeOrArray];
-      }
-
-      var refArray = [];
-      for(var i=0; i < typeArray.length; i++)
-      {
-        var sType = typeArray[i];
-
-        if(!self.allSchema[sType]){
-          finished("Schema type not loaded: ", sType);
-          return;
-        }
-        //push our reference information as a clone
-        refArray.push(traverse(self.requiredReferences[sType]).clone());
-      }
-
-  		//send the refernece objects back
-      //if you are a single object, just send the one -- otherwise send an array
-      finished(undefined, refArray); 		
-   	}
-
-    var buildFullSchema = function(type)
-    {
-      var schema = self.validator.getSchema(type);
-      var tSchema = traverse(schema);
-
-      var clone = tSchema.clone();
-      var tClone = traverse(clone);
-      var references = self.schemaReferences[type];
-
-      for(var path in references)
-      {
-        //we get the type of reference
-        var schemaInfo = references[path];
-        var refType = schemaInfo.schemaType;
-
-        //this is recursive behavior -- itwill call buidl full schema if not finished yet
-        var fullRefSchema = internalGetFullSchema(refType);
-
-        if(!fullRefSchema)
-          throw new Error("No schema could be created for: " + refType + ". Please check it's defined.");
-
-        //now we ahve teh full object to replace
-        var tPath = path.split(self.pathDelimiter);
-
-        // self.log(self.log.testing, 'Path to ref: ', tPath, " replacement: ", fullRefSchema);
-
-        //use traverse to set the path object as our full ref object
-        tClone.set(tPath, fullRefSchema);
-      }
-
-      // self.log(self.log.testing, "Returning schema: ", type, " full: ", clone);
-
-      return clone;
-    }
-    var inprogressSchema = {};
-
-    function internalGetFullSchema(type)
-    {
-      if(inprogressSchema[type])
-      {
-          throw new Error("Infinite schema reference loop: " + JSON.stringify(Object.keys(inprogressSchema)));    
-      }
-
-      inprogressSchema[type] = true;
-
-       //if we don't have a full type yet, we build it
-      if(!self.fullSchema[type])
-      {
-        //need to build a full schema object
-        var fSchema = buildFullSchema(type);
-
-        self.fullSchema[type] = fSchema;
-      }
-
-      //mark the in progress as false!
-      delete inprogressSchema[type];
-
-      return self.fullSchema[type];
-    }
-
-    self.getFullSchema = function(typeOrArray, finished)
-    { 
-      var typeArray = typeOrArray;
-      if(typeof typeOrArray == "string")
-      {
-        //make single type to return
-        typeArray = [typeOrArray];
-      }
-
-      var fullArray = [];
-      for(var i=0; i < typeArray.length; i++)
-      {
-        var sType = typeArray[i];
-
-         if(!self.allSchema[sType]){
-          finished("Schema type not loaded: ", sType);
-          return;
-        }
-
-        try
-        {
-          //get the full schema from internal function
-          //throws error if something is wrong
-          var fullSchema = internalGetFullSchema(sType);
-         
-          //pull the full object -- guaranteed to exist -- send a clone
-           fullArray.push(traverse(fullSchema).clone());
-        }
-        catch(e)
-        {
-          //send the error if we have one
-          finished(e);
-          return;
-        }
-      }
-
-      //send the refernece objects back
-      //if you are a single object, just send the one -- otherwise send an array
-      finished(undefined, fullArray);
-    }
-
-    self.getSchemaProperties = function(typeOrArray, finished)
-    {
-       var typeArray = typeOrArray;
-      if(typeof typeOrArray == "string")
-      {
-        //make single type to return
-        typeArray = [typeOrArray];
-      }
-
-      var propArray = [];
-      for(var i=0; i < typeArray.length; i++)
-      {
-        var sType = typeArray[i];
-
-         if(!self.allSchema[sType]){
-          finished("Schema type not loaded: ", sType);
-          return;
-        }
-
-        //get our schema properties
-        propArray.push({type: sType, primaryPaths: traverse(self.primaryPaths[sType]).clone(), properties: traverse(self.typeProperties[sType]).clone()});
-
-      }
-
-
-      //send the refernece objects back
-      //if you are a single object, just send the one -- otherwise send an array
-      finished(undefined, propArray);
-    }
-
-    //we're going to clone the object, then replace all of the reference wids with new an improved parents
-    self.replaceParentReferences = function(type, object, parentMapping, finished)
-    {
-      var tClone = traverse(object).clone();
-
-      traverse(tClone).forEach(function(node)
-      {
-         //if we have a wid object and parents object -- likely we are a tracked reference
-        if(this.node.wid && this.node.parents)
-        {
-          var replaceParents = parentMapping[this.node.wid];
-
-          if(replaceParents)
-          {
-            //straight up replacement therapy yo
-            this.node.parents = replaceParents;
-
-            //then make sure to update and continue onwards!
-            this.update(this.node);
-          }
-        }
-      })
-
-      //we've replaced the innards of the object with a better future!
-      finished(undefined, tClone);
-    }
-
-    self.getReferencesAndParents = function(type, widObjects, finished)
-    {
-
-        //listed by some identifier, then the object, we need to look through the type, and pull references
-        var fSchema = internalGetFullSchema(type);
-        // self.log("Full schema: ", fSchema);
-        if(!fSchema)
-        {
-          finished("Full schema undefined, might be missing a reference type within " + type);
-          return;
-        } 
-        var widToParents = {};
-        var traverseObjects = {};
-
-        for(var wid in widObjects){
-          widToParents[wid] = {};
-          traverseObjects[wid] = traverse(widObjects[wid]);
-        }
-
-        
-        //for every wid object we see, we loop through and pull that 
-        traverse(fSchema).forEach(function(node)
-        {
-          // self.log("Node: ", this.node, "", " key: ", this.key);
-          //if we have a wid object and parents object -- likely we are a tracked reference
-          if(this.node.wid && this.node.parents)
-          {
-            //let's pull these bad boys our of our other objects
-            var pathToObject = self.stripObjectPath(this.path);
-            
-            //if you aren't root, split it up!
-            if(pathToObject != "")
-              pathToObject = pathToObject.split(self.pathDelimiter);
-
-            // self.log("\nKey before :", this.key, " node-p: ", this.parent.node, " path: ", this.path);
-            
-            var isArray = (this.key == "properties" && this.path[this.path.length - 2] == "items");
-            // self.log("Is array? : ", isArray);
-            for(var wid in traverseObjects)
-            {
-
-              var wtp = widToParents[wid];
-              var tob = traverseObjects[wid];
-
-
-              //fetch object from our traverse thing using this path
-              var arrayOrObject = tob.get(pathToObject);
-
-              // self.log("Path to obj: ", pathToObject, " get: ", arrayOrObject);
-
-              //grab wid to parent mappings, always cloning parent arrays
-              if(isArray)
-              {
-                for(var i=0; i < arrayOrObject.length; i++)
-                {
-                  var aobj = arrayOrObject[i];
-                  //map wid objects to parent wids always thank you
-                  wtp[aobj.wid] = aobj.parents.slice(0);
-                }
-              }
-              else
-                wtp[arrayOrObject.wid] = arrayOrObject.parents.slice(0);
-
-              //now we've aded a mapping from the objects wid to the parents for that wid
-
-            }
-          }
-        });
-
-        //we send back the wids of the original widObjects mapped to the wid internal reference && the corresponding parents
-        //so many damn layers -- it gets confusing
-        finished(undefined, widToParents);
-
-    }
-
-
-	return self;
-}
-
-
-
+    return Math.floor(Math.random()*max);
+};
 
 });
 
-require.modules["optimuslime-win-schema"] = require.modules["optimuslime~win-schema@0.0.5-4"];
-require.modules["optimuslime~win-schema"] = require.modules["optimuslime~win-schema@0.0.5-4"];
-require.modules["win-schema"] = require.modules["optimuslime~win-schema@0.0.5-4"];
+require.modules["optimuslime-win-utils"] = require.modules["optimuslime~win-utils@0.1.1"];
+require.modules["optimuslime~win-utils"] = require.modules["optimuslime~win-utils@0.1.1"];
+require.modules["win-utils"] = require.modules["optimuslime~win-utils@0.1.1"];
 
 
 require.register("optimuslime~win-gen@0.0.2-6", function (exports, module) {
 //need our general utils functions
-var winutils = require("optimuslime~win-utils@master");
-var extendModuleDefinitions = require("optimuslime~win-gen@0.0.2-6/lib/module/backbone.js");
-var traverse = require("optimuslime~traverse@master");
-var uuid = require("optimuslime~win-utils@master").cuid;
+var winutils = require('optimuslime~win-utils@master');
+var extendModuleDefinitions = require('optimuslime~win-gen@0.0.2-6/lib/module/backbone.js');
+var traverse = require('optimuslime~traverse@master');
+var uuid = require('optimuslime~win-utils@master').cuid;
 //for component: techjacker/q
-var Q = require("techjacker~q@master");
+var Q = require('techjacker~q@master');
 
 var cuid = winutils.cuid;
 var wMath = winutils.math;
@@ -17891,123 +11312,9 @@ require.modules["optimuslime~win-gen"] = require.modules["optimuslime~win-gen@0.
 require.modules["win-gen"] = require.modules["optimuslime~win-gen@0.0.2-6"];
 
 
-require.register("optimuslime~win-data@0.0.1-3", function (exports, module) {
-var request = require("visionmedia~superagent@master");
-
-module.exports = windata;
-
-
-function windata(backbone, globalConfig, localConfig)
-{
-	var self= this;
-
-	//need to make requests, much like win-publish
-	//pull in backbone info, we gotta set our logger/emitter up
-	var self = this;
-
-	self.winFunction = "data";
-
-	//this is how we talk to win-backbone
-	self.backEmit = backbone.getEmitter(self);
-
-	//grab our logger
-	self.log = backbone.getLogger(self);
-
-	//only vital stuff goes out for normal logs
-	self.log.logLevel = localConfig.logLevel || self.log.normal;
-
-	//we have logger and emitter, set up some of our functions
-
-	if(!globalConfig.server)
-		throw new Error("Global configuration requires server location and port")
-
-	self.hostname = globalConfig.server;
-	self.port = globalConfig.port;
-
-	//what events do we need?
-	//none for now, though in the future, we might have a way to communicate with foreign win-backbones as if it was just sending
-	//a message within our own backbone -- thereby obfuscating what is done remotely and what is done locally 
-	self.requiredEvents = function()
-	{
-		return [
-		];
-	}
-
-	//what events do we respond to?
-	self.eventCallbacks = function()
-	{ 
-		return {
-			"data:winPOST" : self.postWIN,
-			"data:winGET" : self.getWIN
-		};
-	}
-
-	 var baseWIN = function()
-	{
-		return self.hostname + (self.port ? ":" + self.port : "") + "/api";
-	}
-
-	self.getWIN = function(apiPath, queryObjects, resFunction)
-	{
-		var base = baseWIN();
-
-		if(typeof queryObjects == "function")
-		{
-		  resFunction = queryObjects;
-		  queryObjects = {};
-		}
-		else //make sure to always have at least an empty object
-		  queryObjects = queryObjects || {};
-
-		var qNotEmpty = false;
-		var queryAdditions = "?";
-		for(var key in queryObjects){
-		  if(queryAdditions.length > 1)
-		    queryAdditions += "&";
-
-		  qNotEmpty = true;
-		  queryAdditions += key + "=" + queryObjects[key];
-		} 
-		var fullPath = base + apiPath + (qNotEmpty ? queryAdditions : "");
-
-		self.log("Requesting get from: ",fullPath )
-		request
-		  .get(fullPath)
-		  // .send(data)
-		  .set('Accept', 'application/json')
-		  .end(resFunction);
-	}
-
-	self.postWIN = function(apiPath, data, resFunction)
-	{
-		var base = baseWIN();
-
-		var fullPath= base + apiPath;
-		self.log("Requesting post to: ",fullPath )
-
-		request
-		  .post(fullPath)
-		  .send(data)
-		  .set('Accept', 'application/json')
-		  .end(resFunction);
-	}
-
-
-	return self;
-}
-
-
-
-});
-
-require.modules["optimuslime-win-data"] = require.modules["optimuslime~win-data@0.0.1-3"];
-require.modules["optimuslime~win-data"] = require.modules["optimuslime~win-data@0.0.1-3"];
-require.modules["win-data"] = require.modules["optimuslime~win-data@0.0.1-3"];
-
-
 require.register("optimuslime~win-phylogeny@0.0.1-1", function (exports, module) {
 //this will help us navigate complicated json tree objects
-var traverse = require("optimuslime~traverse@master");
+var traverse = require('optimuslime~traverse@master');
 
 module.exports = winphylogeny;
 
@@ -18412,395 +11719,5345 @@ require.modules["optimuslime~win-phylogeny"] = require.modules["optimuslime~win-
 require.modules["win-phylogeny"] = require.modules["optimuslime~win-phylogeny@0.0.1-1"];
 
 
-require.register("component~event@0.1.4", function (exports, module) {
-var bind = window.addEventListener ? 'addEventListener' : 'attachEvent',
-    unbind = window.removeEventListener ? 'removeEventListener' : 'detachEvent',
-    prefix = bind !== 'addEventListener' ? 'on' : '';
+require.register("optimuslime~cppnjs@master", function (exports, module) {
+var cppnjs = {};
 
-/**
- * Bind `el` event `type` to `fn`.
- *
- * @param {Element} el
- * @param {String} type
- * @param {Function} fn
- * @param {Boolean} capture
- * @return {Function}
- * @api public
- */
+//export the cppn library
+module.exports = cppnjs;
 
-exports.bind = function(el, type, fn, capture){
-  el[bind](prefix + type, fn, capture || false);
-  return fn;
+//CPPNs
+cppnjs.cppn = require('optimuslime~cppnjs@master/networks/cppn.js');
+
+cppnjs.addAdaptable = function()
+{
+    require('optimuslime~cppnjs@master/extras/adaptableAdditions.js');
 };
 
-/**
- * Unbind `el` event `type`'s callback `fn`.
- *
- * @param {Element} el
- * @param {String} type
- * @param {Function} fn
- * @param {Boolean} capture
- * @return {Function}
- * @api public
- */
-
-exports.unbind = function(el, type, fn, capture){
-  el[unbind](prefix + type, fn, capture || false);
-  return fn;
+cppnjs.addPureCPPN = function()
+{
+    require('optimuslime~cppnjs@master/extras/pureCPPNAdditions.js');
 };
+
+cppnjs.addGPUExtras = function()
+{
+    //requires pureCPPN activations
+    cppnjs.addPureCPPN();
+    require('optimuslime~cppnjs@master/extras/gpuAdditions.js');
+};
+
+//add GPU extras by default
+cppnjs.addGPUExtras();
+
+
+
+
+
+//nodes and connections!
+cppnjs.cppnNode = require('optimuslime~cppnjs@master/networks/cppnNode.js');
+cppnjs.cppnConnection = require('optimuslime~cppnjs@master/networks/cppnConnection.js');
+
+//all the activations your heart could ever hope for
+cppnjs.cppnActivationFunctions = require('optimuslime~cppnjs@master/activationFunctions/cppnActivationFunctions.js');
+cppnjs.cppnActivationFactory = require('optimuslime~cppnjs@master/activationFunctions/cppnActivationFactory.js');
+
+//and the utilities to round it out!
+cppnjs.utilities = require('optimuslime~cppnjs@master/utility/utilities.js');
+
+//exporting the node type
+cppnjs.NodeType = require('optimuslime~cppnjs@master/types/nodeType.js');
+
+
+
 });
 
-require.modules["component-event"] = require.modules["component~event@0.1.4"];
-require.modules["component~event"] = require.modules["component~event@0.1.4"];
-require.modules["event"] = require.modules["component~event@0.1.4"];
+require.register("optimuslime~cppnjs@master/activationFunctions/cppnActivationFactory.js", function (exports, module) {
+var utils = require('optimuslime~cppnjs@master/utility/utilities.js');
+var cppnActivationFunctions = require('optimuslime~cppnjs@master/activationFunctions/cppnActivationFunctions.js');
+
+var Factory = {};
+
+module.exports = Factory;
+
+Factory.probabilities = [];
+Factory.functions = [];
+Factory.functionTable= {};
+
+Factory.createActivationFunction = function(functionID)
+{
+    if(!cppnActivationFunctions[functionID])
+        throw new Error("Activation Function doesn't exist!");
+    // For now the function ID is the name of a class that implements IActivationFunction.
+    return new cppnActivationFunctions[functionID]();
+
+};
+
+Factory.getActivationFunction = function(functionID)
+{
+    var activationFunction = Factory.functionTable[functionID];
+    if(!activationFunction)
+    {
+//            console.log('Creating: ' + functionID);
+//            console.log('ActivationFunctions: ');
+//            console.log(cppnActivationFunctions);
+
+        activationFunction = Factory.createActivationFunction(functionID);
+        Factory.functionTable[functionID] = activationFunction;
+    }
+    return activationFunction;
+
+};
+
+Factory.setProbabilities = function(oProbs)
+{
+    Factory.probabilities = [];//new double[probs.Count];
+    Factory.functions = [];//new IActivationFunction[probs.Count];
+    var counter = 0;
+
+    for(var key in oProbs)
+    {
+        Factory.probabilities.push(oProbs[key]);
+        Factory.functions.push(Factory.getActivationFunction(key));
+        counter++;
+    }
+
+};
+
+Factory.defaultProbabilities = function()
+{
+    var oProbs = {'BipolarSigmoid' :.25, 'Sine':.25, 'Gaussian':.25, 'Linear':.25};
+    Factory.setProbabilities(oProbs);
+};
+Factory.getRandomActivationFunction = function()
+{
+    if(Factory.probabilities.length == 0)
+        Factory.defaultProbabilities();
+
+    return Factory.functions[utils.RouletteWheel.singleThrowArray(Factory.probabilities)];
+};
 
 
-require.register("component~query@0.0.3", function (exports, module) {
-function one(selector, el) {
-  return el.querySelector(selector);
+});
+
+require.register("optimuslime~cppnjs@master/activationFunctions/cppnActivationFunctions.js", function (exports, module) {
+var cppnActivationFunctions = {};
+
+module.exports = cppnActivationFunctions;
+
+//implemented the following:
+//BipolarSigmoid
+//PlainSigmoid
+//Gaussian
+//Linear
+//NullFn
+//Sine
+//StepFunction
+
+cppnActivationFunctions.ActivationFunction = function(functionObj)
+{
+    var self = this;
+    self.functionID = functionObj.functionID;
+    self.functionString = functionObj.functionString;
+    self.functionDescription = functionObj.functionDescription;
+    self.calculate = functionObj.functionCalculate;
+    self.enclose = functionObj.functionEnclose;
+//        console.log('self.calc');
+//        console.log(self.calculate);
+//        console.log(self.calculate(0));
+};
+
+//this makes it easy to overwrite an activation function from the outside
+//cppnActivationFunctions.AddActivationFunction("BiplorSigmoid", {NEW IMPLEMENTATION});
+//this can be useful for customizing certain functions for your domain while maintaining the same names
+
+cppnActivationFunctions.AddActivationFunction = function(functionName, description)
+{
+    cppnActivationFunctions[functionName] = function()
+    {
+        return new cppnActivationFunctions.ActivationFunction(description);
+    }
+};
+
+cppnActivationFunctions.AddActivationFunction(
+    "BipolarSigmoid",
+    {
+        functionID: 'BipolarSigmoid' ,
+        functionString: "2.0/(1.0 + exp(-4.9*inputSignal)) - 1.0",
+        functionDescription: "bipolar steepend sigmoid",
+        functionCalculate: function(inputSignal)
+        {
+            return (2.0 / (1.0 + Math.exp(-4.9 * inputSignal))) - 1.0;
+        },
+        functionEnclose: function(stringToEnclose)
+        {
+            return "((2.0 / (1.0 + Math.exp(-4.9 *(" + stringToEnclose + ")))) - 1.0)";
+        }
+    });
+
+cppnActivationFunctions.AddActivationFunction(
+    "PlainSigmoid",
+    {
+        functionID: 'PlainSigmoid' ,
+        functionString: "1.0/(1.0+(exp(-inputSignal)))",
+        functionDescription: "Plain sigmoid [xrange -5.0,5.0][yrange, 0.0,1.0]",
+        functionCalculate: function(inputSignal)
+        {
+            return 1.0/(1.0+(Math.exp(-inputSignal)));
+        },
+        functionEnclose: function(stringToEnclose)
+        {
+            return "(1.0/(1.0+(Math.exp(-1.0*(" + stringToEnclose + ")))))";
+        }
+    });
+
+cppnActivationFunctions.AddActivationFunction(
+    "Gaussian",
+    {
+        functionID:  'Gaussian',
+        functionString: "2*e^(-(input*2.5)^2) - 1",
+        functionDescription:"bimodal gaussian",
+        functionCalculate: function(inputSignal)
+        {
+            return 2 * Math.exp(-Math.pow(inputSignal * 2.5, 2)) - 1;
+        },
+        functionEnclose: function(stringToEnclose)
+        {
+            return "(2.0 * Math.exp(-Math.pow(" + stringToEnclose + "* 2.5, 2.0)) - 1.0)";
+        }
+    });
+
+cppnActivationFunctions.AddActivationFunction(
+    "Linear",
+    {
+        functionID:   'Linear',
+        functionString: "Math.abs(x)",
+        functionDescription:"Linear",
+        functionCalculate: function(inputSignal)
+        {
+            return Math.abs(inputSignal);
+        },
+        functionEnclose: function(stringToEnclose)
+        {
+            return "(Math.abs(" + stringToEnclose + "))";
+        }
+    });
+
+cppnActivationFunctions.AddActivationFunction(
+    "NullFn",
+    {
+        functionID:   'NullFn',
+        functionString: "0",
+        functionDescription: "returns 0",
+        functionCalculate: function(inputSignal)
+        {
+            return 0.0;
+        },
+        functionEnclose: function(stringToEnclose)
+        {
+            return "(0.0)";
+        }
+    });
+
+cppnActivationFunctions.AddActivationFunction(
+    "Sine2",
+    {
+        functionID:   'Sine2',
+        functionString: "Sin(2*inputSignal)",
+        functionDescription: "Sine function with doubled period",
+        functionCalculate: function(inputSignal)
+        {
+            return Math.sin(2*inputSignal);
+        },
+        functionEnclose: function(stringToEnclose)
+        {
+            return "(Math.sin(2.0*(" + stringToEnclose + ")))";
+        }
+    });
+
+
+cppnActivationFunctions.AddActivationFunction(
+    "Sine",
+    {
+        functionID:   'Sine',
+        functionString: "Sin(inputSignal)",
+        functionDescription: "Sine function with normal period",
+        functionCalculate: function(inputSignal)
+        {
+            return Math.sin(inputSignal);
+        },
+        functionEnclose: function(stringToEnclose)
+        {
+            return "(Math.sin(" + stringToEnclose + "))";
+        }
+    });
+
+cppnActivationFunctions.AddActivationFunction(
+    "StepFunction",
+    {
+        functionID:    'StepFunction',
+        functionString: "x<=0 ? 0.0 : 1.0",
+        functionDescription: "Step function [xrange -5.0,5.0][yrange, 0.0,1.0]",
+        functionCalculate: function(inputSignal)
+        {
+            if(inputSignal<=0.0)
+                return 0.0;
+            else
+                return 1.0;
+        },
+        functionEnclose: function(stringToEnclose)
+        {
+            return "(((" + stringToEnclose + ') <= 0.0) ? 0.0 : 1.0)';
+        }
+    });
+
+});
+
+require.register("optimuslime~cppnjs@master/networks/cppnConnection.js", function (exports, module) {
+/**
+ * Module dependencies.
+ */
+//none
+
+/**
+ * Expose `cppnConnection`.
+ */
+
+module.exports = cppnConnection;
+
+/**
+ * Initialize a new cppnConnection.
+ *
+ * @param {Number} sourceIdx
+ * @param {Number} targetIdx
+ * @param {Number} cWeight
+ * @api public
+ */
+//simple connection type -- from FloatFastConnection.cs
+function cppnConnection(
+    sourceIdx,
+    targetIdx,
+    cWeight
+    ){
+
+    var self = this;
+    self.sourceIdx =    sourceIdx;
+    self.targetIdx =    targetIdx;
+    self.weight = cWeight;
+    self.signal =0;
+
 }
-
-exports = module.exports = function(selector, el){
-  el = el || document;
-  return one(selector, el);
-};
-
-exports.all = function(selector, el){
-  el = el || document;
-  return el.querySelectorAll(selector);
-};
-
-exports.engine = function(obj){
-  if (!obj.one) throw new Error('.one callback required');
-  if (!obj.all) throw new Error('.all callback required');
-  one = obj.one;
-  exports.all = obj.all;
-  return exports;
-};
-
 });
 
-require.modules["component-query"] = require.modules["component~query@0.0.3"];
-require.modules["component~query"] = require.modules["component~query@0.0.3"];
-require.modules["query"] = require.modules["component~query@0.0.3"];
+require.register("optimuslime~cppnjs@master/networks/cppnNode.js", function (exports, module) {
+/**
+ * Module dependencies.
+ */
+var NodeType = require("optimuslime~cppnjs@master/types/nodeType.js");
 
+/**
+ * Expose `cppnNode`.
+ */
 
-require.register("component~matches-selector@master", function (exports, module) {
+module.exports = cppnNode;
+
+/**
+ * Initialize a new cppnNode.
+ *
+ * @param {String} actFn
+ * @param {String} neurType
+ * @param {String} nid
+ * @api public
+ */
+
+function cppnNode(actFn, neurType, nid){
+
+    var self = this;
+
+    self.neuronType = neurType;
+    self.id = nid;
+    self.outputValue = (self.neuronType == NodeType.bias ? 1.0 : 0.0);
+    self.activationFunction = actFn;
+
+}
+});
+
+require.register("optimuslime~cppnjs@master/networks/cppn.js", function (exports, module) {
 /**
  * Module dependencies.
  */
 
-var query = require("component~query@0.0.3");
+var utilities = require('optimuslime~cppnjs@master/utility/utilities.js');
 
 /**
- * Element prototype.
+ * Expose `CPPN`.
  */
 
-var proto = Element.prototype;
+module.exports = CPPN;
 
 /**
- * Vendor function.
- */
-
-var vendor = proto.matches
-  || proto.webkitMatchesSelector
-  || proto.mozMatchesSelector
-  || proto.msMatchesSelector
-  || proto.oMatchesSelector;
-
-/**
- * Expose `match()`.
- */
-
-module.exports = match;
-
-/**
- * Match `el` to `selector`.
+ * Initialize a new error view.
  *
- * @param {Element} el
- * @param {String} selector
- * @return {Boolean}
+ * @param {Number} biasNeuronCount
+ * @param {Number} inputNeuronCount
+ * @param {Number} outputNeuronCount
+ * @param {Number} totalNeuronCount
+ * @param {Array} connections
+ * @param {Array} biasList
+ * @param {Array} activationFunctions
  * @api public
  */
+function CPPN(
+    biasNeuronCount,
+    inputNeuronCount,
+    outputNeuronCount,
+    totalNeuronCount,
+    connections,
+    biasList,
+    activationFunctions
+    )
+{
+    var self = this;
 
-function match(el, selector) {
-  if (!el || el.nodeType !== 1) return false;
-  if (vendor) return vendor.call(el, selector);
-  var nodes = query.all(selector, el.parentNode);
-  for (var i = 0; i < nodes.length; ++i) {
-    if (nodes[i] == el) return true;
-  }
-  return false;
+    // must be in the same order as neuronSignals. Has null entries for neurons that are inputs or outputs of a module.
+    self.activationFunctions = activationFunctions;
+
+    // The modules and connections are in no particular order; only the order of the neuronSignals is used for input and output methods.
+    //floatfastconnections
+    self.connections = connections;
+
+    /// The number of bias neurons, usually one but sometimes zero. This is also the index of the first input neuron in the neuron signals.
+    self.biasNeuronCount = biasNeuronCount;
+    /// The number of input neurons.
+    self.inputNeuronCount = inputNeuronCount;
+    /// The number of input neurons including any bias neurons. This is also the index of the first output neuron in the neuron signals.
+    self.totalInputNeuronCount = self.biasNeuronCount + self.inputNeuronCount;
+    /// The number of output neurons.
+    self.outputNeuronCount = outputNeuronCount;
+
+    //save the total neuron count for us
+    self.totalNeuronCount = totalNeuronCount;
+
+    // For the following array, neurons are ordered with bias nodes at the head of the list,
+    // then input nodes, then output nodes, and then hidden nodes in the array's tail.
+    self.neuronSignals = [];
+    self.modSignals = [];
+
+    // This array is a parallel of neuronSignals, and only has values during SingleStepInternal().
+    // It is declared here to avoid having to reallocate it for every network activation.
+    self.neuronSignalsBeingProcessed = [];
+
+    //initialize the neuron,mod, and processing signals
+    for(var i=0; i < totalNeuronCount; i++){
+        //either you are 1 for bias, or 0 otherwise
+        self.neuronSignals.push(i < self.biasNeuronCount ? 1 : 0);
+        self.modSignals.push(0);
+        self.neuronSignalsBeingProcessed.push(0);
+    }
+
+    self.biasList = biasList;
+
+    // For recursive activation, marks whether we have finished this node yet
+    self.activated = [];
+    // For recursive activation, makes whether a node is currently being calculated. For recurrant connections
+    self.inActivation = [];
+    // For recursive activation, the previous activation for recurrent connections
+    self.lastActivation = [];
+
+
+    self.adjacentList = [];
+    self.reverseAdjacentList = [];
+    self.adjacentMatrix = [];
+
+
+    //initialize the activated, in activation, previous activation
+    for(var i=0; i < totalNeuronCount; i++){
+        self.activated.push(false);
+        self.inActivation.push(false);
+        self.lastActivation.push(0);
+
+        //then we initialize our list of lists!
+        self.adjacentList.push([]);
+        self.reverseAdjacentList.push([]);
+
+        self.adjacentMatrix.push([]);
+        for(var j=0; j < totalNeuronCount; j++)
+        {
+            self.adjacentMatrix[i].push(0);
+        }
+    }
+
+//        console.log(self.adjacentList.length);
+
+    //finally
+    // Set up adjacency list and matrix
+    for (var i = 0; i < self.connections.length; i++)
+    {
+        var crs = self.connections[i].sourceIdx;
+        var crt = self.connections[i].targetIdx;
+
+        // Holds outgoing nodes
+        self.adjacentList[crs].push(crt);
+
+        // Holds incoming nodes
+        self.reverseAdjacentList[crt].push(crs);
+
+        self.adjacentMatrix[crs][crt] = connections[i].weight;
+    }
 }
+
+
+/// <summary>
+/// Using RelaxNetwork erodes some of the perofrmance gain of FastConcurrentNetwork because of the slightly
+/// more complex implemementation of the third loop - whe compared to SingleStep().
+/// </summary>
+/// <param name="maxSteps"></param>
+/// <param name="maxAllowedSignalDelta"></param>
+/// <returns></returns>
+CPPN.prototype.relaxNetwork = function(maxSteps, maxAllowedSignalDelta)
+{
+    var self = this;
+    var isRelaxed = false;
+    for (var j = 0; j < maxSteps && !isRelaxed; j++) {
+        isRelaxed = self.singleStepInternal(maxAllowedSignalDelta);
+    }
+    return isRelaxed;
+};
+
+CPPN.prototype.setInputSignal = function(index, signalValue)
+{
+    var self = this;
+    // For speed we don't bother with bounds checks.
+    self.neuronSignals[self.biasNeuronCount + index] = signalValue;
+};
+
+CPPN.prototype.setInputSignals = function(signalArray)
+{
+    var self = this;
+    // For speed we don't bother with bounds checks.
+    for (var i = 0; i < signalArray.length; i++)
+        self.neuronSignals[self.biasNeuronCount + i] = signalArray[i];
+};
+
+//we can dispense of this by accessing neuron signals directly
+CPPN.prototype.getOutputSignal = function(index)
+{
+    // For speed we don't bother with bounds checks.
+    return this.neuronSignals[this.totalInputNeuronCount + index];
+};
+
+//we can dispense of this by accessing neuron signals directly
+CPPN.prototype.clearSignals = function()
+{
+    var self = this;
+    // Clear signals for input, hidden and output nodes. Only the bias node is untouched.
+    for (var i = self.biasNeuronCount; i < self.neuronSignals.length; i++)
+        self.neuronSignals[i] = 0.0;
+};
+
+//    cppn.CPPN.prototype.TotalNeuronCount = function(){ return this.neuronSignals.length;};
+
+CPPN.prototype.recursiveActivation = function(){
+
+    var self = this;
+    // Initialize boolean arrays and set the last activation signal, but only if it isn't an input (these have already been set when the input is activated)
+    for (var i = 0; i < self.neuronSignals.length; i++)
+    {
+        // Set as activated if i is an input node, otherwise ensure it is unactivated (false)
+        self.activated[i] = (i < self.totalInputNeuronCount) ? true : false;
+        self.inActivation[i] = false;
+        if (i >= self.totalInputNeuronCount)
+            self.lastActivation[i] = self.neuronSignals[i];
+    }
+
+    // Get each output node activation recursively
+    // NOTE: This is an assumption that genomes have started minimally, and the output nodes lie sequentially after the input nodes
+    for (var i = 0; i < self.outputNeuronCount; i++)
+        self.recursiveActivateNode(self.totalInputNeuronCount + i);
+
+};
+
+
+CPPN.prototype.recursiveActivateNode = function(currentNode)
+{
+    var self = this;
+    // If we've reached an input node we return since the signal is already set
+    if (self.activated[currentNode])
+    {
+        self.inActivation[currentNode] = false;
+        return;
+    }
+
+    // Mark that the node is currently being calculated
+    self.inActivation[currentNode] = true;
+
+    // Set the presignal to 0
+    self.neuronSignalsBeingProcessed[currentNode] = 0;
+
+    // Adjacency list in reverse holds incoming connections, go through each one and activate it
+    for (var i = 0; i < self.reverseAdjacentList[currentNode].length; i++)
+    {
+        var crntAdjNode = self.reverseAdjacentList[currentNode][i];
+
+        //{ Region recurrant connection handling - not applicable in our implementation
+        // If this node is currently being activated then we have reached a cycle, or recurrant connection. Use the previous activation in this case
+        if (self.inActivation[crntAdjNode])
+        {
+            //console.log('using last activation!');
+            self.neuronSignalsBeingProcessed[currentNode] += self.lastActivation[crntAdjNode]*self.adjacentMatrix[crntAdjNode][currentNode];
+//                    parseFloat(
+//                    parseFloat(self.lastActivation[crntAdjNode].toFixed(9)) * parseFloat(self.adjacentMatrix[crntAdjNode][currentNode].toFixed(9)).toFixed(9));
+        }
+
+        // Otherwise proceed as normal
+        else
+        {
+            // Recurse if this neuron has not been activated yet
+            if (!self.activated[crntAdjNode])
+                self.recursiveActivateNode(crntAdjNode);
+
+            // Add it to the new activation
+            self.neuronSignalsBeingProcessed[currentNode] +=  self.neuronSignals[crntAdjNode] *self.adjacentMatrix[crntAdjNode][currentNode];
+//                    parseFloat(
+//                    parseFloat(self.neuronSignals[crntAdjNode].toFixed(9)) * parseFloat(self.adjacentMatrix[crntAdjNode][currentNode].toFixed(9)).toFixed(9));
+        }
+        //} endregion
+    }
+
+    // Mark this neuron as completed
+    self.activated[currentNode] = true;
+
+    // This is no longer being calculated (for cycle detection)
+    self.inActivation[currentNode] = false;
+
+//        console.log('Current node: ' + currentNode);
+//        console.log('ActivationFunctions: ');
+//        console.log(self.activationFunctions);
+//
+//        console.log('neuronSignals: ');
+//        console.log(self.neuronSignals);
+//
+//        console.log('neuronSignalsBeingProcessed: ');
+//        console.log(self.neuronSignalsBeingProcessed);
+    // Set this signal after running it through the activation function
+    self.neuronSignals[currentNode] = self.activationFunctions[currentNode].calculate(self.neuronSignalsBeingProcessed[currentNode]);
+//            parseFloat((self.activationFunctions[currentNode].calculate(parseFloat(self.neuronSignalsBeingProcessed[currentNode].toFixed(9)))).toFixed(9));
+
+};
+
+
+CPPN.prototype.isRecursive = function()
+{
+    var self = this;
+
+    //if we're a hidden/output node (nodeid >= totalInputcount), and we connect to an input node (nodeid <= self.totalInputcount) -- it's recurrent!
+    //if we are a self connection, duh we are recurrent
+    for(var c=0; c< self.connections.length; c++)
+        if((self.connections[c].sourceIdx >= self.totalInputNeuronCount
+            && self.connections[c].targetIdx < self.totalInputNeuronCount)
+            || self.connections[c].sourceIdx == self.connections[c].targetIdx
+            )
+            return true;
+
+    self.recursed = [];
+    self.inRecursiveCheck = [];
+
+
+    for(var i=0; i < self.neuronSignals.length; i++)
+    {
+
+        self.recursed.push((i < self.totalInputNeuronCount) ? true : false);
+        self.inRecursiveCheck.push(false);
+    }
+
+    // Get each output node activation recursively
+    // NOTE: This is an assumption that genomes have started minimally, and the output nodes lie sequentially after the input nodes
+    for (var i = 0; i < self.outputNeuronCount; i++){
+        if(self.recursiveCheckRecursive(self.totalInputNeuronCount + i))
+        {
+//                console.log('Returned one!');
+            return true;
+
+        }
+    }
+
+    return false;
+
+};
+
+CPPN.prototype.recursiveCheckRecursive = function(currentNode)
+{
+    var self = this;
+
+
+//        console.log('Self recursed : '+ currentNode + ' ? ' +  self.recursed[currentNode]);
+
+//        console.log('Checking: ' + currentNode)
+    //  If we've reached an input node we return since the signal is already set
+    if (self.recursed[currentNode])
+    {
+        self.inRecursiveCheck[currentNode] = false;
+        return false;
+    }
+
+    // Mark that the node is currently being calculated
+    self.inRecursiveCheck[currentNode] = true;
+
+    // Adjacency list in reverse holds incoming connections, go through each one and activate it
+    for (var i = 0; i < self.reverseAdjacentList[currentNode].length; i++)
+    {
+        var crntAdjNode = self.reverseAdjacentList[currentNode][i];
+
+        //{ Region recurrant connection handling - not applicable in our implementation
+        // If this node is currently being activated then we have reached a cycle, or recurrant connection. Use the previous activation in this case
+        if (self.inRecursiveCheck[crntAdjNode])
+        {
+            self.inRecursiveCheck[currentNode] = false;
+            return true;
+        }
+
+        // Otherwise proceed as normal
+        else
+        {
+            var verifiedRecursive;
+            // Recurse if this neuron has not been activated yet
+            if (!self.recursed[crntAdjNode])
+                verifiedRecursive = self.recursiveCheckRecursive(crntAdjNode);
+
+            if(verifiedRecursive)
+                return true;
+        }
+        //} endregion
+    }
+
+    // Mark this neuron as completed
+    self.recursed[currentNode] = true;
+
+    // This is no longer being calculated (for cycle detection)
+    self.inRecursiveCheck[currentNode] = false;
+
+    return false;
+};
+
+
+
+
+
+(function(exports, selfBrowser, isBrowser){
+
+    var cppn = {CPPN: {}};
+
+
+
+
+
+
+
+    //send in the object, and also whetehr or not this is nodejs
+})(typeof exports === 'undefined'? this['cppnjs']['cppn']={}: exports, this, typeof exports === 'undefined'? true : false);
 
 });
 
-require.modules["component-matches-selector"] = require.modules["component~matches-selector@master"];
-require.modules["component~matches-selector"] = require.modules["component~matches-selector@master"];
-require.modules["matches-selector"] = require.modules["component~matches-selector@master"];
+require.register("optimuslime~cppnjs@master/types/nodeType.js", function (exports, module) {
+var NodeType =
+{
+    bias : "Bias",
+    input: "Input",
+    output: "Output",
+    hidden: "Hidden",
+    other : "Other"
+};
 
+module.exports = NodeType;
 
-require.register("discore~closest@0.1.3", function (exports, module) {
-var matches = require("component~matches-selector@master")
-
-module.exports = function (element, selector, checkYoSelf, root) {
-  element = checkYoSelf ? {parentNode: element} : element
-
-  root = root || document
-
-  // Make sure `element !== document` and `element != null`
-  // otherwise we get an illegal invocation
-  while ((element = element.parentNode) && element !== document) {
-    if (matches(element, selector))
-      return element
-    // After `matches` on the edge case that
-    // the selector matches the root
-    // (when the root is not the document)
-    if (element === root)
-      return  
-  }
-}
 });
 
-require.modules["discore-closest"] = require.modules["discore~closest@0.1.3"];
-require.modules["discore~closest"] = require.modules["discore~closest@0.1.3"];
-require.modules["closest"] = require.modules["discore~closest@0.1.3"];
+require.register("optimuslime~cppnjs@master/utility/utilities.js", function (exports, module) {
+var utils = {};
+
+module.exports = utils;
+
+utils.stringToFunction = function(str) {
+    var arr = str.split(".");
+
+    var fn = (window || this);
+    for (var i = 0, len = arr.length; i < len; i++) {
+        fn = fn[arr[i]];
+    }
+
+    if (typeof fn !== "function") {
+        throw new Error("function not found");
+    }
+
+    return  fn;
+};
+
+utils.nextDouble = function()
+{
+    return Math.random();
+};
+
+utils.next = function(range)
+{
+    return Math.floor((Math.random()*range));
+};
+
+utils.tanh = function(arg) {
+    // sinh(number)/cosh(number)
+    return (Math.exp(arg) - Math.exp(-arg)) / (Math.exp(arg) + Math.exp(-arg));
+};
+
+utils.sign = function(input)
+{
+    if (input < 0) {return -1;}
+    if (input > 0) {return 1;}
+    return 0;
+};
+
+//ROULETTE WHEEL class
 
 
-require.register("component~delegate@0.2.2", function (exports, module) {
+//if we need a node object, this is how we would do it
+//    var neatNode = isNodejs ? self['neatNode'] : require('./neatNode.js');
+utils.RouletteWheel =
+{
+
+};
+
+/// <summary>
+/// A simple single throw routine.
+/// </summary>
+/// <param name="probability">A probability between 0..1 that the throw will result in a true result.</param>
+/// <returns></returns>
+utils.RouletteWheel.singleThrow = function(probability)
+{
+    return (utils.nextDouble() <= probability);
+};
+
+
+
+/// <summary>
+/// Performs a single throw for a given number of outcomes with equal probabilities.
+/// </summary>
+/// <param name="numberOfOutcomes"></param>
+/// <returns>An integer between 0..numberOfOutcomes-1. In effect this routine selects one of the possible outcomes.</returns>
+
+utils.RouletteWheel.singleThrowEven = function(numberOfOutcomes)
+{
+    var probability= 1.0 / numberOfOutcomes;
+    var accumulator=0;
+    var throwValue = utils.nextDouble();
+
+    for(var i=0; i<numberOfOutcomes; i++)
+    {
+        accumulator+=probability;
+        if(throwValue<=accumulator)
+            return i;
+    }
+    //throw exception in javascript
+    throw "PeannutLib.Maths.SingleThrowEven() - invalid outcome.";
+};
+
+/// <summary>
+/// Performs a single thrown onto a roulette wheel where the wheel's space is unevenly divided.
+/// The probabilty that a segment will be selected is given by that segment's value in the 'probabilities'
+/// array. The probabilities are normalised before tossing the ball so that their total is always equal to 1.0.
+/// </summary>
+/// <param name="probabilities"></param>
+/// <returns></returns>
+utils.RouletteWheel.singleThrowArray = function(aProbabilities)
+{
+    if(typeof aProbabilities === 'number')
+        throw new Error("Send Array to singleThrowArray!");
+    var pTotal=0;	// Total probability
+
+    //-----
+    for(var i=0; i<aProbabilities.length; i++)
+        pTotal+= aProbabilities[i];
+
+    //----- Now throw the ball and return an integer indicating the outcome.
+    var throwValue = utils.nextDouble() * pTotal;
+    var accumulator=0;
+
+    for(var j=0; j< aProbabilities.length; j++)
+    {
+        accumulator+= aProbabilities[j];
+
+        if(throwValue<=accumulator)
+            return j;
+    }
+
+    throw "PeannutLib.Maths.singleThrowArray() - invalid outcome.";
+};
+
+/// <summary>
+/// Similar in functionality to SingleThrow(double[] probabilities). However the 'probabilities' array is
+/// not normalised. Therefore if the total goes beyond 1 then we allow extra throws, thus if the total is 10
+/// then we perform 10 throws.
+/// </summary>
+/// <param name="probabilities"></param>
+/// <returns></returns>
+utils.RouletteWheel.multipleThrows = function(aProbabilities)
+{
+    var pTotal=0;	// Total probability
+    var numberOfThrows;
+
+    //----- Determine how many throws of the ball onto the wheel.
+    for(var i=0; i<aProbabilities.length; i++)
+        pTotal+=aProbabilities[i];
+
+    // If total probabilty is > 1 then we take this as meaning more than one throw of the ball.
+    var pTotalInteger = Math.floor(pTotal);
+    var pTotalRemainder = pTotal - pTotalInteger;
+    numberOfThrows = Math.floor(pTotalInteger);
+
+    if(utils.nextDouble() <= pTotalRemainder)
+        numberOfThrows++;
+
+    //----- Now throw the ball the determined number of times. For each throw store an integer indicating the outcome.
+    var outcomes = [];//new int[numberOfThrows];
+    for(var a=0; a < numberOfThrows; a++)
+        outcomes.push(0);
+
+    for(var i=0; i<numberOfThrows; i++)
+    {
+        var throwValue = utils.nextDouble() * pTotal;
+        var accumulator=0;
+
+        for(var j=0; j<aProbabilities.length; j++)
+        {
+            accumulator+=aProbabilities[j];
+
+            if(throwValue<=accumulator)
+            {
+                outcomes[i] = j;
+                break;
+            }
+        }
+    }
+
+    return outcomes;
+};
+utils.RouletteWheel.selectXFromSmallObject = function(x, objects){
+    var ixs = [];
+    //works with objects with count or arrays with length
+    var gCount = objects.count === undefined ? objects.length : objects.count;
+
+    for(var i=0; i<gCount;i++)
+        ixs.push(i);
+
+    //how many do we need back? we need x back. So we must remove (# of objects - x) leaving ... x objects
+    for(var i=0; i < gCount -x; i++)
+    {
+        //remove random index
+        ixs.splice(utils.next(ixs.length),1);
+    }
+
+    return ixs;
+};
+utils.RouletteWheel.selectXFromLargeObject = function(x, objects)
+{
+    var ixs = [];
+    var guesses = {};
+    var gCount = objects.count === undefined ? objects.length : objects.count;
+
+    //we make sure the number of requested objects is less than the object indices
+    x = Math.min(x, gCount);
+
+    for(var i=0; i<x; i++)
+    {
+        var guessIx = utils.next(gCount);
+        while(guesses[guessIx])
+            guessIx = utils.next(gCount);
+
+        guesses[guessIx] = true;
+        ixs.push(guessIx);
+    }
+
+    return ixs;
+};
+
+});
+
+require.register("optimuslime~cppnjs@master/extras/adaptableAdditions.js", function (exports, module) {
+//The purpose of this file is to only extend CPPNs to have additional activation capabilities involving mod connections
+
+var cppnConnection = require("optimuslime~cppnjs@master/networks/cppnConnection.js");
+//default all the variables that need to be added to handle adaptable activation
+var connectionPrototype = cppnConnection.prototype;
+connectionPrototype.a = 0;
+connectionPrototype.b = 0;
+connectionPrototype.c = 0;
+connectionPrototype.d = 0;
+connectionPrototype.modConnection = 0;
+connectionPrototype.learningRate = 0;
+
+
+var CPPN = require("optimuslime~cppnjs@master/networks/cppn.js");
+//default all the variables that need to be added to handle adaptable activation
+var cppnPrototype = CPPN.prototype;
+
+cppnPrototype.a = 0;
+cppnPrototype.b = 0;
+cppnPrototype.c = 0;
+cppnPrototype.d = 0;
+cppnPrototype.learningRate = 0;
+cppnPrototype.pre = 0;
+cppnPrototype.post = 0;
+
+cppnPrototype.adaptable = false;
+cppnPrototype.modulatory = false;
+
+
+/// <summary>
+/// This function carries out a single network activation.
+/// It is called by all those methods that require network activations.
+/// </summary>
+/// <param name="maxAllowedSignalDelta">
+/// The network is not relaxed as long as the absolute value of the change in signals at any given point is greater than this value.
+/// Only positive values are used. If the value is less than or equal to 0, the method will return true without checking for relaxation.
+/// </param>
+/// <returns>True if the network is relaxed, or false if not.</returns>
+cppnPrototype.singleStepInternal = function(maxAllowedSignalDelta)
+{
+    var isRelaxed = true;	// Assume true.
+    var self = this;
+    // Calculate each connection's output signal, and add the signals to the target neurons.
+    for (var i = 0; i < self.connections.length; i++) {
+
+        if (self.adaptable)
+        {
+            if (self.connections[i].modConnection <= 0.0)   //Normal connection
+            {
+                self.neuronSignalsBeingProcessed[self.connections[i].targetIdx] += self.neuronSignals[self.connections[i].sourceIdx] * self.connections[i].weight;
+            }
+            else //modulatory connection
+            {
+                self.modSignals[self.connections[i].targetIdx] += self.neuronSignals[self.connections[i].sourceIdx] * self.connections[i].weight;
+
+            }
+        }
+        else
+        {
+            self.neuronSignalsBeingProcessed[self.connections[i].targetIdx] += self.neuronSignals[self.connections[i].sourceIdx] * self.connections[i].weight;
+
+        }
+    }
+
+    // Pass the signals through the single-valued activation functions.
+    // Do not change the values of input neurons or neurons that have no activation function because they are part of a module.
+    for (var i = self.totalInputNeuronCount; i < self.neuronSignalsBeingProcessed.length; i++) {
+        self.neuronSignalsBeingProcessed[i] = self.activationFunctions[i].calculate(self.neuronSignalsBeingProcessed[i]+self.biasList[i]);
+        if (self.modulatory)
+        {
+            //Make sure it's between 0 and 1
+            self.modSignals[i] += 1.0;
+            if (self.modSignals[i]!=0.0)
+                self.modSignals[i] = utilities.tanh(self.modSignals[i]);//Tanh(modSignals[i]);//(Math.Exp(2 * modSignals[i]) - 1) / (Math.Exp(2 * modSignals[i]) + 1));
+        }
+    }
+    //TODO Modules not supported in this implementation - don't care
+
+
+    /*foreach (float f in neuronSignals)
+     HyperNEATParameters.distOutput.Write(f.ToString("R") + " ");
+     HyperNEATParameters.distOutput.WriteLine();
+     HyperNEATParameters.distOutput.Flush();*/
+
+    // Move all the neuron signals we changed while processing this network activation into storage.
+    if (maxAllowedSignalDelta > 0) {
+        for (var i = self.totalInputNeuronCount; i < self.neuronSignalsBeingProcessed.length; i++) {
+
+            // First check whether any location in the network has changed by more than a small amount.
+            isRelaxed &= (Math.abs(self.neuronSignals[i] - self.neuronSignalsBeingProcessed[i]) > maxAllowedSignalDelta);
+
+            self.neuronSignals[i] = self.neuronSignalsBeingProcessed[i];
+            self.neuronSignalsBeingProcessed[i] = 0.0;
+        }
+    } else {
+        for (var i = self.totalInputNeuronCount; i < self.neuronSignalsBeingProcessed.length; i++) {
+            self.neuronSignals[i] = self.neuronSignalsBeingProcessed[i];
+            self.neuronSignalsBeingProcessed[i] = 0.0;
+        }
+    }
+
+    // Console.WriteLine(inputNeuronCount);
+
+    if (self.adaptable)//CPPN != null)
+    {
+        var coordinates = [0,0,0,0];
+        var modValue;
+        var weightDelta;
+        for (var i = 0; i < self.connections.length; i++)
+        {
+            if (self.modulatory)
+            {
+                self.pre = self.neuronSignals[self.connections[i].sourceIdx];
+                self.post = self.neuronSignals[self.connections[i].targetIdx];
+                modValue = self.modSignals[self.connections[i].targetIdx];
+
+                self.a = self.connections[i].a;
+                self.b = self.connections[i].b;
+                self.c = self.connections[i].c;
+                self.d = self.connections[i].d;
+
+                self.learningRate = self.connections[i].learningRate;
+                if (modValue != 0.0 && (self.connections[i].modConnection <= 0.0))        //modulate target neuron if its a normal connection
+                {
+                    self.connections[i].weight += modValue*self.learningRate * (self.a * self.pre * self.post + self.b * self.pre + self.c * self.post + self.d);
+                }
+
+                if (Math.abs(self.connections[i].weight) > 5.0)
+                {
+                    self.connections[i].weight = 5.0 * Math.sign(self.connections[i].weight);
+                }
+            }
+            else
+            {
+                self.pre = self.neuronSignals[self.connections[i].sourceIdx];
+                self.post = self.neuronSignals[self.connections[i].targetIdx];
+                self.a = self.connections[i].a;
+                self.b = self.connections[i].b;
+                self.c = self.connections[i].c;
+
+                self.learningRate = self.connections[i].learningRate;
+
+                weightDelta = self.learningRate * (self.a * self.pre * self.post + self.b * self.pre + self.c * self.post);
+                connections[i].weight += weightDelta;
+
+                //   Console.WriteLine(pre + " " + post + " " + learningRate + " " + A + " " + B + " " + C + " " + weightDelta);
+
+                if (Math.abs(self.connections[i].weight) > 5.0)
+                {
+                    self.connections[i].weight = 5.0 * Math.sign(self.connections[i].weight);
+                }
+            }
+        }
+    }
+
+    for (var i = self.totalInputNeuronCount; i < self.neuronSignalsBeingProcessed.length; i++)
+    {
+        self.modSignals[i] = 0.0;
+    }
+
+    return isRelaxed;
+
+};
+
+
+cppnPrototype.singleStep = function(finished)
+{
+    var self = this;
+    self.singleStepInternal(0.0); // we will ignore the value of this function, so the "allowedDelta" argument doesn't matter.
+    if (finished)
+    {
+        finished(null);
+    }
+};
+
+cppnPrototype.multipleSteps = function(numberOfSteps)
+{
+    var self = this;
+    for (var i = 0; i < numberOfSteps; i++) {
+        self.singleStep();
+    }
+};
+
+});
+
+require.register("optimuslime~cppnjs@master/extras/pureCPPNAdditions.js", function (exports, module) {
+//The purpose of this file is to only extend CPPNs to have additional activation capabilities involving turning
+//cppns into a string!
+
+var CPPN = require("optimuslime~cppnjs@master/networks/cppn.js");
+
+//for convenience, you can require pureCPPNAdditions
+module.exports = CPPN;
+
+var CPPNPrototype = CPPN.prototype;
+
+CPPNPrototype.createPureCPPNFunctions = function()
+{
+
+    var self = this;
+
+    //create our enclosed object for each node! (this way we actually have subnetworks functions setup too
+    self.nEnclosed = new Array(self.neuronSignals.length);
+
+    self.bAlreadyEnclosed = new Array(self.neuronSignals.length);
+    self.inEnclosure = new Array(self.neuronSignals.length);
+
+    // Initialize boolean arrays and set the last activation signal, but only if it isn't an input (these have already been set when the input is activated)
+    for (var i = 0; i < self.nEnclosed.length; i++)
+    {
+        // Set as activated if i is an input node, otherwise ensure it is unactivated (false)
+        self.bAlreadyEnclosed[i] = (i < self.totalInputNeuronCount) ? true : false;
+        self.nEnclosed[i] = (i < self.totalInputNeuronCount ? "x" + i : "");
+
+        self.inEnclosure[i] = false;
+
+    }
+
+    // Get each output node activation recursively
+    // NOTE: This is an assumption that genomes have started minimally, and the output nodes lie sequentially after the input nodes
+    for (var i = 0; i < self.outputNeuronCount; i++){
+
+//            for (var m = 0; m < self.nEnclosed.length; m++)
+//            {
+//                // Set as activated if i is an input node, otherwise ensure it is unactivated (false)
+//                self.bAlreadyEnclosed[m] = (m < self.totalInputNeuronCount) ? true : false;
+//                self.inEnclosure[m] = false;
+//            }
+
+
+        self.nrEncloseNode(self.totalInputNeuronCount + i);
+
+    }
+
+//        console.log(self.nEnclosed);
+
+    //now grab our ordered objects
+    var orderedObjects = self.recursiveCountThings();
+
+//        console.log(orderedObjects);
+
+    //now let's build our functions
+    var nodeFunctions = {};
+
+    var stringFunctions = {};
+
+    var emptyNodes = {};
+
+    for(var i= self.totalInputNeuronCount; i < self.totalNeuronCount; i++)
+    {
+        //skip functions that aren't defined
+        if(!self.bAlreadyEnclosed[i]){
+            emptyNodes[i] = true;
+            continue;
+        }
+
+        var fnString = "return " + self.nEnclosed[i] + ';';
+        nodeFunctions[i] = new Function([], fnString);
+        stringFunctions[i] = fnString;
+    }
+
+    var inOrderAct = [];
+    //go through and grab the indices -- no need for rank and things
+    orderedObjects.forEach(function(oNode)
+    {
+        if(!emptyNodes[oNode.node])
+            inOrderAct.push(oNode.node);
+    });
+
+
+    var containedFunction = function(nodesInOrder, functionsForNodes, biasCount, outputCount)
+    {
+        return function(inputs)
+        {
+            var bias = 1.0;
+            var context = {};
+            context.rf = new Array(nodesInOrder.length);
+            var totalIn = inputs.length + biasCount;
+
+            for(var i=0; i < biasCount; i++)
+                context.rf[i] = bias;
+
+            for(var i=0; i < inputs.length; i++)
+                context.rf[i+biasCount] = inputs[i];
+
+
+            for(var i=0; i < nodesInOrder.length; i++)
+            {
+                var fIx = nodesInOrder[i];
+//                console.log('Ix to hit: ' fIx + );
+                context.rf[fIx] = (fIx < totalIn ? context.rf[fIx] : functionsForNodes[fIx].call(context));
+            }
+
+            return context.rf.slice(totalIn, totalIn + outputCount);
+        }
+    };
+
+    //this will return a function that can be run by calling var outputs = functionName(inputs);
+    var contained =  containedFunction(inOrderAct, nodeFunctions, self.biasNeuronCount, self.outputNeuronCount);
+
+    return {contained: contained, stringFunctions: stringFunctions, arrayIdentifier: "this.rf", nodeOrder: inOrderAct};
+
+
+//        console.log(self.nEnclosed[self.totalInputNeuronCount + 0].length);
+//        console.log('Enclosed nodes: ');
+//        console.log(self.nEnclosed);
+
+//        console.log('Ordered: ');
+//        console.log(orderedActivation);
+
+};
+
+
+
+CPPNPrototype.nrEncloseNode = function(currentNode)
+{
+    var self = this;
+
+    // If we've reached an input node we return since the signal is already set
+
+//        console.log('Checking: ' + currentNode);
+//        console.log('Total: ');
+//        console.log(self.totalInputNeuronCount);
+
+
+    if (currentNode < self.totalInputNeuronCount)
+    {
+        self.inEnclosure[currentNode] = false;
+        self[currentNode] = 'this.rf[' + currentNode + ']';
+        return;
+    }
+    if (self.bAlreadyEnclosed[currentNode])
+    {
+        self.inEnclosure[currentNode] = false;
+        return;
+    }
+
+    // Mark that the node is currently being calculated
+    self.inEnclosure[currentNode] = true;
+
+    // Adjacency list in reverse holds incoming connections, go through each one and activate it
+    for (var i = 0; i < self.reverseAdjacentList[currentNode].length; i++)
+    {
+        var crntAdjNode = self.reverseAdjacentList[currentNode][i];
+
+        //{ Region recurrant connection handling - not applicable in our implementation
+        // If this node is currently being activated then we have reached a cycle, or recurrant connection. Use the previous activation in this case
+        if (self.inEnclosure[crntAdjNode])
+        {
+            //easy fix, this isn't meant for recurrent networks -- just throw an error!
+            throw new Error("Method not built for recurrent networks!");
+        }
+
+        // Otherwise proceed as normal
+        else
+        {
+
+            // Recurse if this neuron has not been activated yet
+            if (!self.bAlreadyEnclosed[crntAdjNode])
+                self.nrEncloseNode(crntAdjNode);
+
+//                console.log('Next: ');
+//                console.log(crntAdjNode);
+//                console.log(self.nEnclosed[crntAdjNode]);
+
+            var add = (self.nEnclosed[currentNode] == "" ? "(" : "+");
+
+            //get our weight from adjacency matrix
+            var weight = self.adjacentMatrix[crntAdjNode][currentNode];
+
+            //we have a whole number weight!
+            if(Math.round(weight) === weight)
+                weight = '' + weight + '.0';
+            else
+                weight = '' + weight;
+
+
+            // Add it to the new activation
+            self.nEnclosed[currentNode] += add + weight + "*" + "this.rf[" + crntAdjNode + "]";
+
+        }
+        //} endregion
+//            nodeCount++;
+    }
+
+    //if we're empty, we're empty! We don't go no where, derrrr
+    if(self.nEnclosed[currentNode] === '')
+        self.nEnclosed[currentNode] = '0.0';
+    else
+        self.nEnclosed[currentNode] += ')';
+
+    // Mark this neuron as completed
+    self.bAlreadyEnclosed[currentNode] = true;
+
+    // This is no longer being calculated (for cycle detection)
+    self.inEnclosure[currentNode] = false;
+
+
+//        console.log('Enclosed legnth: ' + self.activationFunctions[currentNode].enclose(self.nEnclosed[currentNode]).length);
+
+    self.nEnclosed[currentNode] = self.activationFunctions[currentNode].enclose(self.nEnclosed[currentNode]);
+
+};
+
+CPPNPrototype.recursiveCountThings = function()
+{
+    var self= this;
+
+    var orderedActivation = {};
+
+    var higherLevelRecurse = function(neuron)
+    {
+        var inNode = new Array(self.totalNeuronCount);
+        var nodeCount = new Array(self.totalNeuronCount);
+        var interactCount = new Array(self.totalNeuronCount);
+
+        for(var s=0; s < self.totalNeuronCount; s++) {
+            inNode[s] = false;
+            nodeCount[s] = 0;
+            interactCount[s] = 0;
+        }
+
+        var recurseNode = function(currentNode)
+        {
+            // Mark that the node is currently being calculated
+            inNode[currentNode] = true;
+
+            var recurse = {};
+
+            // Adjacency list in reverse holds incoming connections, go through each one and activate it
+            for (var i = 0; i < self.reverseAdjacentList[currentNode].length; i++)
+            {
+                var crntAdjNode = self.reverseAdjacentList[currentNode][i];
+
+
+                recurse[i] = (nodeCount[crntAdjNode] < nodeCount[currentNode] + 1);
+
+                nodeCount[crntAdjNode] = Math.max(nodeCount[crntAdjNode], nodeCount[currentNode] + 1);
+
+            }
+            //all nodes are marked with correct count, let's continue backwards for each one!
+            for (var i = 0; i < self.reverseAdjacentList[currentNode].length; i++)
+            {
+                var crntAdjNode = self.reverseAdjacentList[currentNode][i];
+
+                if(recurse[i])
+                // Recurse on it! -- already marked above
+                    recurseNode(crntAdjNode);
+
+            }
+
+            //            nodeCount[currentNode] = nodeCount[currentNode] + 1;
+            inNode[currentNode] = false;
+
+        };
+
+        recurseNode(neuron);
+
+        return nodeCount;
+    };
+
+
+    var orderedObjects = new Array(self.totalNeuronCount);
+
+    // Get each output node activation recursively
+    // NOTE: This is an assumption that genomes have started minimally, and the output nodes lie sequentially after the input nodes
+    for (var m = 0; m < self.outputNeuronCount; m++){
+        //we have ordered count for this output!
+
+        var olist = higherLevelRecurse(self.totalInputNeuronCount + m);
+
+        var nodeSpecificOrdering  = [];
+
+        for(var n=0; n< olist.length; n++)
+        {
+            //we take the maximum depending on whether or not it's been seen before
+            if(orderedObjects[n])
+                orderedObjects[n] = {node: n, rank: Math.max(orderedObjects[n].rank, olist[n])};
+            else
+                orderedObjects[n] = {node: n, rank: olist[n]};
+
+            nodeSpecificOrdering.push({node: n, rank: olist[n]});
+        }
+
+        nodeSpecificOrdering.sort(function(a,b){return b.rank - a.rank;});
+
+        orderedActivation[self.totalInputNeuronCount + m] = nodeSpecificOrdering;
+    }
+
+
+    orderedObjects.sort(function(a,b){return b.rank - a.rank;});
+//        console.log(orderedObjects);
+
+
+    return orderedObjects;
+
+};
+});
+
+require.register("optimuslime~cppnjs@master/extras/gpuAdditions.js", function (exports, module) {
+//this takes in cppn functions, and outputs a shader....
+//radical!
+//needs to be tested more! How large can CPPNs get? inputs/outputs/hiddens?
+//we'll extend a CPPN to produce a GPU shader
+var CPPN = require("optimuslime~cppnjs@master/networks/cppn.js");
+
+var CPPNPrototype = CPPN.prototype;
+
+var cppnToGPU = {};
+cppnToGPU.ShaderFragments = {};
+
+cppnToGPU.ShaderFragments.passThroughVariables =
+    [
+        "uniform float texelWidth;",
+        "uniform float texelHeight;"
+
+    ].join('\n');
+
+//simple, doesn't do anything but pass on uv coords to the frag shaders
+cppnToGPU.ShaderFragments.passThroughVS =
+    [
+        cppnToGPU.ShaderFragments.passThroughVariables,
+        "varying vec2 passCoord;",
+
+        "void main()	{",
+        "passCoord = uv;",
+        "gl_Position = vec4( position, 1.0 );",
+        "}",
+        "\n"
+    ].join('\n');
+
+cppnToGPU.ShaderFragments.passThroughVS3x3 =
+    [
+        cppnToGPU.ShaderFragments.passThroughVariables,
+        "varying vec2 sampleCoords[9];",
+
+        "void main()	{",
+
+        "gl_Position = vec4( position, 1.0 );",
+
+        "vec2 widthStep = vec2(texelWidth, 0.0);",
+        "vec2 heightStep = vec2(0.0, texelHeight);",
+        "vec2 widthHeightStep = vec2(texelWidth, texelHeight);",
+        "vec2 widthNegativeHeightStep = vec2(texelWidth, -texelHeight);",
+
+        "vec2 inputTextureCoordinate = uv;",
+
+        "sampleCoords[0] = inputTextureCoordinate.xy;",
+        "sampleCoords[1] = inputTextureCoordinate.xy - widthStep;",
+        "sampleCoords[2] = inputTextureCoordinate.xy + widthStep;",
+
+        "sampleCoords[3] = inputTextureCoordinate.xy - heightStep;",
+        "sampleCoords[4] = inputTextureCoordinate.xy - widthHeightStep;",
+        "sampleCoords[5] = inputTextureCoordinate.xy + widthNegativeHeightStep;",
+
+        "sampleCoords[6] = inputTextureCoordinate.xy + heightStep;",
+        "sampleCoords[7] = inputTextureCoordinate.xy - widthNegativeHeightStep;",
+        "sampleCoords[8] = inputTextureCoordinate.xy + widthHeightStep;",
+
+        "}",
+        "\n"
+    ].join('\n');
+
+
+cppnToGPU.ShaderFragments.variables =
+    [
+        "varying vec2 passCoord; ",
+        "uniform sampler2D inputTexture; "
+    ].join('\n');
+
+cppnToGPU.ShaderFragments.variables3x3 =
+    [
+        "varying vec2 sampleCoords[9];",
+        "uniform sampler2D inputTexture; "
+    ].join('\n');
+
+
+//this is a generic conversion from cppn to shader
+//Extends the CPPN object to have fullShaderFromCPPN function (and a callback to add any extras)
+//the extras will actually dictate how the final output is created and used
+CPPNPrototype.fullShaderFromCPPN = function(specificAddFunction)
+{
+    var cppn = this;
+
+//        console.log('Decoded!');
+//        console.log('Start enclose :)');
+    var functionObject = cppn.createPureCPPNFunctions();
+//        console.log('End enclose!');
+    //functionobject of the form
+//        {contained: contained, stringFunctions: stringFunctions, arrayIdentifier: "this.rf", nodeOrder: inOrderAct};
+
+    var multiInput = cppn.inputNeuronCount >= 27;
+
+
+    var totalNeurons = cppn.totalNeuronCount;
+
+    var inorderString = "";
+
+    var lastIx = functionObject.nodeOrder[totalNeurons-1];
+    functionObject.nodeOrder.forEach(function(ix)
+    {
+        inorderString += ix +  (ix !== lastIx ? "," : "");
+    });
+
+    var defaultVariables = multiInput ? cppnToGPU.ShaderFragments.variables3x3 : cppnToGPU.ShaderFragments.variables;
+
+    //create a float array the size of the neurons
+//        var fixedArrayDec = "int order[" + totalNeurons + "](" + inorderString + ");";
+    var arrayDeclaration = "float register[" + totalNeurons + "];";
+
+
+    var beforeFunctionIx = "void f";
+    var functionWrap = "(){";
+
+    var postFunctionWrap = "}";
+
+    var repString = functionObject.arrayIdentifier;
+    var fns = functionObject.stringFunctions;
+    var wrappedFunctions = [];
+    for(var key in fns)
+    {
+        if(key < cppn.totalInputNeuronCount)
+            continue;
+
+        //do this as 3 separate lines
+        var wrap = beforeFunctionIx + key + functionWrap;
+        wrappedFunctions.push(wrap);
+        var setRegister = "register[" + key + "] = ";
+
+        var repFn =  fns[key].replace(new RegExp(repString, 'g'), "register");
+        //remove all Math. references -- e.g. Math.sin == sin in gpu code
+        repFn = repFn.replace(new RegExp("Math.", 'g'), "");
+        //we don't want a return function, fs are void
+        repFn = repFn.replace(new RegExp("return ", 'g'), "");
+        //anytime you see a +-, this actually means -
+        //same goes for -- this is a +
+        repFn = repFn.replace(new RegExp("\\+\\-", 'g'), "-");
+        repFn = repFn.replace(new RegExp("\\-\\-", 'g'), "+");
+
+        wrappedFunctions.push(setRegister + repFn);
+        wrappedFunctions.push(postFunctionWrap);
+    }
+
+    var activation = [];
+
+    var actBefore, additionalParameters;
+
+    if(cppn.outputNeuronCount == 1)
+    {
+        actBefore = "float";
+        additionalParameters = "";
+    }
+    else
+    {
+//            actBefore = "float[" + ng.outputNodeCount + "]";
+        actBefore = "void";
+        additionalParameters = ", out float[" + cppn.outputNeuronCount + "] outputs";
+    }
+
+    actBefore += " activate(float[" +cppn.inputNeuronCount + "] fnInputs" + additionalParameters+ "){";
+    activation.push(actBefore);
+
+    var bCount = cppn.biasNeuronCount;
+
+    for(var i=0; i < bCount; i++)
+    {
+        activation.push('register[' + i + '] = 1.0;');
+    }
+    for(var i=0; i < cppn.inputNeuronCount; i++)
+    {
+        activation.push('register[' + (i + bCount) + '] = fnInputs[' + i + '];');
+    }
+
+    functionObject.nodeOrder.forEach(function(ix)
+    {
+        if(ix >= cppn.totalInputNeuronCount)
+            activation.push("f"+ix +"();");
+    });
+
+    var outputs;
+
+    //if you're just one output, return a simple float
+    //otherwise, you need to return an array
+    if(cppn.outputNeuronCount == 1)
+    {
+        outputs = "return register[" + cppn.totalInputNeuronCount + "];";
+    }
+    else
+    {
+        var multiOut = [];
+
+//            multiOut.push("float o[" + ng.outputNodeCount + "];");
+        for(var i=0; i < cppn.outputNeuronCount; i++)
+            multiOut.push("outputs[" + i + "] = register[" + (i + cppn.totalInputNeuronCount) + "];");
+//            multiOut.push("return o;");
+
+        outputs = multiOut.join('\n');
+    }
+
+    activation.push(outputs);
+    activation.push("}");
+
+    var additional = specificAddFunction(cppn);
+
+
+    return {vertex: multiInput ?
+        cppnToGPU.ShaderFragments.passThroughVS3x3 :
+        cppnToGPU.ShaderFragments.passThroughVS,
+        fragment: [defaultVariables,arrayDeclaration].concat(wrappedFunctions).concat(activation).concat(additional).join('\n')};
+
+};
+
+
+});
+
+require.modules["optimuslime-cppnjs"] = require.modules["optimuslime~cppnjs@master"];
+require.modules["optimuslime~cppnjs"] = require.modules["optimuslime~cppnjs@master"];
+require.modules["cppnjs"] = require.modules["optimuslime~cppnjs@master"];
+
+
+require.register("optimuslime~neatjs@master", function (exports, module) {
+var neatjs = {};
+
+//export the cppn library
+module.exports = neatjs;
+
+//nodes and connections!
+neatjs.neatNode = require('optimuslime~neatjs@master/genome/neatNode.js');
+neatjs.neatConnection = require('optimuslime~neatjs@master/genome/neatConnection.js');
+neatjs.neatGenome = require('optimuslime~neatjs@master/genome/neatGenome.js');
+
+//all the activations your heart could ever hope for
+neatjs.iec = require('optimuslime~neatjs@master/evolution/iec.js');
+neatjs.multiobjective = require('optimuslime~neatjs@master/evolution/multiobjective.js');
+neatjs.novelty = require('optimuslime~neatjs@master/evolution/novelty.js');
+
+//neatHelp
+neatjs.neatDecoder = require('optimuslime~neatjs@master/neatHelp/neatDecoder.js');
+neatjs.neatHelp = require('optimuslime~neatjs@master/neatHelp/neatHelp.js');
+neatjs.neatParameters = require('optimuslime~neatjs@master/neatHelp/neatParameters.js');
+
+//and the utilities to round it out!
+neatjs.genomeSharpToJS = require('optimuslime~neatjs@master/utility/genomeSharpToJS.js');
+
+//exporting the node type
+neatjs.NodeType = require('optimuslime~neatjs@master/types/nodeType.js');
+
+
+
+});
+
+require.register("optimuslime~neatjs@master/evolution/iec.js", function (exports, module) {
 /**
  * Module dependencies.
  */
 
-var closest = require("discore~closest@0.1.3")
-  , event = require("component~event@0.1.4");
+var NeatGenome = require('optimuslime~neatjs@master/genome/neatGenome.js');
+
+//pull in variables from cppnjs
+var cppnjs = require('optimuslime~cppnjs@master');
+var utilities =  cppnjs.utilities;
 
 /**
- * Delegate event `type` to `selector`
- * and invoke `fn(e)`. A callback function
- * is returned which may be passed to `.unbind()`.
- *
- * @param {Element} el
- * @param {String} selector
- * @param {String} type
- * @param {Function} fn
- * @param {Boolean} capture
- * @return {Function}
- * @api public
+ * Expose `iec objects`.
  */
+module.exports = GenericIEC;
 
-exports.bind = function(el, selector, type, fn, capture){
-  return event.bind(el, type, function(e){
-    var target = e.target || e.srcElement;
-    e.delegateTarget = closest(target, selector, true, el);
-    if (e.delegateTarget) fn.call(el, e);
-  }, capture);
+//seeds are required -- and are expected to be the correct neatGenome types
+function GenericIEC(np, seeds, iecOptions)
+{
+    var self = this;
+
+    self.options = iecOptions || {};
+    self.np = np;
+
+    //we keep track of new nodes and connections for the session
+    self.newNodes = {};
+    self.newConnections = {};
+
+    //we can send in a seed genome -- to create generic objects when necessary
+    self.seeds = seeds;
+
+    for(var s=0; s < seeds.length; s++)
+    {
+        var seed = seeds[s];
+        for(var c =0; c < seed.connections.length; c++)
+        {
+            var sConn = seed.connections[c];
+            var cid = '(' + sConn.sourceID + ',' + sConn.targetID + ')';
+            self.newConnections[cid] = sConn;
+        }
+    }
+
+    self.cloneSeed = function(){
+
+        var seedIx = utilities.next(self.seeds.length);
+
+        var seedCopy = NeatGenome.Copy(self.seeds[seedIx]);
+        if(self.options.seedMutationCount)
+        {
+            for(var i=0; i < self.options.seedMutationCount; i++)
+                seedCopy.mutate(self.newNodes, self.newConnections, self.np);
+        }
+        return seedCopy;
+    };
+
+    self.markParentConnections = function(parents){
+
+        for(var s=0; s < parents.length; s++)
+        {
+            var parent = parents[s];
+            for(var c =0; c < parent.connections.length; c++)
+            {
+                var sConn = parent.connections[c];
+                var cid = '(' + sConn.sourceID + ',' + sConn.targetID + ')';
+                self.newConnections[cid] = sConn;
+            }
+        }
+
+    };
+
+
+        //this function handles creating a genotype from sent in parents.
+    //it's pretty simple -- however many parents you have, select a random number of them, and attempt to mate them
+    self.createNextGenome = function(parents)
+    {
+        self.markParentConnections(parents);
+        //IF we have 0 parents, we create a genome with the default configurations
+        var ng;
+        var initialMutationCount = self.options.initialMutationCount || 0,
+            postXOMutationCount = self.options.postMutationCount || 0;
+
+        var responsibleParents = [];
+
+        switch(parents.length)
+        {
+            case 0:
+
+                //parents are empty -- start from scratch!
+                ng = self.cloneSeed();
+
+                for(var m=0; m < initialMutationCount; m++)
+                    ng.mutate(self.newNodes, self.newConnections, self.np);
+
+                //no responsible parents
+
+                break;
+            case 1:
+
+                //we have one parent
+                //asexual reproduction
+                ng = parents[0].createOffspringAsexual(self.newNodes, self.newConnections, self.np);
+
+                //parent at index 0 responsible
+                responsibleParents.push(0);
+
+                for(var m=0; m < postXOMutationCount; m++)
+                    ng.mutate(self.newNodes, self.newConnections, self.np);
+
+                break;
+            default:
+                //greater than 1 individual as a possible parent
+
+                //at least 1 parent, and at most self.activeParents.count # of parents
+                var parentCount = 1 + utilities.next(parents.length);
+
+                if(parentCount == 1)
+                {
+                    //select a single parent for offspring
+                    var rIx = utilities.next(parents.length);
+
+                    ng = parents[rIx].createOffspringAsexual(self.newNodes, self.newConnections, self.np);
+                    //1 responsible parent at index 0
+                    responsibleParents.push(rIx);
+                    break;
+                }
+
+                //we expect active parents to be small, so we grab parentCount number of parents from a small array of parents
+                var parentIxs = utilities.RouletteWheel.selectXFromSmallObject(parentCount, parents);
+
+                var p1 = parents[parentIxs[0]], p2;
+                //if I have 3 parents, go in order composing the objects
+
+                responsibleParents.push(parentIxs[0]);
+
+                //p1 mates with p2 to create o1, o1 mates with p3, to make o2 -- p1,p2,p3 are all combined now inside of o2
+                for(var i=1; i < parentIxs.length; i++)
+                {
+                    p2 = parents[parentIxs[i]];
+                    ng = p1.createOffspringSexual(p2, self.np);
+                    p1 = ng;
+                    responsibleParents.push(parentIxs[i]);
+                }
+
+                for(var m=0; m < postXOMutationCount; m++)
+                    ng.mutate(self.newNodes, self.newConnections, self.np);
+
+
+                break;
+        }
+
+        //we have our genome, let's send it back
+
+        //the reason we don't end it inisde the switch loop is that later, we might be interested in saving this genome from some other purpose
+        return {offspring: ng, parents: responsibleParents};
+    };
+
 };
 
+
+});
+
+require.register("optimuslime~neatjs@master/evolution/multiobjective.js", function (exports, module) {
+//here we have everything for NSGA-II mutliobjective search and neatjs
 /**
- * Unbind event `type`'s callback `fn`.
- *
- * @param {Element} el
- * @param {String} type
- * @param {Function} fn
- * @param {Boolean} capture
- * @api public
+ * Module dependencies.
  */
 
-exports.unbind = function(el, type, fn, capture){
-  event.unbind(el, type, fn, capture);
+var NeatGenome = require('optimuslime~neatjs@master/genome/neatGenome.js');
+var Novelty = require('optimuslime~neatjs@master/evolution/novelty.js');
+
+
+//pull in variables from cppnjs
+var cppnjs = require('optimuslime~cppnjs@master');
+var utilities =  cppnjs.utilities;
+
+
+/**
+ * Expose `MultiobjectiveSearch`.
+ */
+
+module.exports = MultiobjectiveSearch;
+
+
+//information to rank each genome
+MultiobjectiveSearch.RankInfo = function()
+{
+    var self = this;
+    //when iterating, we count how many genomes dominate other genomes
+    self.dominationCount = 0;
+    //who does this genome dominate
+    self.dominates = [];
+    //what is this genome's rank (i.e. what pareto front is it on)
+    self.rank = 0;
+    //has this genome been ranked
+    self.ranked = false;
+};
+MultiobjectiveSearch.RankInfo.prototype.reset = function(){
+
+    var self = this;
+    self.rank = 0;
+    self.ranked = false;
+    self.dominationCount = 0;
+    self.dominates = [];
+};
+
+MultiobjectiveSearch.Help = {};
+
+MultiobjectiveSearch.Help.SortPopulation = function(pop)
+{
+    //sort genomes by fitness / age -- as genomes are often sorted
+    pop.sort(function(x,y){
+
+        var fitnessDelta = y.fitness - x.fitness;
+        if (fitnessDelta < 0.0)
+            return -1;
+        else if (fitnessDelta > 0.0)
+            return 1;
+
+        var ageDelta = x.age - y.age;
+
+        // Convert result to an int.
+        if (ageDelta < 0)
+            return -1;
+        else if (ageDelta > 0)
+            return 1;
+
+        return 0;
+
+    });
+};
+
+//class to assign multiobjective fitness to individuals (fitness based on what pareto front they are on)
+MultiobjectiveSearch.multiobjectiveUtilities = function(np)
+{
+
+    var self = this;
+
+    self.np = np;
+    self.population = [];
+    self.populationIDs = {};
+    self.ranks = [];
+    self.nov = new Novelty(10.0);
+    self.doNovelty = false;
+    self.generation = 0;
+
+    self.localCompetition = false;
+
+    self.measureNovelty = function()
+    {
+        var count = self.population.length;
+
+        self.nov.initialize(self.population);
+
+        //reset locality and competition for each genome
+        for(var i=0; i < count; i++)
+        {
+            var genome = self.population[i];
+
+            genome.locality=0.0;
+            genome.competition=0.0;
+
+            //we measure all objectives locally -- just to make it simpler
+            for(var o=0; o < genome.objectives.length; o++)
+                genome.localObjectivesCompetition[o] = 0.0;
+        }
+
+       var ng;
+        var max = 0.0, min = 100000000000.0;
+
+        for (var i = 0; i< count; i++)
+        {
+            ng = self.population[i];
+            var fit = self.nov.measureNovelty(ng);
+
+            //reset our fitness value to be local, yeah boyee
+            //the first objective is fitness which is replaced with local fitness -- how many did you beat around you
+            // # won / total number of neighbors = % competitive
+            ng.objectives[0] = ng.competition / ng.nearestNeighbors;
+            ng.objectives[ng.objectives.length - 2] = fit + 0.01;
+
+            //the last local measure is the genome novelty measure
+            var localGenomeNovelty = ng.localObjectivesCompetition[ng.objectives.length-1];
+
+            //genomic novelty is measured locally as well
+            console.log("Genomic Novelty: " + ng.objectives[ng.objectives.length - 1] + " After: " + localGenomeNovelty / ng.nearestNeighbors);
+
+            //this makes genomic novelty into a local measure
+            ng.objectives[ng.objectives.length - 1] = localGenomeNovelty / ng.nearestNeighbors;
+
+            if(fit>max) max=fit;
+            if(fit<min) min=fit;
+
+        }
+
+        console.log("nov min: "+ min + " max:" + max);
+    };
+
+    //if genome x dominates y, increment y's dominated count, add y to x's dominated list
+    self.updateDomination = function( x,  y,  r1, r2)
+    {
+        if(self.dominates(x,y)) {
+            r1.dominates.push(r2);
+            r2.dominationCount++;
+        }
+    };
+
+
+    //function to check whether genome x dominates genome y, usually defined as being no worse on all
+    //objectives, and better at at least one
+    self.dominates = function( x,  y) {
+        var better=false;
+        var objx = x.objectives, objy = y.objectives;
+
+        var sz = objx.length;
+
+        //if x is ever worse than y, it cannot dominate y
+        //also check if x is better on at least one
+        for(var i=0;i<sz-1;i++) {
+            if(objx[i]<objy[i]) return false;
+            if(objx[i]>objy[i]) better=true;
+        }
+
+        //genomic novelty check, disabled for now
+        //threshold set to 0 -- Paul since genome is local
+        var thresh=0.0;
+        if((objx[sz-1]+thresh)<(objy[sz-1])) return false;
+        if((objx[sz-1]>(objy[sz-1]+thresh))) better=true;
+
+        return better;
+    };
+
+    //distance function between two lists of objectives, used to see if two individuals are unique
+    self.distance = function(x, y) {
+        var delta=0.0;
+        var len = x.length;
+        for(var i=0;i<len;i++) {
+            var d=x[i]-y[i];
+            delta+=d*d;
+        }
+        return delta;
+    };
+
+
+    //Todo: Print to file
+    self.printDistribution = function()
+    {
+        var filename="dist"+    self.generation+".txt";
+        var content="";
+
+        console.log("Print to file disabled for now, todo: write in save to file!");
+//            XmlDocument archiveout = new XmlDocument();
+//            XmlPopulationWriter.WriteGenomeList(archiveout, population);
+//            archiveout.Save(filename);
+    };
+
+    //currently not used, calculates genomic novelty objective for protecting innovation
+    //uses a rough characterization of topology, i.e. number of connections in the genome
+    self.calculateGenomicNovelty = function() {
+        var sum=0.0;
+        var max_conn = 0;
+
+        var xx, yy;
+
+        for(var g=0; g < self.population.length; g++) {
+            xx = self.population[g];
+            var minDist=10000000.0;
+
+            var difference=0.0;
+            var delta=0.0;
+            //double array
+            var distances= [];
+
+            if(xx.connections.length > max_conn)
+                max_conn = xx.connections.length;
+
+            //int ccount=xx.ConnectionGeneList.Count;
+            for(var g2=0; g2 < self.population.length; g2++) {
+                yy = self.population[g2];
+                if(g==g2)
+                    continue;
+
+                //measure genomic compatability using neatparams
+                var d = xx.compat(yy, np);
+                //if(d<minDist)
+                //	minDist=d;
+
+                distances.push(d);
+            }
+            //ascending order
+            //want the closest individuals
+            distances.Sort(function(a,b) {return a-b;});
+
+            //grab the 10 closest distances
+            var sz=Math.min(distances.length,10);
+
+            var diversity = 0.0;
+
+            for(var i=0;i<sz;i++)
+                diversity+=distances[i];
+
+            xx.objectives[xx.objectives.length-1] = diversity;
+            sum += diversity;
+        }
+        console.log("Diversity: " + sum/population.length + " " + max_conn);
+    };
+
+
+
+    //add an existing population from hypersharpNEAT to the multiobjective population maintained in
+    //this class, step taken before evaluating multiobjective population through the rank function
+    self.addPopulation = function(genomes)
+    {
+
+        for(var i=0;i< genomes.length;i++)
+        {
+            var blacklist=false;
+
+            //TODO: I'm not sure this is correct, since genomes coming in aren't measured locally yet
+            //so in some sense, we're comparing local measures to global measures and seeing how far
+            //if they are accidentally close, this could be bad news
+//                for(var j=0;j<self.population.length; j++)
+//                {
+//                    if(self.distance(genomes[i].behavior.objectives, self.population[j].objectives) < 0.01)
+//                        blacklist=true;  //reject a genome if it is very similar to existing genomes in pop
+//                }
+            //no duplicates please
+            if(self.populationIDs[genomes[i].gid])
+                blacklist = true;
+
+            //TODO: Test if copies are needed, or not?
+            if(!blacklist) {
+                //add genome if it is unique
+                //we might not need to make copies
+                //this will make a copy of the behavior
+//                    var copy = new neatGenome.NeatGenome.Copy(genomes[i], genomes[i].gid);
+//                    self.population.push(copy);
+
+                //push directly into population, don't use copy -- should test if this is a good idea?
+                self.population.push(genomes[i]);
+                self.populationIDs[genomes[i].gid] = genomes[i];
+
+            }
+
+        }
+
+    };
+
+
+
+    self.rankGenomes = function()
+    {
+        var size = self.population.length;
+
+        self.calculateGenomicNovelty();
+        if(self.doNovelty) {
+            self.measureNovelty();
+        }
+
+        //reset rank information
+        for(var i=0;i<size;i++) {
+            if(self.ranks.length<i+1)
+                self.ranks.push(new MultiobjectiveSearch.RankInfo());
+            else
+                self.ranks[i].reset();
+        }
+        //calculate domination by testing each genome against every other genome
+        for(var i=0;i<size;i++) {
+            for(var j=0;j<size;j++) {
+                self.updateDomination(self.population[i], self.population[j],self.ranks[i],self.ranks[j]);
+            }
+        }
+
+        //successively peel off non-dominated fronts (e.g. those genomes no longer dominated by any in
+        //the remaining population)
+        var front = [];
+        var ranked_count=0;
+        var current_rank=1;
+        while(ranked_count < size) {
+            //search for non-dominated front
+            for(var i=0;i<size;i++)
+            {
+                //continue if already ranked
+                if(self.ranks[i].ranked) continue;
+                //if not dominated, add to front
+                if(self.ranks[i].dominationCount==0) {
+                    front.push(i);
+                    self.ranks[i].ranked=true;
+                    self.ranks[i].rank = current_rank;
+                }
+            }
+
+            var front_size = front.length;
+            console.log("Front " + current_rank + " size: " + front_size);
+
+            //now take all the non-dominated individuals, see who they dominated, and decrease
+            //those genomes' domination counts, because we are removing this front from consideration
+            //to find the next front of individuals non-dominated by the remaining individuals in
+            //the population
+            for(var i=0;i<front_size;i++) {
+                var r = self.ranks[front[i]];
+                for (var dominated in r.dominates) {
+                    dominated.dominationCount--;
+                }
+            }
+
+            ranked_count+=front_size;
+            front = [];
+            current_rank++;
+        }
+
+        //we save the last objective for potential use as genomic novelty objective
+        var last_obj = self.population[0].objectives.length-1;
+
+        //fitness = popsize-rank (better way might be maxranks+1-rank), but doesn't matter
+        //because speciation is not used and tournament selection is employed
+        for(var i=0;i<size;i++) {
+            self.population[i].fitness = (size+1)-self.ranks[i].rank;//+population[i].objectives[last_obj]/100000.0;
+    }
+
+        //sorting based on fitness
+        MultiobjectiveSearch.Help.SortPopulation(self.population);
+
+        self.generation++;
+
+        if(self.generation%250==0)
+            self.printDistribution();
+    };
+
+    //when we merge populations together, often the population will overflow, and we need to cut
+    //it down. to do so, we just remove the last x individuals, which will be in the less significant
+    //pareto fronts
+    self.truncatePopulation = function(size)
+    {
+        var toRemove = self.population.length - size;
+        console.log("population size before: " + self.population.length);
+        console.log("removing " + toRemove);
+
+        //remove the tail after sorting
+        if(toRemove > 0)
+            self.population.splice(size, toRemove);
+
+        //changes to population, make sure to update our lookup
+        self.populationIDs = NeatGenome.Help.CreateGIDLookup(self.population);
+
+        console.log("population size after: " + self.population.length);
+
+        return self.population;
+    };
+
+};
+
+function MultiobjectiveSearch(seedGenomes, genomeEvaluationFunctions, neatParameters, searchParameters)
+{
+    var self=this;
+
+    //functions for evaluating genomes in a population
+    self.genomeEvaluationFunctions = genomeEvaluationFunctions;
+
+    self.generation = 0;
+    self.np = neatParameters;
+    self.searchParameters = searchParameters;
+
+    //for now, we just set seed genomes as population
+    //in reality, we should use seed genomes as seeds into population determined by search parameters
+    //i.e. 5 seed genomes -> 50 population size
+    //TODO: Turn seed genomes into full first population
+    self.population = seedGenomes;
+
+    //create genome lookup once we have population
+    self.populationIDs = NeatGenome.Help.CreateGIDLookup(seedGenomes);
+
+
+    //see end of multiobjective search declaration for initailization code
+    self.multiobjective= new MultiobjectiveSearch.multiobjectiveUtilities(neatParameters);
+    self.np.compatibilityThreshold = 100000000.0; //disable speciation w/ multiobjective
+
+    self.initializePopulation = function()
+    {
+        // The GenomeFactories normally won't bother to ensure that like connections have the same ID
+        // throughout the population (because it's not very easy to do in most cases). Therefore just
+        // run this routine to search for like connections and ensure they have the same ID.
+        // Note. This could also be done periodically as part of the search, remember though that like
+        // connections occuring within a generation are already fixed - using a more efficient scheme.
+        self.matchConnectionIDs();
+
+        // Evaluate the whole population.
+        self.evaluatePopulation();
+
+        //TODO: Add in some concept of speciation for NSGA algorithm -- other than genomic novelty?
+        //We don't do speciation for NSGA-II algorithm
+
+        // Now we have fitness scores and no speciated population we can calculate fitness stats for the
+        // population as a whole -- and save best genomes
+        //recall that speciation is NOT part of NSGA-II
+        self.updateFitnessStats();
+
+    };
+
+    self.matchConnectionIDs = function()
+    {
+        var connectionIdTable = {};
+
+        var genomeBound = self.population.length;
+        for(var genomeIdx=0; genomeIdx<genomeBound; genomeIdx++)
+        {
+            var genome = self.population[genomeIdx];
+
+            //loop through all the connections for this genome
+            var connectionGeneBound = genome.connections.length;
+            for(var connectionGeneIdx=0; connectionGeneIdx<connectionGeneBound; connectionGeneIdx++)
+            {
+                var connectionGene = genome.connections[connectionGeneIdx];
+
+                var ces = connectionGene.sourceID + "," + connectionGene.targetID;
+
+                var existingID = connectionIdTable[ces];
+
+                if(existingID==null)
+                {	// No connection withthe same end-points has been registered yet, so
+                    // add it to the table.
+                    connectionIdTable[ces] = connectionGene.gid;
+                }
+                else
+                {	// This connection is already registered. Give our latest connection
+                    // the same innovation ID as the one in the table.
+                    connectionGene.gid = existingID;
+                }
+            }
+            // The connection genes in this genome may now be out of order. Therefore we must ensure
+            // they are sorted before we continue.
+            genome.connections.sort(function(a,b){
+               return a.gid - b.gid;
+            });
+        }
+    };
+
+    self.incrementAges = function()
+    {
+        //would normally increment species age as  well, but doesn't happen in multiobjective
+        for(var i=0; i < self.population.length; i++)
+        {
+            var ng = self.population[i];
+            ng.age++;
+        }
+    };
+    self.updateFitnessStats = function()
+    {
+        self.bestFitness = Number.MIN_VALUE;
+        self.bestGenome = null;
+        self.totalNeuronCount = 0;
+        self.totalConnectionCount = 0;
+        self.totalFitness = 0;
+        self.avgComplexity = 0;
+        self.meanFitness =0;
+
+        //go through the genomes, find the best genome and the most fit
+        for(var i=0; i < self.population.length; i++)
+        {
+            var ng = self.population[i];
+            if(ng.realFitness > self.bestFitness)
+            {
+                self.bestFitness = ng.realFitness;
+                self.bestGenome = ng;
+            }
+            self.totalNeuronCount += ng.nodes.length;
+            self.totalConnectionCount += ng.connections.length;
+            self.totalFitness += ng.realFitness;
+        }
+
+        self.avgComplexity = (self.totalNeuronCount + self.totalConnectionCount)/self.population.length;
+        self.meanFitness = self.totalFitness/self.population.length;
+
+    };
+
+    self.tournamentSelect = function(genomes)
+    {
+        var bestFound= 0.0;
+        var bestGenome=null;
+        var bound = genomes.length;
+
+        //grab the best of 4 by default, can be more attempts than that
+        for(var i=0;i<self.np.tournamentSize;i++) {
+            var next= genomes[utilities.next(bound)];
+            if (next.fitness > bestFound) {
+                bestFound=next.fitness;
+                bestGenome=next;
+            }
+        }
+
+        return bestGenome;
+    };
+
+
+    self.evaluatePopulation= function()
+    {
+        //for each genome, we need to check if we should evaluate the individual, and then evaluate the individual
+
+        //default everyone is evaluated
+        var shouldEvaluate = self.genomeEvaluationFunctions.shouldEvaluateGenome || function(){return true;};
+        var defaultFitness = self.genomeEvaluationFunctions.defaultFitness || 0.0001;
+
+        if(!self.genomeEvaluationFunctions.evaluateGenome)
+            throw new Error("No evaluation function defined, how are you supposed to run evolution?");
+
+        var evaluateGenome = self.genomeEvaluationFunctions.evaluateGenome;
+
+        for(var i=0; i < self.population.length; i++)
+        {
+            var ng = self.population[i];
+
+            var fit = defaultFitness;
+
+            if(shouldEvaluate(ng))
+            {
+                fit = evaluateGenome(ng, self.np);
+            }
+
+            ng.fitness = fit;
+            ng.realFitness = fit;
+        }
+
+    };
+
+    self.performOneGeneration = function()
+    {
+        //No speciation in multiobjective
+        //therefore no species to check for removal
+
+        //----- Stage 1. Create offspring / cull old genomes / add offspring to population.
+        var regenerate = false;
+
+        self.multiobjective.addPopulation(self.population);
+        self.multiobjective.rankGenomes();
+
+
+        //cut the population down to the desired size
+        self.multiobjective.truncatePopulation(self.population.length);
+        //no speciation necessary
+
+        //here we can decide if we want to save to WIN
+
+        self.updateFitnessStats();
+
+        if(!regenerate)
+        {
+            self.createOffSpring();
+
+            //we need to trim population to the elite count, then replace
+            //however, this doesn't affect the multiobjective population -- just the population held in search at the time
+            MultiobjectiveSearch.Help.SortPopulation(self.population);
+            var eliteCount = Math.floor(self.np.elitismProportion*self.population.length);
+
+            //remove everything but the most elite!
+            self.population.splice(eliteCount, self.population.length - eliteCount);
+
+            // Add offspring to the population.
+            var genomeBound = self.offspringList.length;
+            for(var genomeIdx=0; genomeIdx<genomeBound; genomeIdx++)
+                self.population.push(self.offspringList[genomeIdx]);
+        }
+
+        //----- Stage 2. Evaluate genomes / Update stats.
+        self.evaluatePopulation();
+        self.updateFitnessStats();
+
+        self.incrementAges();
+        self.generation++;
+
+    };
+
+
+    self.createOffSpring = function()
+    {
+        self.offspringList = [];
+
+        // Create a new lists so that we can track which connections/neurons have been added during this routine.
+        self.newConnectionTable = [];
+        self.newNodeTable = [];
+
+        //now create chunk of offspring asexually
+        self.createMultipleOffSpring_Asexual();
+        //then the rest sexually
+        self.createMultipleOffSpring_Sexual();
+    };
+    self.createMultipleOffSpring_Asexual = function()
+    {
+        //function for testing if offspring is valid
+        var validOffspring = self.genomeEvaluationFunctions.isValidOffspring || function() {return true;};
+        var attemptValid = self.genomeEvaluationFunctions.validOffspringAttempts || 5;
+
+        var eliteCount = Math.floor(self.np.elitismProportion*self.population.length);
+
+
+        //how many asexual offspring? Well, the proportion of asexual * total number of desired new individuals
+        var offspringCount = Math.max(1, Math.round((self.population.length - eliteCount)*self.np.pOffspringAsexual));
+
+        // Add offspring to a seperate genomeList. We will add the offspring later to prevent corruption of the enumeration loop.
+        for(var i=0; i<offspringCount; i++)
+        {
+            var parent=null;
+
+            //tournament select in multiobjective search
+            parent = self.tournamentSelect(self.population);
+
+            var offspring = parent.createOffspringAsexual(self.newNodeTable, self.newConnectionTable, self.np);
+            var testCount = 0, maxTests = attemptValid;
+
+            //if we have a valid genotype test function, it should be used for generating this individual!
+            while (!validOffspring(offspring, self.np) && testCount++ < maxTests)
+                offspring = parent.createOffspringAsexual(self.newNodeTable, self.newConnectionTable, self.np);
+
+            //we have a valid offspring, send it away!
+            self.offspringList.push(offspring);
+        }
+    };
+
+    self.createMultipleOffSpring_Sexual = function()
+    {
+        //function for testing if offspring is valid
+        var validOffspring = self.genomeEvaluationFunctions.isValidOffspring || function() {return true;};
+        var attemptValid = self.genomeEvaluationFunctions.validOffspringAttempts || 5;
+
+        var oneMember=false;
+        var twoMembers=false;
+
+        if(self.population.length == 1)
+        {
+            // We can't perform sexual reproduction. To give the species a fair chance we call the asexual routine instead.
+            // This keeps the proportions of genomes per species steady.
+            oneMember = true;
+        }
+        else if(self.population.length==2)
+            twoMembers = true;
+
+        // Determine how many sexual offspring to create.
+        var eliteCount = Math.floor(self.np.elitismProportion*self.population.length);
+
+        //how many sexual offspring? Well, the proportion of sexual * total number of desired new individuals
+        var matingCount = Math.round((self.population.length - eliteCount)*self.np.pOffspringSexual);
+
+        for(var i=0; i<matingCount; i++)
+        {
+            var parent1;
+            var parent2=null;
+            var offspring;
+
+            if(utilities.nextDouble() < self.np.pInterspeciesMating)
+            {	// Inter-species mating!
+                //System.Diagnostics.Debug.WriteLine("Inter-species mating!");
+                if(oneMember)
+                    parent1 = self.population[0];
+                else  {
+                    //tournament select in multiobjective search
+                    parent1 = self.tournamentSelect(self.population);
+                }
+
+                // Select the 2nd parent from the whole popualtion (there is a chance that this will be an genome
+                // from this species, but that's OK).
+                var j=0;
+                do
+                {
+                    parent2  = self.tournamentSelect(self.population);
+                }
+
+                while(parent1==parent2 && j++ < 4);	// Slightly wasteful but not too bad. Limited by j.
+            }
+            else
+            {	// Mating within the current species.
+                //System.Diagnostics.Debug.WriteLine("Mating within the current species.");
+                if(oneMember)
+                {	// Use asexual reproduction instead.
+                    offspring = self.population[0].createOffspringAsexual(self.newNodeTable, self.newConnectionTable, self.np);
+
+                    var testCount = 0; var maxTests = attemptValid;
+                    //if we have an assess function, it should be used for generating this individual!
+                    while (!validOffspring(offspring) && testCount++ < maxTests)
+                        offspring = self.population[0].createOffspringAsexual(self.newNodeTable, self.newConnectionTable, self.np);
+
+                    self.offspringList.push(offspring);
+                    continue;
+                }
+
+                if(twoMembers)
+                {
+                    offspring = self.population[0].createOffspringSexual(self.population[1], self.np);
+
+                    var testCount = 0; var maxTests = attemptValid;
+
+                    //if we have an assess function, it should be used for generating this individual!
+                    while (!validOffspring(offspring) && testCount++ < maxTests)
+                        offspring = self.population[0].createOffspringSexual(self.population[1], self.np);
+
+                    self.offspringList.push(offspring);
+                    continue;
+                }
+
+                parent1 = self.tournamentSelect(self.population);
+
+                var j=0;
+                do
+                {
+                    parent2 = self.tournamentSelect(self.population);
+                }
+                while(parent1==parent2 && j++ < 4);	// Slightly wasteful but not too bad. Limited by j.
+            }
+
+            if(parent1 != parent2)
+            {
+                offspring = parent1.createOffspringSexual(parent2, self.np);
+
+                var testCount = 0; var maxTests = attemptValid;
+                //if we have an assess function, it should be used for generating this individual!
+                while (!validOffspring(offspring) && testCount++ < maxTests)
+                    offspring = parent1.createOffspringSexual(parent2, self.np);
+
+                self.offspringList.push(offspring);
+            }
+            else
+            {	// No mating pair could be found. Fallback to asexual reproduction to keep the population size constant.
+                offspring = parent1.createOffspringAsexual(self.newNodeTable, self.newConnectionTable,self.np);
+
+                var testCount = 0; var maxTests = attemptValid;
+                //if we have an assess function, it should be used for generating this individual!
+                while (!validOffspring(offspring) && testCount++ < maxTests)
+                    offspring = parent1.createOffspringAsexual(self.newNodeTable, self.newConnectionTable,self.np);
+
+                self.offspringList.push(offspring);
+            }
+        }
+
+    };
+
+
+
+    //finishing initalizatgion of object
+    self.initializePopulation();
+
+
+}
+
+});
+
+require.register("optimuslime~neatjs@master/evolution/novelty.js", function (exports, module) {
+/**
+ * Module dependencies.
+ */
+
+var NeatGenome = require('optimuslime~neatjs@master/genome/neatGenome.js');
+var utilities =  require('optimuslime~cppnjs@master').utilities;
+
+/**
+ * Expose `NeatNode`.
+ */
+
+module.exports = Novelty;
+
+/**
+ * Initialize a new NeatNode.
+ *
+ * @param {Number} threshold
+ * @api public
+ */
+function Novelty(threshold)
+{
+    var self = this;
+
+    self.nearestNeighbors = 20;
+    self.initialized = false;
+    self.archiveThreshold = threshold;
+    self.measureAgainst = [];
+    self.archive = [];
+    self.pendingAddition = [];
+
+    self.maxDistSeen = Number.MIN_VALUE;
+}
+
+
+Novelty.Behavior = function()
+{
+    var self =this;
+    self.behaviorList = null;
+    self.objectives = null;
+};
+
+Novelty.Behavior.BehaviorCopy = function(copyFrom)
+{
+    var behavior = new novelty.Behavior();
+    if(copyFrom.behaviorList)
+    {
+        //copy the behavior over
+        behavior.behaviorList = copyFrom.behaviorList.slice(0);
+    }
+    //if you have objectives filled out, take those too
+    if(copyFrom.objectives)
+    {
+        behavior.objectives = copyFrom.objectives.slice(0);
+    }
+    //finished copying behavior
+    return behavior;
+};
+
+Novelty.Behavior.distance = function(x, y)
+{
+    var dist = 0.0;
+
+    if(!x.behaviorList || !y.behaviorList)
+        throw new Error("One of the behaviors is empty, can't compare distance!");
+
+    //simple calculation, loop through double array and sum up square differences
+    for(var k=0;k<x.behaviorList.length;k++)
+    {
+        var delta = x.behaviorList[k]-y.behaviorList[k];
+        dist += delta*delta;
+    }
+
+    //return square distance of behavior
+    return dist;
+};
+
+
+Novelty.prototype.addPending = function()
+{
+    var self = this;
+
+    var length = self.pendingAddition.length;
+
+    if(length === 0)
+    {
+        self.archiveThreshold *= .95;
+    }
+    if(length > 5)
+    {
+        self.archiveThreshold *= 1.3;
+    }
+
+    //for all of our additions to the archive,
+    //check against others to see if entered into archive
+    for(var i=0; i < length; i++)
+    {
+        if(self.measureAgainstArchive(self.pendingAddition[i], false))
+            self.archive.push(self.pendingAddition[i]);
+    }
+
+    //clear it all out
+    self.pendingAddition = [];
+};
+
+Novelty.prototype.measureAgainstArchive = function(neatgenome, addToPending)
+{
+    var self = this;
+
+    for(var genome in self.archive)
+    {
+        var dist = novelty.Behavior.distance(neatgenome.behavior, genome.behavior);
+
+        if(dist > self.maxDistSeen)
+        {
+            self.maxDistSeen = dist;
+            console.log('Most novel dist: ' + self.maxDistSeen);
+        }
+
+        if(dist < self.archiveThreshold)
+            return false;
+
+    }
+
+    if(addToPending)
+    {
+        self.pendingAddition.push(neatgenome);
+    }
+
+    return true;
+};
+
+//measure the novelty of an organism against the fixed population
+Novelty.prototype.measureNovelty = function(neatgenome)
+{
+    var sum = 0.0;
+    var self = this;
+
+    if(!self.initialized)
+        return Number.MIN_VALUE;
+
+    var noveltyList = [];
+
+    for(var genome in self.measureAgainst)
+    {
+        noveltyList.push(
+            {distance: novelty.Behavior.distance(genome, neatgenome.behavior),
+            genome: genome}
+        );
+    }
+
+    for(var genome in self.archive)
+    {
+        noveltyList.push(
+            {distance: novelty.Behavior.distance(genome, neatgenome.behavior),
+                genome: genome}
+        );
+    }
+
+    //see if we should add this genome to the archive
+    self.measureAgainstArchive(neatgenome,true);
+
+    noveltyList.sort(function(a,b){return b.distance - a.distance});
+    var nn = self.nearestNeighbors;
+    if(noveltyList.length < self.nearestNeighbors) {
+        nn=noveltyList.length;
+    }
+
+    neatgenome.nearestNeighbors = nn;
+
+    //Paul - reset local competition and local genome novelty -- might have been incrementing over time
+    //Not sure if that's the intention of the algorithm to keep around those scores to signify longer term success
+    //this would have a biasing effect on individuals that have been around for longer
+//            neatgenome.competition = 0;
+//            neatgenome.localGenomeNovelty = 0;
+
+    //TODO: Verify this is working - are local objectives set up, is this measuring properly?
+    for (var x = 0; x < nn; x++)
+    {
+        sum += noveltyList[x].distance;
+
+        if (neatgenome.realFitness > noveltyList[x].genome.realFitness)
+            neatgenome.competition += 1;
+
+        //compare all the objectives, and locally determine who you are beating
+        for(var o =0; o < neatgenome.objectives.length; o++)
+        {
+            if(neatgenome.objectives[o] > noveltyList[x].genome.objectives[o])
+                neatgenome.localObjectivesCompetition[o] += 1;
+        }
+
+        noveltyList[x].genome.locality += 1;
+        // sum+=10000.0; //was 100
+    }
+    //neatgenome.locality = 0;
+    //for(int x=0;x<nn;x++)
+    //{
+    //    sum+=noveltyList[x].First;
+
+    //    if(neatgenome.RealFitness>noveltyList[x].Second.RealFitness)
+    //        neatgenome.competition+=1;
+
+    //    noveltyList[x].Second.locality+=1;
+    //    //Paul: This might not be the correct meaning of locality, but I am hijacking it instead
+    //    //count how many genomes we are neighbored to
+    //    //then, if we take neatgenome.competition/neatgenome.locality - we get percentage of genomes that were beaten locally!
+    //    neatgenome.locality += 1;
+    //    // sum+=10000.0; //was 100
+    //}
+    return Math.max(sum, .0001);
+}
+
+//Todo REFINE... adding highest fitness might
+//not correspond with most novel?
+Novelty.prototype.add_most_novel = function(genomes)
+{
+    var self = this;
+
+    var max_novelty =0;
+    var best= null;
+
+    for(var i=0;i<genomes.length;i++)
+    {
+        if(genomes[i].fitness > max_novelty)
+        {
+            best = genomes[i];
+            max_novelty = genomes[i].fitness;
+        }
+    }
+    self.archive.push(best);
+};
+
+
+Novelty.prototype.initialize = function(genomes)
+{
+    var self = this;
+    self.initialized = true;
+
+    self.measureAgainst = [];
+
+    if(genomes !=null){
+        for(var i=0;i<genomes.length;i++)
+        {
+            //we might not need to make copies
+            //Paul: removed copies to make it easier to read the realfitness from the indiviudals, without making a million update calls
+            self.measureAgainst.push(genomes[i]);//new NeatGenome.NeatGenome((NeatGenome.NeatGenome)p[i],i));
+        }
+    }
+};
+
+//update the measure population by intelligently sampling
+//the current population + archive + fixed population
+Novelty.prototype.update_measure = function(genomes)
+{
+    var self = this;
+
+    var total = [];
+
+    //we concatenate copies of the genomes, the measureagainst and archive array
+    var total = genomes.slice(0).concat(self.measureAgainst.slice(0), self.archive.slice(0));
+
+    self.mergeTogether(total, genomes.length);
+
+    console.log("Size: " + self.measureAgainst.length);
+}
+
+Novelty.prototype.mergeTogether = function(list, size)
+{
+    var self = this;
+
+    console.log("total count: "+ list.length);
+
+//            Random r = new Random();
+    var newList = [];
+
+
+
+    //bool array
+    var dirty = [];
+    //doubles
+    var closest = [];
+
+    //set default values
+    for(var x=0;x<list.length;x++)
+    {
+        dirty.push(false);
+        closest.push(Number.MAX_VALUE);
+    }
+    //now add the first individual randomly to the new population
+    var last_added = utilities.next(list.length);
+    dirty[last_added] = true;
+    newList.push(list[last_added]);
+
+    while(newList.length < size)
+    {
+        var mostNovel = 0.0;
+        var mostNovelIndex = 0;
+        for(var x=0;x<list.length;x++)
+        {
+            if (dirty[x])
+                continue;
+            var dist_to_last = novelty.Behavior.distance(list[x].behavior,
+            list[last_added].behavior);
+
+            if (dist_to_last < closest[x])
+                closest[x] = dist_to_last;
+
+            if (closest[x] > mostNovel)
+            {
+                mostNovel = closest[x];
+                mostNovelIndex = x;
+            }
+        }
+
+        dirty[mostNovelIndex] = true;
+        newList.push(NeatGenome.Copy(list[mostNovelIndex],0));
+        last_added = mostNovelIndex;
+    }
+
+    self.measureAgainst = newList;
+};
+
+Novelty.prototype.updatePopulationFitness = function(genomes)
+{
+    var self = this;
+
+    for (var i = 0; i < genomes.length; i++)
+    {
+        //we might not need to make copies
+        self.measureAgainst[i].realFitness = genomes[i].realFitness;
+    }
 };
 
 });
 
-require.modules["component-delegate"] = require.modules["component~delegate@0.2.2"];
-require.modules["component~delegate"] = require.modules["component~delegate@0.2.2"];
-require.modules["delegate"] = require.modules["component~delegate@0.2.2"];
+require.register("optimuslime~neatjs@master/genome/neatConnection.js", function (exports, module) {
+
+/**
+ * Module dependencies.
+ */
+//none
+
+/**
+ * Expose `NeatConnection`.
+ */
+
+module.exports = NeatConnection;
+
+/**
+ * Initialize a new NeatConnection.
+ *
+ * @param {String} gid
+ * @param {Number} weight
+ * @param {Object} srcTgtObj
+ * @api public
+ */
+
+function NeatConnection(gid, weight, srcTgtObj) {
+
+    var self = this;
+    //Connection can be inferred by the cantor pair in the gid, however, in other systems, we'll need a source and target ID
+
+    //gid must be a string
+    self.gid = typeof gid === "number" ? "" + gid : gid;//(typeof gid === 'string' ? parseFloat(gid) : gid);
+    self.weight = (typeof weight === 'string' ? parseFloat(weight) : weight);
+
+    //node ids are strings now -- so make sure to save as string always
+    self.sourceID = (typeof srcTgtObj.sourceID === 'number' ? "" + (srcTgtObj.sourceID) : srcTgtObj.sourceID);
+    self.targetID = (typeof srcTgtObj.targetID === 'number' ? "" + (srcTgtObj.targetID) : srcTgtObj.targetID);
+
+    //learning rates and modulatory information contained here, not generally used or tested
+    self.a =0;
+    self.b =0;
+    self.c =0;
+    self.d =0;
+    self.modConnection=0;
+    self.learningRate=0;
+
+    self.isMutated=false;
+}
 
 
-require.register("component~events@master", function (exports, module) {
+NeatConnection.Copy = function(connection)
+{
+    return new NeatConnection(connection.gid, connection.weight, {sourceID: connection.sourceID, targetID: connection.targetID});
+};
+});
+
+require.register("optimuslime~neatjs@master/genome/neatNode.js", function (exports, module) {
+/**
+ * Module dependencies.
+ */
+//none
+
+/**
+ * Expose `NeatNode`.
+ */
+
+module.exports = NeatNode;
+
+/**
+ * Initialize a new NeatNode.
+ *
+ * @param {String} gid
+ * @param {Object,String} aFunc
+ * @param {Number} layer
+ * @param {Object} typeObj
+ * @api public
+ */
+function NeatNode(gid, aFunc, layer, typeObj) {
+
+    var self = this;
+
+    //gids are strings not numbers -- make it so
+    self.gid =  typeof gid === "number" ? "" + gid : gid;
+    //we only story the string of the activation funciton
+    //let cppns deal with actual act functions
+    self.activationFunction = aFunc.functionID || aFunc;
+
+    self.nodeType = typeObj.type;
+
+    self.layer = (typeof layer === 'string' ? parseFloat(layer) : layer);
+
+    //TODO: Create step tests, include in constructor
+    self.step = 0;
+
+    self.bias = 0;
+}
+
+NeatNode.INPUT_LAYER = 0.0;
+NeatNode.OUTPUT_LAYER = 10.0;
+
+NeatNode.Copy = function(otherNode)
+{
+    return new NeatNode(otherNode.gid, otherNode.activationFunction, otherNode.layer, {type: otherNode.nodeType});
+};
+});
+
+require.register("optimuslime~neatjs@master/genome/neatGenome.js", function (exports, module) {
+/**
+ * Module dependencies.
+ */
+
+//pull in our cppn lib
+var cppnjs = require('optimuslime~cppnjs@master');
+
+//grab our activation factory, cppn object and connections
+var CPPNactivationFactory = cppnjs.cppnActivationFactory;
+var utilities = cppnjs.utilities;
+
+//neatjs imports
+var novelty = require('optimuslime~neatjs@master/evolution/novelty.js');
+var NeatConnection = require('optimuslime~neatjs@master/genome/neatConnection.js');
+var NeatNode = require('optimuslime~neatjs@master/genome/neatNode.js');
+
+//help and params
+var neatHelp =  require('optimuslime~neatjs@master/neatHelp/neatHelp.js');
+var neatParameters =  require('optimuslime~neatjs@master/neatHelp/neatParameters.js');
+var neatDecoder =  require('optimuslime~neatjs@master/neatHelp/neatDecoder.js');
+
+var wUtils = require('optimuslime~win-utils@master');
+var uuid = wUtils.cuid;
+
+//going to need to read node types appropriately
+var NodeType = require('optimuslime~neatjs@master/types/nodeType.js');
+
+/**
+ * Expose `NeatGenome`.
+ */
+
+module.exports = NeatGenome;
+
+/**
+ * Decodes a neatGenome in a cppn.
+ *
+ * @param {String} gid
+ * @param {Array} nodes
+ * @param {Array} connections
+ * @param {Number} incount
+ * @param {Number} outcount
+ * @param {Boolean} debug
+ * @api public
+ */
+function NeatGenome(gid, nodes, connections, incount, outcount, debug) {
+
+    var self = this;
+
+    self.gid = gid;
+    self.fitness = 0;
+
+    // From C#: Ensure that the connectionGenes are sorted by innovation ID at all times.
+    self.nodes = nodes;
+    self.connections = connections;
+
+    //we start a fresh set of mutations for each genome we create!
+    self.mutations = [];
+
+    self.debug = debug;
+
+    //keep track of behavior for novelty
+    self.behavior = new novelty.Behavior();
+    //keep track of "real" fitness - that is the objective measure we've observed
+    self.realFitness = 0;
+    self.age = 0;
+
+    self.localObjectivesCompetition = [];
+
+    self.meta = {};
+
+    //TODO: Hash nodes, connections, and meta to make a global ID! 128-bit md5 hash?
+    //WIN will assign a globalID or gid
+//        self.gid = //get hash
+
+
+    // From C#: For efficiency we store the number of input and output neurons. These two quantities do not change
+// throughout the life of a genome. Note that inputNeuronCount does NOT include the bias neuron! use inputAndBiasNeuronCount.
+// We also keep all input(including bias) neurons at the start of the neuronGeneList followed by
+// the output neurons.
+    self.inputNodeCount= incount;
+    self.inputAndBiasNodeCount= incount+1;
+    self.outputNodeCount= outcount;
+    self.inputBiasOutputNodeCount= self.inputAndBiasNodeCount + self.outputNodeCount;
+    self.inputBiasOutputNodeCountMinus2= self.inputBiasOutputNodeCount -2;
+
+
+
+    self.networkAdaptable= false;
+    self.networkModulatory= false;
+    // Temp tables.
+    self.connectionLookup = null;
+    self.nodeLookup = null;
+
+    /// From C#: A table that keeps a track of which connections have added to the sexually reproduced child genome.
+    /// This is cleared on each call to CreateOffspring_Sexual() and is only declared at class level to
+    /// prevent having to re-allocate the table and it's associated memory on each invokation.
+//        self.newConnectionTable = null;
+//        self.newNodeTable= null;
+//        self.newConnectionList= null;
+
+    self.parent = null;
+
+}
+
+//Define the helper functions here!
+NeatGenome.Help = {};
+
+var genomeCount = 0;
+
+NeatGenome.Help.nextGenomeID = function()
+{
+    return genomeCount++;
+};
+NeatGenome.Help.currentGenomeID = function(){
+    return genomeCount;
+};
+NeatGenome.Help.resetGenomeID = function(value){
+    if(value ===undefined ){
+        genomeCount = 0;
+        return;
+    }
+    genomeCount = value;
+};
+
+
+var innovationCount = 0;
+var lastID = -1;
+var hitCount = 0;
+//wouldn't work with multithreaded/multi-process environment
+NeatGenome.Help.nextInnovationID = function(ix)
+{
+    if(ix !== undefined)
+        return "" + ix;
+
+    //generate random string quickly (unlikely to cause local collisions on any machine)
+    //no more number based stuff -- all string now
+    return uuid();
+    // var id = 1000*(new Date().valueOf());//innovationCount++;
+    // if(lastID === id)
+    //     hitCount++;
+    // else
+    //     hitCount = 0;
+
+
+    // lastID = id;
+    // return id + (hitCount%1000);
+};
+
+// NeatGenome.Help.currentInnovationID = function(){
+//     return innovationCount;
+// };
+// NeatGenome.Help.resetInnovationID = function(value){
+//     if(value === undefined ){
+//         innovationCount = 0;
+//         return;
+//     }
+
+//     innovationCount = value;
+// };
+
+
+NeatGenome.Help.insertByInnovation = function(connection, connectionList)
+{
+    var self = connectionList;
+    // Determine the insert idx with a linear search, starting from the end
+    // since mostly we expect to be adding genes that belong only 1 or 2 genes
+    // from the end at most.
+    var idx= connectionList.length-1;
+    for(; idx>-1; idx--)
+    {
+        if(uuid.isLessThan(self[idx].gid, connection.gid))
+        {	// Insert idx found.
+            break;
+        }
+    }
+    connectionList.splice(idx+1, 0, connection);
+};
+
+NeatGenome.Help.CreateGIDLookup = function(arObject)
+{
+    var lookup = {};
+    arObject.forEach(function(o)
+    {
+        lookup[o.gid] = o;
+    });
+
+    return lookup;
+
+};
+
+
+//NeuronGene creator
+/// <summary>
+/// Create a default minimal genome that describes a NN with the given number of inputs and outputs.
+/// </summary>
+/// <returns></returns>
+//{connectionWeightRange: val, connectionProportion: val}
+NeatGenome.Help.CreateGenomeByInnovation = function(ins, outs, connParams, existing)
+{
+    //existing is for seing if a connection innovation id already exists according to local believers/shamans
+    existing = existing || {};
+    //create our ins and outs,
+    var inputNodeList = [], outputNodeList = [], nodeList = [], connectionList = [];
+
+    var aFunc = CPPNactivationFactory.getActivationFunction('NullFn');
+
+    var iCount = 0;
+
+    // IMPORTANT NOTE: The neurons must all be created prior to any connections. That way all of the genomes
+    // will obtain the same innovation ID's for the bias,input and output nodes in the initial population.
+    // Create a single bias neuron.
+    var node = new NeatNode(NeatGenome.Help.nextInnovationID(iCount++), aFunc, NeatNode.INPUT_LAYER, {type: NodeType.bias});
+    //null, idGenerator.NextInnovationId, NeuronGene.INPUT_LAYER, NeuronType.Bias, actFunct, stepCount);
+    inputNodeList.push(node);
+    nodeList.push(node);
+
+
+    // Create input neuron genes.
+    aFunc = CPPNactivationFactory.getActivationFunction('NullFn');
+    for(var i=0; i<ins; i++)
+    {
+        //TODO: DAVID proper activation function change to NULL?
+        node = new NeatNode(NeatGenome.Help.nextInnovationID(iCount++), aFunc, NeatNode.INPUT_LAYER, {type: NodeType.input});
+        inputNodeList.push(node);
+        nodeList.push(node);
+    }
+
+    // Create output neuron genes.
+    aFunc = CPPNactivationFactory.getActivationFunction('BipolarSigmoid');
+    for(var i=0; i<outs; i++)
+    {
+        //TODO: DAVID proper activation function change to NULL?
+        node = new NeatNode(NeatGenome.Help.nextInnovationID(iCount++), aFunc, NeatNode.OUTPUT_LAYER, {type: NodeType.output});
+        outputNodeList.push(node);
+        nodeList.push(node);
+    }
+
+    // Loop over all possible connections from input to output nodes and create a number of connections based upon
+    // connectionProportion.
+    outputNodeList.forEach(function(targetNode){
+
+        inputNodeList.forEach(function(sourceNode){
+            // Always generate an ID even if we aren't going to use it. This is necessary to ensure connections
+            // between the same neurons always have the same ID throughout the generated population.
+
+            if(utilities.nextDouble() < connParams.connectionProportion )
+            {
+
+                var cIdentifier = '(' + sourceNode.gid + "," + targetNode.gid + ')';
+
+                // Ok lets create a connection.
+                //if it already exists, we can use the existing innovation ID
+                var connectionInnovationId = existing[cIdentifier] || NeatGenome.Help.nextInnovationID();
+
+                //if we didn't have one before, we do now! If we did, we simply overwrite with the same innovation id
+                existing[cIdentifier] = connectionInnovationId;
+
+                connectionList.push(new NeatConnection(connectionInnovationId,
+                    (utilities.nextDouble() * connParams.connectionWeightRange ) - connParams.connectionWeightRange/2.0,
+                    {sourceID: sourceNode.gid, targetID: targetNode.gid}));
+
+            }
+        });
+    });
+
+    // Don't create any hidden nodes at this point. Fundamental to the NEAT way is to start minimally!
+    return new NeatGenome(NeatGenome.Help.nextGenomeID(), nodeList, connectionList, ins, outs);
+//            NeatGenome(idGenerator.NextGenomeId, neuronGeneList, connectionGeneList, inputNeuronCount, outputNeuronCount);
+
+};
+
+
+NeatGenome.Copy = function(genome, gid)
+{
+
+    var nodeCopy = [], connectionCopy = [];
+    genome.nodes.forEach(function(node)
+    {
+        nodeCopy.push(NeatNode.Copy(node));
+    });
+    genome.connections.forEach(function(conn)
+    {
+        connectionCopy.push(NeatConnection.Copy(conn));
+    });
+
+    //not debuggin
+    var gCopy = new NeatGenome((gid !== undefined ? gid : genome.gid), nodeCopy, connectionCopy, genome.inputNodeCount, genome.outputNodeCount, false);
+
+    //copy the behavior as well -- if there exists any behavior to copy
+    if(genome.behavior && (genome.behavior.objectives || genome.behavior.behaviorList))
+        gCopy.behavior = novelty.Behavior.BehaviorCopy(genome.behavior);
+
+    return gCopy;
+};
+
+
+/// Asexual reproduction with built in mutation.
+NeatGenome.prototype.createOffspringAsexual = function(newNodeTable, newConnectionTable, np)
+{
+    var self = this;
+    //copy the genome, then mutate
+    var genome = NeatGenome.Copy(self, NeatGenome.Help.nextGenomeID());
+
+    //mutate genome before returning
+    genome.mutate(newNodeTable, newConnectionTable, np);
+
+    return genome;
+};
+
+
+
+/// <summary>
+/// Adds a connection to the list that will eventually be copied into a child of this genome during sexual reproduction.
+/// A helper function that is only called by CreateOffspring_Sexual_ProcessCorrelationItem().
+/// </summary>
+/// <param name="connectionGene">Specifies the connection to add to this genome.</param>
+/// <param name="overwriteExisting">If there is already a connection from the same source to the same target,
+/// that connection is replaced when overwriteExisting is true and remains (no change is made) when overwriteExisting is false.</param>
+//TODO: Use gid or innovationID?
+NeatGenome.Help.createOffspringSexual_AddGene  = function(connectionList, connectionTable, connection, overwriteExisting)
+{
+
+    var conKey = connection.gid;
+
+    // Check if a matching gene has already been added.
+    var oIdx = connectionTable[conKey];
+
+    if(oIdx==null)
+    {	// No matching gene has been added.
+        // Register this new gene with the newConnectionGeneTable - store its index within newConnectionGeneList.
+        connectionTable[conKey] = connectionList.length;
+
+        // Add the gene to the list.
+        connectionList.push(NeatConnection.Copy(connection));
+    }
+    else if(overwriteExisting)
+    {
+        // Overwrite the existing matching gene with this one. In fact only the weight value differs between two
+        // matching connection genes, so just overwrite the existing genes weight value.
+
+        // Remember that we stored the gene's index in newConnectionGeneTable. So use it here.
+        connectionList[oIdx].weight = connection.weight;
+    }
+};
+
+/// <summary>
+/// Given a description of a connection in two parents, decide how to copy it into their child.
+/// A helper function that is only called by CreateOffspring_Sexual().
+/// </summary>
+/// <param name="correlationItem">Describes a connection and whether it exists on one parent, the other, or both.</param>
+/// <param name="fitSwitch">If this is 1, then the first parent is more fit; if 2 then the second parent. Other values are not defined.</param>
+/// <param name="combineDisjointExcessFlag">If this is true, add disjoint and excess genes to the child; otherwise, leave them out.</param>
+/// <param name="np">Not used.</param>
+NeatGenome.Help.createOffspringSexual_ProcessCorrelationItem
+    = function(connectionList, connectionTable, correlationItem, fitSwitch, combineDisjointExcessFlag)
+{
+    switch(correlationItem.correlationType)
+    {
+        // Disjoint and excess genes.
+        case neatHelp.CorrelationType.disjointConnectionGene:
+        case neatHelp.CorrelationType.excessConnectionGene:
+        {
+            // If the gene is in the fittest parent then override any existing entry in the connectionGeneTable.
+            if(fitSwitch==1 && correlationItem.connection1!=null)
+            {
+                NeatGenome.Help.createOffspringSexual_AddGene(connectionList, connectionTable, correlationItem.connection1, true);
+                return;
+            }
+
+            if(fitSwitch==2 && correlationItem.connection2!=null)
+            {
+                NeatGenome.Help.createOffspringSexual_AddGene(connectionList, connectionTable, correlationItem.connection2, true);
+                return;
+            }
+
+            // The disjoint/excess gene is on the less fit parent.
+            //if(Utilities.NextDouble() < np.pDisjointExcessGenesRecombined)	// Include the gene n% of the time from whichever parent contains it.
+            if(combineDisjointExcessFlag)
+            {
+                if(correlationItem.connection1!=null)
+                {
+                    NeatGenome.Help.createOffspringSexual_AddGene(connectionList, connectionTable, correlationItem.connection1, false);
+                    return;
+                }
+                if(correlationItem.connection2!=null)
+                {
+                    NeatGenome.Help.createOffspringSexual_AddGene(connectionList, connectionTable, correlationItem.connection2, false);
+                    return;
+                }
+            }
+            break;
+        }
+
+        case neatHelp.CorrelationType.matchedConnectionGenes:
+        {
+            if(utilities.RouletteWheel.singleThrow(0.5))
+            {
+                // Override any existing entries in the table.
+                NeatGenome.Help.createOffspringSexual_AddGene(connectionList, connectionTable, correlationItem.connection1, true);
+            }
+            else
+            {
+                // Override any existing entries in the table.
+                NeatGenome.Help.createOffspringSexual_AddGene(connectionList, connectionTable, correlationItem.connection2, true);
+            }
+            break;
+        }
+    }
+};
+
+
+/// <summary>
+/// Correlate the ConnectionGenes within the two ConnectionGeneLists - based upon innovation number.
+/// Return an ArrayList of ConnectionGene[2] structures - pairs of matching ConnectionGenes.
+/// </summary>
+/// <param name="list1"></param>
+/// <param name="list2"></param>
+/// <returns>Resulting correlation</returns>
+NeatGenome.Help.correlateConnectionListsByInnovation
+    = function(list1, list2)
+{
+    var correlationResults = new neatHelp.CorrelationResults();
+
+    //----- Test for special cases.
+    if(!list1.length && !list2.length)
+    {	// Both lists are empty!
+        return correlationResults;
+    }
+
+    if(!list1.length)
+    {	// All list2 genes are excess.
+        correlationResults.correlationStatistics.excessConnectionCount = list2.length;
+
+        list2.forEach(function(connection){
+            //add a bunch of excess genes to our new creation!
+            correlationResults.correlationList.push(new neatHelp.CorrelationItem(neatHelp.CorrelationType.excessConnectionGene, null, connection));
+        });
+        //done with correlating al; genes since list1 is empty
+        return correlationResults;
+    }
+
+    // i believe there is a bug in the C# code, but it's completely irrelevant cause you'll never have 0 connections and for it to be sensical!
+    if(!list2.length)
+    {	// All list1 genes are excess.
+        correlationResults.correlationStatistics.excessConnectionCount  = list1.length;
+
+        list1.forEach(function(connection){
+            //add a bunch of excess genes to our new creation!
+            correlationResults.correlationList.push(new neatHelp.CorrelationItem(neatHelp.CorrelationType.excessConnectionGene, connection, null));
+        });
+
+        //done with correlating al; genes since list2 is empty
+        return correlationResults;
+    }
+
+    //----- Both ConnectionGeneLists contain genes - compare the contents.
+    var list1Idx=0;
+    var list2Idx=0;
+    var connection1 = list1[list1Idx];
+    var connection2 = list2[list2Idx];
+
+    for(;;)
+    {
+
+        if(uuid.isLessThan(connection2.gid, connection1.gid))
+        {
+            // connectionGene2 is disjoint.
+            correlationResults.correlationList.push(new neatHelp.CorrelationItem(neatHelp.CorrelationType.disjointConnectionGene, null, connection2));
+            correlationResults.correlationStatistics.disjointConnectionCount++;
+
+            // Move to the next gene in list2.
+            list2Idx++;
+        }
+        else if(connection1.gid == connection2.gid)
+        {
+            correlationResults.correlationList.push(new neatHelp.CorrelationItem(neatHelp.CorrelationType.matchedConnectionGenes, connection1, connection2));
+            correlationResults.correlationStatistics.connectionWeightDelta += Math.abs(connection1.weight-connection2.weight);
+            correlationResults.correlationStatistics.matchingCount++;
+
+            // Move to the next gene in both lists.
+            list1Idx++;
+            list2Idx++;
+        }
+        else // (connectionGene2.InnovationId > connectionGene1.InnovationId)
+        {
+            // connectionGene1 is disjoint.
+            correlationResults.correlationList.push(new  neatHelp.CorrelationItem(neatHelp.CorrelationType.disjointConnectionGene, connection1, null));
+            correlationResults.correlationStatistics.disjointConnectionCount++;
+
+            // Move to the next gene in list1.
+            list1Idx++;
+        }
+
+        // Check if we have reached the end of one (or both) of the lists. If we have reached the end of both then
+        // we execute the first if block - but it doesn't matter since the loop is not entered if both lists have
+        // been exhausted.
+        if(list1Idx >= list1.length)
+        {
+            // All remaining list2 genes are excess.
+            for(; list2Idx<list2.length; list2Idx++)
+            {
+                correlationResults.correlationList.push(new neatHelp.CorrelationItem(neatHelp.CorrelationType.excessConnectionGene, null, list2[list2Idx]));
+                correlationResults.correlationStatistics.excessConnectionCount++;
+            }
+            return correlationResults;
+        }
+
+        if(list2Idx >= list2.length)
+        {
+            // All remaining list1 genes are excess.
+            for(; list1Idx<list1.length; list1Idx++)
+            {
+                correlationResults.correlationList.push(new neatHelp.CorrelationItem(neatHelp.CorrelationType.excessConnectionGene, list1[list1Idx], null));
+                correlationResults.correlationStatistics.excessConnectionCount++;
+            }
+            return correlationResults;
+        }
+
+        connection1 = list1[list1Idx];
+        connection2 = list2[list2Idx];
+    }
+};
+
+
+
+//NeuronGene creator
+NeatGenome.prototype.createOffspringSexual
+    = function(otherParent, np)
+{
+    var self = this;
+
+    if (otherParent == null || otherParent === undefined)
+        return null;
+
+    // Build a list of connections in either this genome or the other parent.
+    var correlationResults = NeatGenome.Help.correlateConnectionListsByInnovation(self.connections, otherParent.connections);
+
+    if(self.debug && !correlationResults.performIntegrityCheckByInnovation())
+        throw "CorrelationResults failed innovation integrity check.";
+
+    //----- Connection Genes.
+    // We will temporarily store the offspring's genes in newConnectionGeneList and keeping track of which genes
+    // exist with newConnectionGeneTable. Here we ensure these objects are created, and if they already existed
+    // then ensure they are cleared. Clearing existing objects is more efficient that creating new ones because
+    // allocated memory can be re-used.
+
+    // Key = connection key, value = index in newConnectionGeneList.
+    var newConnectionTable = {};
+
+    //TODO: No 'capacity' constructor on CollectionBase. Create modified/custom CollectionBase.
+    // newConnectionGeneList must be constructed on each call because it is passed to a new NeatGenome
+    // at construction time and a permanent reference to the list is kept.
+    var newConnectionList = [];
+
+    // A switch that stores which parent is fittest 1 or 2. Chooses randomly if both are equal. More efficient to calculate this just once.
+    var fitSwitch;
+    if(self.fitness > otherParent.fitness)
+        fitSwitch = 1;
+    else if(self.fitness < otherParent.fitness)
+        fitSwitch = 2;
+    else
+    {	// Select one of the parents at random to be the 'master' genome during crossover.
+        if(utilities.nextDouble() < 0.5)
+            fitSwitch = 1;
+        else
+            fitSwitch = 2;
+    }
+
+    var combineDisjointExcessFlag = utilities.nextDouble() < np.pDisjointExcessGenesRecombined;
+
+    // Loop through the correlationResults, building a table of ConnectionGenes from the parents that will make it into our
+    // new [single] offspring. We use a table keyed on connection end points to prevent passing connections to the offspring
+    // that may have the same end points but a different innovation number - effectively we filter out duplicate connections.
+//        var idxBound = correlationResults.correlationList.length;
+    correlationResults.correlationList.forEach(function(correlationItem)
+    {
+        NeatGenome.Help.createOffspringSexual_ProcessCorrelationItem(newConnectionList, newConnectionTable, correlationItem, fitSwitch, combineDisjointExcessFlag);
+    });
+
+
+
+    //----- Neuron Genes.
+    // Build a neuronGeneList by analysing each connection's neuron end-point IDs.
+    // This strategy has the benefit of eliminating neurons that are no longer connected too.
+    // Remember to always keep all input, output and bias neurons though!
+    var newNodeList = [];
+
+    // Keep a table of the NeuronGene ID's keyed by ID so that we can keep track of which ones have been added.
+    // Key = innovation ID, value = null for some reason.
+
+    var newNodeTable = {};
+
+    // Get the input/output neurons from this parent. All Genomes share these neurons, they do not change during a run.
+//        idxBound = neuronGeneList.Count;
+
+    self.nodes.forEach(function(node)
+    {
+        if(node.nodeType != NodeType.hidden)
+        {
+            newNodeList.push(NeatNode.Copy(node));
+            newNodeTable[node.gid] = node;
+        }
+//            else
+//            {	// No more bias, input or output nodes. break the loop.
+//                break;
+//            }
+    });
+
+    // Now analyse the connections to determine which NeuronGenes are required in the offspring.
+    // Loop through every connection in the child, and add to the child those hidden neurons that are sources or targets of the connection.
+//        idxBound = newConnectionGeneList.Count;
+
+
+    var nodeLookup = NeatGenome.Help.CreateGIDLookup(self.nodes);
+    var otherNodeLookup = NeatGenome.Help.CreateGIDLookup(otherParent.nodes);
+//        var connLookup =  NeatGenome.Help.CreateGIDLookup(self.connections);
+
+    newConnectionList.forEach(function(connection)
+    {
+        var node;
+
+        if(!newNodeTable[connection.sourceID])
+        {
+            //TODO: DAVID proper activation function
+            // We can safely assume that any missing NeuronGenes at this point are hidden heurons.
+            node = nodeLookup[connection.sourceID];
+            if (node)
+                newNodeList.push(NeatNode.Copy(node));
+            else{
+                node = otherNodeLookup[connection.sourceID];
+                if(!node)
+                    throw new Error("Connection references source node that does not exist in either parent: " + JSON.stringify(connection));
+                
+                newNodeList.push(NeatNode.Copy(otherNodeLookup[connection.sourceID]));
+            }
+            //newNeuronGeneList.Add(new NeuronGene(connectionGene.SourceNeuronId, NeuronType.Hidden, ActivationFunctionFactory.GetActivationFunction("SteepenedSigmoid")));
+            newNodeTable[connection.sourceID] = node;
+        }
+
+        if(!newNodeTable[connection.targetID])
+        {
+            //TODO: DAVID proper activation function
+            // We can safely assume that any missing NeuronGenes at this point are hidden heurons.
+            node = nodeLookup[connection.targetID];
+            if (node != null)
+                newNodeList.push(NeatNode.Copy(node));
+           else{
+                node = otherNodeLookup[connection.targetID];
+                if(!node)
+                    throw new Error("Connection references target node that does not exist in either parent: " + JSON.stringify(connection));
+
+                newNodeList.push(NeatNode.Copy(otherNodeLookup[connection.targetID]));
+            }
+                
+            //newNeuronGeneList.Add(new NeuronGene(connectionGene.TargetNeuronId, NeuronType.Hidden, ActivationFunctionFactory.GetActivationFunction("SteepenedSigmoid")));
+            newNodeTable[connection.targetID] = node;
+        }
+    });
+
+    // TODO: Inefficient code?
+    newNodeList.sort(function(a,b){
+        var compare = uuid.isLessThan(a.gid, b.gid) ? 
+            -1 : //is less than -- a- b = -1
+            (a.gid == b.gid) ? 0 : //is possible equal to or greater
+            1;//is greater than definitely
+        return compare
+    });
+
+    // newConnectionGeneList is already sorted because it was generated by passing over the list returned by
+    // CorrelateConnectionGeneLists() - which is always in order.
+    return new NeatGenome(NeatGenome.Help.nextGenomeID(), newNodeList,newConnectionList, self.inputNodeCount, self.outputNodeCount, self.debug);
+
+    //No module support in here
+
+    // Determine which modules to pass on to the child in the same way.
+    // For each module in this genome or in the other parent, if it was referenced by even one connection add it and all its dummy neurons to the child.
+//        List<ModuleGene> newModuleGeneList = new List<ModuleGene>();
+//
+//        // Build a list of modules the child might have, which is a union of the parents' module lists, but they are all copies so we can't just do a union.
+//        List<ModuleGene> unionParentModules = new List<ModuleGene>(moduleGeneList);
+//        foreach (ModuleGene moduleGene in otherParent.moduleGeneList) {
+//        bool alreadySeen = false;
+//        foreach (ModuleGene match in unionParentModules) {
+//            if (moduleGene.InnovationId == match.InnovationId) {
+//                alreadySeen = true;
+//                break;
+//            }
+//        }
+//        if (!alreadySeen) {
+//            unionParentModules.Add(moduleGene);
+//        }
+//    }
+
+//        foreach (ModuleGene moduleGene in unionParentModules) {
+//        // Examine each neuron in the child to determine whether it is part of a module.
+//        foreach (List<long> dummyNeuronList in new List<long>[] { moduleGene.InputIds, moduleGene.OutputIds })
+//        {
+//            foreach (long dummyNeuronId in dummyNeuronList)
+//            {
+//                if (newNeuronGeneTable.ContainsKey(dummyNeuronId)) {
+//                    goto childHasModule;
+//                }
+//            }
+//        }
+//
+//        continue; // the child does not contain this module, so continue the loop and check for the next module.
+//        childHasModule: // the child does contain this module, so make sure the child gets all the nodes the module requires to work.
+//
+//            // Make sure the child has all the neurons in the given module.
+//            newModuleGeneList.Add(new ModuleGene(moduleGene));
+//        foreach (List<long> dummyNeuronList in new List<long>[] { moduleGene.InputIds, moduleGene.OutputIds })
+//        {
+//            foreach (long dummyNeuronId in dummyNeuronList)
+//            {
+//                if (!newNeuronGeneTable.ContainsKey(dummyNeuronId)) {
+//                    newNeuronGeneTable.Add(dummyNeuronId, null);
+//                    NeuronGene neuronGene = this.neuronGeneList.GetNeuronById(dummyNeuronId);
+//                    if (neuronGene != null) {
+//                        newNeuronGeneList.Add(new NeuronGene(neuronGene));
+//                    } else {
+//                        newNeuronGeneList.Add(new NeuronGene(otherParent.NeuronGeneList.GetNeuronById(dummyNeuronId)));
+//                    }
+//                }
+//            }
+//        }
+//    }
+
+
+
+};
+
+
+/// <summary>
+/// Decode the genome's 'DNA' into a working network.
+/// </summary>
+/// <returns></returns>
+NeatGenome.prototype.networkDecode = function(activationFn)
+{
+    var self = this;
+
+    return neatDecoder.DecodeToFloatFastConcurrentNetwork(self, activationFn);
+};
+
+
+/// <summary>
+/// Clone this genome.
+/// </summary>
+/// <returns></returns>
+NeatGenome.prototype.clone = function()
+{
+    var self = this;
+    return NeatGenome.Copy(self, NeatGenome.Help.nextGenomeID());
+};
+
+NeatGenome.prototype.compatFormer = function(comparisonGenome, np) {
+    /* A very simple way of implementing this routine is to call CorrelateConnectionGeneLists and to then loop
+     * through the correlation items, calculating a compatibility score as we go. However, this routine
+     * is heavily used and in performance tests was shown consume 40% of the CPU time for the core NEAT code.
+     * Therefore this new routine has been rewritten with it's own version of the logic within
+     * CorrelateConnectionGeneLists. This allows us to only keep comparing genes up to the point where the
+     * threshold is passed. This also eliminates the need to build the correlation results list, this difference
+     * alone is responsible for a 200x performance improvement when testing with a 1664 length genome!!
+     *
+     * A further optimisation is achieved by comparing the genes starting at the end of the genomes which is
+     * where most disparities are located - new novel genes are always attached to the end of genomes. This
+     * has the result of complicating the routine because we must now invoke additional logic to determine
+     * which genes are excess and when the first disjoint gene is found. This is done with an extra integer:
+     *
+     * int excessGenesSwitch=0; // indicates to the loop that it is handling the first gene.
+     *						=1;	// Indicates that the first gene was excess and on genome 1.
+     *						=2;	// Indicates that the first gene was excess and on genome 2.
+     *						=3;	// Indicates that there are no more excess genes.
+     *
+     * This extra logic has a slight performance hit, but this is minor especially in comparison to the savings that
+     * are expected to be achieved overall during a NEAT search.
+     *
+     * If you have trouble understanding this logic then it might be best to work through the previous version of
+     * this routine (below) that scans through the genomes from start to end, and which is a lot simpler.
+     *
+     */
+    var self = this;
+
+    //this can be replaced with the following code:
+
+
+
+
+    var list1 = self.connections;
+    var list2 = comparisonGenome.connections;
+
+//
+//        var compatibility = 0;
+//        var correlation = NeatGenome.Help.correlateConnectionListsByInnovation(list1, list2);
+//        compatibility += correlation.correlationStatistics.excessConnectionCount*np.compatibilityExcessCoeff;
+//        compatibility += correlation.correlationStatistics.disjointConnectionCount*np.compatibilityDisjointCoeff;
+//        compatibility += correlation.correlationStatistics.connectionWeightDelta*np.compatibilityWeightDeltaCoeff;
+//        return compatibility;
+
+
+    var excessGenesSwitch=0;
+
+    // Store these heavily used values locally.
+    var list1Count = list1.length;
+    var list2Count = list2.length;
+
+    //----- Test for special cases.
+    if(list1Count==0 && list2Count==0)
+    {	// Both lists are empty! No disparities, therefore the genomes are compatible!
+        return 0.0;
+    }
+
+    if(list1Count==0)
+    {	// All list2 genes are excess.
+        return ((list2.length * np.compatibilityExcessCoeff));
+    }
+
+    if(list2Count==0)
+    {
+        // All list1 genes are excess.
+        return ((list1Count * np.compatibilityExcessCoeff));
+    }
+
+    //----- Both ConnectionGeneLists contain genes - compare the contents.
+    var compatibility = 0.0;
+    var list1Idx=list1Count-1;
+    var list2Idx=list2Count-1;
+    var connection1 = list1[list1Idx];
+    var connection2 = list2[list2Idx];
+    for(;;)
+    {
+        if(connection1.gid == connection2.gid)
+        {
+            // No more excess genes. It's quicker to set this every time than to test if is not yet 3.
+            excessGenesSwitch=3;
+
+            // Matching genes. Increase compatibility by weight difference * coeff.
+            compatibility += Math.abs(connection1.weight-connection2.weight) * np.compatibilityWeightDeltaCoeff;
+
+            // Move to the next gene in both lists.
+            list1Idx--;
+            list2Idx--;
+        }
+        else if(!uuid.isLessThan(connection2.gid, connection1.gid))
+        {
+            // Most common test case(s) at top for efficiency.
+            if(excessGenesSwitch==3)
+            {	// No more excess genes. Therefore this mismatch is disjoint.
+                compatibility += np.compatibilityDisjointCoeff;
+            }
+            else if(excessGenesSwitch==2)
+            {	// Another excess gene on genome 2.
+                compatibility += np.compatibilityExcessCoeff;
+            }
+            else if(excessGenesSwitch==1)
+            {	// We have found the first non-excess gene.
+                excessGenesSwitch=3;
+                compatibility += np.compatibilityDisjointCoeff;
+            }
+            else //if(excessGenesSwitch==0)
+            {	// First gene is excess, and is on genome 2.
+                excessGenesSwitch = 2;
+                compatibility += np.compatibilityExcessCoeff;
+            }
+
+            // Move to the next gene in list2.
+            list2Idx--;
+        } 
+        else // (connectionGene2.InnovationId < connectionGene1.InnovationId)
+        {
+            // Most common test case(s) at top for efficiency.
+            if(excessGenesSwitch==3)
+            {	// No more excess genes. Therefore this mismatch is disjoint.
+                compatibility += np.compatibilityDisjointCoeff;
+            }
+            else if(excessGenesSwitch==1)
+            {	// Another excess gene on genome 1.
+                compatibility += np.compatibilityExcessCoeff;
+            }
+            else if(excessGenesSwitch==2)
+            {	// We have found the first non-excess gene.
+                excessGenesSwitch=3;
+                compatibility += np.compatibilityDisjointCoeff;
+            }
+            else //if(excessGenesSwitch==0)
+            {	// First gene is excess, and is on genome 1.
+                excessGenesSwitch = 1;
+                compatibility += np.compatibilityExcessCoeff;
+            }
+
+            // Move to the next gene in list1.
+            list1Idx--;
+        }
+
+
+        // Check if we have reached the end of one (or both) of the lists. If we have reached the end of both then
+        // we execute the first 'if' block - but it doesn't matter since the loop is not entered if both lists have
+        // been exhausted.
+        if(list1Idx < 0)
+        {
+            // All remaining list2 genes are disjoint.
+            compatibility +=  (list2Idx+1) * np.compatibilityDisjointCoeff;
+            return (compatibility); //< np.compatibilityThreshold);
+        }
+
+        if(list2Idx < 0)
+        {
+            // All remaining list1 genes are disjoint.
+            compatibility += (list1Idx+1) * np.compatibilityDisjointCoeff;
+            return (compatibility); //< np.compatibilityThreshold);
+        }
+
+        connection1 = list1[list1Idx];
+        connection2 = list2[list2Idx];
+    }
+};
+
+NeatGenome.prototype.compat = function(comparisonGenome, np) {
+
+    var self = this;
+    var list1 = self.connections;
+    var list2 = comparisonGenome.connections;
+
+    var compatibility = 0;
+    var correlation = NeatGenome.Help.correlateConnectionListsByInnovation(list1, list2);
+    compatibility += correlation.correlationStatistics.excessConnectionCount*np.compatibilityExcessCoeff;
+    compatibility += correlation.correlationStatistics.disjointConnectionCount*np.compatibilityDisjointCoeff;
+    compatibility += correlation.correlationStatistics.connectionWeightDelta*np.compatibilityWeightDeltaCoeff;
+    return compatibility;
+
+};
+
+NeatGenome.prototype.isCompatibleWithGenome= function(comparisonGenome, np)
+{
+    var self = this;
+
+    return (self.compat(comparisonGenome, np) < np.compatibilityThreshold);
+};
+
+NeatGenome.Help.InOrderInnovation = function(aObj)
+{
+    var prevId = 0;
+
+    for(var i=0; i< aObj.length; i++){
+        var connection = aObj[i];
+        if(uuid.isLessThan(connection.gid, prevId))
+            return false;
+        prevId = connection.gid;
+    }
+
+    return true;
+};
+
+
+/// <summary>
+/// For debug purposes only.
+/// </summary>
+/// <returns>Returns true if genome integrity checks out OK.</returns>
+NeatGenome.prototype.performIntegrityCheck = function()
+{
+    var self = this;
+    return NeatGenome.Help.InOrderInnovation(self.connections);
+};
+
+
+NeatGenome.prototype.mutate = function(newNodeTable, newConnectionTable, np)
+{
+    var self = this;
+
+    // Determine the type of mutation to perform.
+    var probabilities = [];
+    probabilities.push(np.pMutateAddNode);
+//        probabilities.push(0);//np.pMutateAddModule);
+    probabilities.push(np.pMutateAddConnection);
+    probabilities.push(np.pMutateDeleteConnection);
+    probabilities.push(np.pMutateDeleteSimpleNeuron);
+    probabilities.push(np.pMutateConnectionWeights);
+    probabilities.push(np.pMutateChangeActivations);
+
+    var outcome = utilities.RouletteWheel.singleThrowArray(probabilities);
+    switch(outcome)
+    {
+        case 0:
+            self.mutate_AddNode(newNodeTable);
+            return 0;
+        case 1:
+//               self.mutate_Ad Mutate_AddModule(ea);
+            self.mutate_AddConnection(newConnectionTable,np);
+            return 1;
+        case 2:
+            self.mutate_DeleteConnection();
+            return 2;
+        case 3:
+            self.mutate_DeleteSimpleNeuronStructure(newConnectionTable, np);
+            return 3;
+        case 4:
+            self.mutate_ConnectionWeights(np);
+            return 4;
+        case 5:
+            self.mutate_ChangeActivation(np);
+            return 5;
+    }
+};
+
+
+
+//NeuronGene creator
+/// <summary>
+/// Add a new node to the Genome. We do this by removing a connection at random and inserting
+/// a new node and two new connections that make the same circuit as the original connection.
+///
+/// This way the new node is properly integrated into the network from the outset.
+/// </summary>
+/// <param name="ea"></param>
+NeatGenome.prototype.mutate_AddNode = function(newNodeTable, connToSplit)
+{
+    var self = this;
+
+    if(!self.connections.length)
+        return null;
+
+    // Select a connection at random.
+    var connectionToReplaceIdx = Math.floor(utilities.nextDouble() * self.connections.length);
+    var connectionToReplace =  connToSplit || self.connections[connectionToReplaceIdx];
+
+    // Delete the existing connection. JOEL: Why delete old connection?
+    //connectionGeneList.RemoveAt(connectionToReplaceIdx);
+
+    // Check if this connection has already been split on another genome. If so then we should re-use the
+    // neuron ID and two connection ID's so that matching structures within the population maintain the same ID.
+    var existingNeuronGeneStruct = newNodeTable[connectionToReplace.gid];
+
+    var newNode;
+    var newConnection1;
+    var newConnection2;
+    var actFunct;
+
+    var nodeLookup = NeatGenome.Help.CreateGIDLookup(self.nodes);
+
+    //we could attempt to mutate the same node TWICE -- causing big issues, since we'll double add that node
+
+    var acnt = 0;
+    var attempts = 5;
+    //while we
+    while(acnt++ < attempts && existingNeuronGeneStruct && nodeLookup[existingNeuronGeneStruct.node.gid])
+    {
+        connectionToReplaceIdx = Math.floor(utilities.nextDouble() * self.connections.length);
+        connectionToReplace =  connToSplit || self.connections[connectionToReplaceIdx];
+        existingNeuronGeneStruct = newNodeTable[connectionToReplace.gid];
+    }
+
+    //we have failed to produce a new node to split!
+    if(acnt == attempts && existingNeuronGeneStruct && nodeLookup[existingNeuronGeneStruct.node.gid])
+        return;
+
+    if(!existingNeuronGeneStruct)
+    {	// No existing matching structure, so generate some new ID's.
+
+        //TODO: DAVID proper random activation function
+        // Replace connectionToReplace with two new connections and a neuron.
+        actFunct= CPPNactivationFactory.getRandomActivationFunction();
+        //newNeuronGene = new NeuronGene(ea.NextInnovationId, NeuronType.Hidden, actFunct);
+
+        var nextID = NeatGenome.Help.nextInnovationID();//connectionToReplace.gid);
+
+        newNode = new NeatNode(nextID, actFunct,
+            (nodeLookup[connectionToReplace.sourceID].layer + nodeLookup[connectionToReplace.targetID].layer)/2.0,
+            {type: NodeType.hidden});
+
+        nextID = NeatGenome.Help.nextInnovationID();
+        newConnection1 = new NeatConnection(nextID, 1.0, {sourceID: connectionToReplace.sourceID, targetID:newNode.gid});
+
+        nextID = NeatGenome.Help.nextInnovationID();
+        newConnection2 =  new NeatConnection(nextID, connectionToReplace.weight, {sourceID: newNode.gid, targetID: connectionToReplace.targetID});
+
+        // Register the new ID's with NewNeuronGeneStructTable.
+        newNodeTable[connectionToReplace.gid] = {node: newNode, connection1: newConnection1, connection2: newConnection2};
+    }
+    else
+    {	// An existing matching structure has been found. Re-use its ID's
+
+        //TODO: DAVID proper random activation function
+        // Replace connectionToReplace with two new connections and a neuron.
+        actFunct = CPPNactivationFactory.getRandomActivationFunction();
+        var tmpStruct = existingNeuronGeneStruct;
+        //newNeuronGene = new NeuronGene(tmpStruct.NewNeuronGene.InnovationId, NeuronType.Hidden, actFunct);
+        newNode = NeatNode.Copy(tmpStruct.node);
+        newNode.nodeType = NodeType.hidden;
+        //new NeuronGene(null, tmpStruct.NewNeuronGene.gid, tmpStruct.NewNeuronGene.Layer, NeuronType.Hidden, actFunct, this.step);
+
+        newConnection1 = new NeatConnection(tmpStruct.connection1.gid, 1.0, {sourceID: connectionToReplace.sourceID, targetID:newNode.gid});
+//                new ConnectionGene(tmpStruct.NewConnectionGene_Input.gid, connectionToReplace.SourceNeuronId, newNeuronGene.gid, 1.0);
+        newConnection2 = new NeatConnection(tmpStruct.connection2.gid, connectionToReplace.weight, {sourceID: newNode.gid, targetID: connectionToReplace.targetID});
+//                new ConnectionGene(tmpStruct.NewConnectionGene_Output.gid, newNeuronGene.gid, connectionToReplace.TargetNeuronId, connectionToReplace.Weight);
+    }
+
+    // Add the new genes to the genome.
+    self.nodes.push(newNode);
+    NeatGenome.Help.insertByInnovation(newConnection1, self.connections);
+    NeatGenome.Help.insertByInnovation(newConnection2, self.connections);
+
+    //in javascript, we return the new node and connections created, since it's so easy!
+//        return {node: newNode, connection1: newConnection1, newConnection2: newConnection2};
+
+};
+
+//Modules not implemented
+//    NeatGenome.prototype.mutate_AddModule = function(np)
+//    {
+//    }
+
+NeatGenome.prototype.testForExistingConnectionInnovation = function(sourceID, targetID)
+{
+    var self = this;
+//        console.log('looking for source: ' + sourceID + ' target: ' + targetID);
+
+    for(var i=0; i< self.connections.length; i++){
+        var connection = self.connections[i];
+        if(connection.sourceID == sourceID && connection.targetID == targetID){
+            return connection;
+        }
+    }
+
+    return null;
+};
+
+//messes with the activation functions
+NeatGenome.prototype.mutate_ChangeActivation = function(np)
+{
+    //let's select a node at random (so long as it's not an input)
+    var self = this;
+
+    for(var i=0; i < self.nodes.length; i++)
+    {
+        //not going to change the inputs
+        if(i < self.inputAndBiasNodeCount)
+            continue;
+
+        if(utilities.nextDouble() < np.pNodeMutateActivationRate)
+        {
+            self.nodes[i].activationFunction = CPPNactivationFactory.getRandomActivationFunction().functionID;
+        }
+    }
+};
+
+//add a connection, sourcetargetconnect specifies the source, target or both nodes you'd like to connect (optionally)
+NeatGenome.prototype.mutate_AddConnection = function(newConnectionTable, np, sourceTargetConnect)
+{
+    //if we didn't send specifics, just create an empty object
+    sourceTargetConnect = sourceTargetConnect || {};
+
+    var self = this;
+    // We are always guaranteed to have enough neurons to form connections - because the input/output neurons are
+    // fixed. Any domain that doesn't require input/outputs is a bit nonsensical!
+
+    // Make a fixed number of attempts at finding a suitable connection to add.
+
+    if(self.nodes.length>1)
+    {	// At least 2 neurons, so we have a chance at creating a connection.
+
+        for(var attempts=0; attempts<5; attempts++)
+        {
+            // Select candidate source and target neurons. Any neuron can be used as the source. Input neurons
+            // should not be used as a target
+            var srcNeuronIdx;
+            var tgtNeuronIdx;
+
+
+
+            // Find all potential inputs, or quit if there are not enough.
+            // Neurons cannot be inputs if they are dummy input nodes of a module.
+            var potentialInputs = [];
+
+            self.nodes.forEach(function(n)
+            {
+                if(n.activationFunction.functionID !== 'ModuleInputNeuron')
+                    potentialInputs.push(n);
+            });
+
+
+            if (potentialInputs.length < 1)
+                return false;
+
+            var potentialOutputs = [];
+
+            // Find all potential outputs, or quit if there are not enough.
+            // Neurons cannot be outputs if they are dummy input or output nodes of a module, or network input or bias nodes.
+            self.nodes.forEach(function(n)
+            {
+                if(n.nodeType != NodeType.bias && n.nodeType != NodeType.input &&
+                    n.activationFunction.functionID !== 'ModuleInputNeuron'
+                    &&  n.activationFunction.functionID !== 'ModuleOutputNeuron')
+                    potentialOutputs.push(n);
+            });
+
+            if (potentialOutputs.length < 1)
+                return false;
+
+            var sourceNeuron = sourceTargetConnect.source || potentialInputs[utilities.next(potentialInputs.length)];
+            var targetNeuron = sourceTargetConnect.target || potentialOutputs[utilities.next(potentialOutputs.length)];
+
+            // Check if a connection already exists between these two neurons.
+            var sourceID = sourceNeuron.gid;
+            var targetID = targetNeuron.gid;
+
+            //we don't allow recurrent connections, we can't let the target layers be <= src
+            if(np.disallowRecurrence && targetNeuron.layer <= sourceNeuron.layer)
+                continue;
+
+            if(!self.testForExistingConnectionInnovation(sourceID, targetID))
+            {
+                // Check if a matching mutation has already occured on another genome.
+                // If so then re-use the connection ID.
+                var connectionKey = "(" + sourceID + "," + targetID + ")";
+                var existingConnection = newConnectionTable[connectionKey];
+                var newConnection;
+                var nextID = NeatGenome.Help.nextInnovationID();
+                if(existingConnection==null)
+                {	// Create a new connection with a new ID and add it to the Genome.
+                    newConnection = new NeatConnection(nextID,
+                        (utilities.nextDouble()*np.connectionWeightRange/4.0) - np.connectionWeightRange/8.0,
+                        {sourceID: sourceID, targetID: targetID});
+
+//                            new ConnectionGene(ea.NextInnovationId, sourceID, targetID,
+//                            (Utilities.NextDouble() * ea.NeatParameters.connectionWeightRange/4.0) - ea.NeatParameters.connectionWeightRange/8.0);
+
+                    // Register the new connection with NewConnectionGeneTable.
+                    newConnectionTable[connectionKey] = newConnection;
+
+                    // Add the new gene to this genome. We have a new ID so we can safely append the gene to the end
+                    // of the list without risk of breaking the innovation ID order.
+                    self.connections.push(newConnection);
+                }
+                else
+                {	// Create a new connection, re-using the ID from existingConnection, and add it to the Genome.
+                    newConnection = new NeatConnection(existingConnection.gid,
+                        (utilities.nextDouble()*np.connectionWeightRange/4.0) -  np.connectionWeightRange/8.0,
+                        {sourceID: sourceID, targetID: targetID});
+
+//                            new ConnectionGene(existingConnection.InnovationId, sourceId, targetID,
+//                            (Utilities.NextDouble() * ea.NeatParameters.connectionWeightRange/4.0) - ea.NeatParameters.connectionWeightRange/8.0);
+
+                    // Add the new gene to this genome. We are re-using an ID so we must ensure the connection gene is
+                    // inserted into the correct position (sorted by innovation ID).
+                    NeatGenome.Help.insertByInnovation(newConnection, self.connections);
+//                        connectionGeneList.InsertIntoPosition(newConnection);
+                }
+
+
+
+                return true;
+            }
+        }
+    }
+
+    // We couldn't find a valid connection to create. Instead of doing nothing lets perform connection
+    // weight mutation.
+    self.mutate_ConnectionWeights(np);
+
+    return false;
+};
+
+NeatGenome.prototype.mutate_ConnectionWeights = function(np)
+{
+    var self = this;
+    // Determine the type of weight mutation to perform.
+    var probabilties = [];
+
+    np.connectionMutationParameterGroupList.forEach(function(connMut){
+        probabilties.push(connMut.activationProportion);
+    });
+
+    // Get a reference to the group we will be using.
+    var paramGroup = np.connectionMutationParameterGroupList[utilities.RouletteWheel.singleThrowArray(probabilties)];
+
+    // Perform mutations of the required type.
+    if(paramGroup.selectionType== neatParameters.ConnectionSelectionType.proportional)
+    {
+        var mutationOccured=false;
+        var connectionCount = self.connections.length;
+        self.connections.forEach(function(connection){
+
+            if(utilities.nextDouble() < paramGroup.proportion)
+            {
+                self.mutateConnectionWeight(connection, np, paramGroup);
+                mutationOccured = true;
+            }
+
+        });
+
+        if(!mutationOccured && connectionCount>0)
+        {	// Perform at least one mutation. Pick a gene at random.
+            self.mutateConnectionWeight(self.connections[utilities.next(connectionCount)], // (Utilities.NextDouble() * connectionCount)],
+                np,
+                paramGroup);
+        }
+    }
+    else // if(paramGroup.SelectionType==ConnectionSelectionType.FixedQuantity)
+    {
+        // Determine how many mutations to perform. At least one - if there are any genes.
+        var connectionCount = self.connections.length;
+
+        var mutations = Math.min(connectionCount, Math.max(1, paramGroup.quantity));
+        if(mutations==0) return;
+
+        // The mutation loop. Here we pick an index at random and scan forward from that point
+        // for the first non-mutated gene. This prevents any gene from being mutated more than once without
+        // too much overhead. In fact it's optimal for small numbers of mutations where clashes are unlikely
+        // to occur.
+        for(var i=0; i<mutations; i++)
+        {
+            // Pick an index at random.
+            var index = utilities.next(connectionCount);
+            var connection = self.connections[index];
+
+            // Scan forward and find the first non-mutated gene.
+            while(self.connections[index].isMutated)
+            {	// Increment index. Wrap around back to the start if we go off the end.
+                if(++index==connectionCount)
+                    index=0;
+            }
+
+            // Mutate the gene at 'index'.
+            self.mutateConnectionWeight(self.connections[index], np, paramGroup);
+            self.connections[index].isMutated = true;
+        }
+
+        self.connections.forEach(function(connection){
+            //reset if connection has been mutated, in case we go to do more mutations...
+            connection.isMutated = false;
+        });
+
+    }
+};
+
+NeatGenome.prototype.mutateConnectionWeight = function(connection, np, paramGroup)
+{
+    switch(paramGroup.perturbationType)
+    {
+        case neatParameters.ConnectionPerturbationType.jiggleEven:
+        {
+            connection.weight += (utilities.nextDouble()*2-1.0) * paramGroup.perturbationFactor;
+
+            // Cap the connection weight. Large connections weights reduce the effectiveness of the search.
+            connection.weight = Math.max(connection.weight, -np.connectionWeightRange/2.0);
+            connection.weight = Math.min(connection.weight, np.connectionWeightRange/2.0);
+            break;
+        }
+        //Paul - not implementing cause Randlib.gennor is a terribel terrible function
+        //if i need normal distribution, i'll find another javascript source
+//            case neatParameters.ConnectionPerturbationType.jiggleND:
+//            {
+//                connectionGene.weight += RandLib.gennor(0, paramGroup.Sigma);
+//
+//                // Cap the connection weight. Large connections weights reduce the effectiveness of the search.
+//                connectionGene.weight = Math.max(connectionGene.weight, -np.connectionWeightRange/2.0);
+//                connectionGene.weight = Math.min(connectionGene.weight, np.connectionWeightRange/2.0);
+//                break;
+//            }
+        case neatParameters.ConnectionPerturbationType.reset:
+        {
+            // TODO: Precalculate connectionWeightRange / 2.
+            connection.weight = (utilities.nextDouble()*np.connectionWeightRange) - np.connectionWeightRange/2.0;
+            break;
+        }
+        default:
+        {
+            throw "Unexpected ConnectionPerturbationType";
+        }
+    }
+};
+
+/// <summary>
+/// If the neuron is a hidden neuron and no connections connect to it then it is redundant.
+/// No neuron is redundant that is part of a module (although the module itself might be found redundant separately).
+/// </summary>
+NeatGenome.prototype.isNeuronRedundant=function(nodeLookup, nid)
+{
+    var self = this;
+    var node = nodeLookup[nid];
+    if (node.nodeType != NodeType.hidden
+        || node.activationFunction.functionID === 'ModuleInputNeuron'
+        || node.activationFunction.functionID === 'ModuleOutputNeuron')
+        return false;
+
+    return !self.isNeuronConnected(nid);
+};
+
+NeatGenome.prototype.isNeuronConnected = function(nid)
+{
+    var self = this;
+    for(var i=0; i < self.connections.length; i++)
+    {
+        var connection =  self.connections[i];
+
+        if(connection.sourceID == nid)
+            return true;
+        if(connection.targetID == nid)
+            return true;
+
+    }
+
+    return false;
+};
+
+
+NeatGenome.prototype.mutate_DeleteConnection = function(connection)
+{
+    var self = this;
+    if(self.connections.length ==0)
+        return;
+
+    self.nodeLookup = NeatGenome.Help.CreateGIDLookup(self.nodes);
+
+    // Select a connection at random.
+    var connectionToDeleteIdx = utilities.next(self.connections.length);
+
+    if(connection){
+        for(var i=0; i< self.connections.length; i++){
+            if(connection.gid == self.connections[i].gid)
+            {
+                connectionToDeleteIdx = i;
+                break;
+            }
+        }
+    }
+
+    var connectionToDelete = connection || self.connections[connectionToDeleteIdx];
+
+    // Delete the connection.
+    self.connections.splice(connectionToDeleteIdx,1);
+
+    var srcIx = -1;
+    var tgtIx = -1;
+
+    self.nodes.forEach(function(node,i){
+
+        if(node.sourceID == connectionToDelete.sourceID)
+            srcIx = i;
+
+        if(node.targetID == connectionToDelete.targetID)
+            tgtIx = i;
+    });
+
+    // Remove any neurons that may have been left floating.
+    if(self.isNeuronRedundant(self.nodeLookup ,connectionToDelete.sourceID)){
+        self.nodes.splice(srcIx,1);//(connectionToDelete.sourceID);
+    }
+
+    // Recurrent connection has both end points at the same neuron!
+    if(connectionToDelete.sourceID !=connectionToDelete.targetID){
+        if(self.isNeuronRedundant(self.nodeLookup, connectionToDelete.targetID))
+            self.nodes.splice(tgtIx,1);//neuronGeneList.Remove(connectionToDelete.targetID);
+    }
+};
+
+NeatGenome.BuildNeuronConnectionLookupTable_NewConnection = function(nodeConnectionLookup,nodeTable, gid, connection, inOrOut)
+{
+    // Is this neuron already known to the lookup table?
+    var lookup = nodeConnectionLookup[gid];
+
+    if(lookup==null)
+    {	// Creae a new lookup entry for this neuron Id.
+        lookup = {node: nodeTable[gid], incoming: [], outgoing: [] };
+        nodeConnectionLookup[gid] = lookup;
+    }
+
+    // Register the connection with the NeuronConnectionLookup object.
+    lookup[inOrOut].push(connection);
+};
+NeatGenome.prototype.buildNeuronConnectionLookupTable = function()
+{
+    var self = this;
+    self.nodeLookup = NeatGenome.Help.CreateGIDLookup(self.nodes);
+
+    var nodeConnectionLookup = {};
+
+    self.connections.forEach(function(connection){
+
+        //what node is this connections target? That makes this an incoming connection
+        NeatGenome.BuildNeuronConnectionLookupTable_NewConnection(nodeConnectionLookup,
+            self.nodeLookup,connection.targetID, connection, 'incoming');
+
+        //what node is this connectino's source? That makes this an outgoing connection for the node
+        NeatGenome.BuildNeuronConnectionLookupTable_NewConnection(nodeConnectionLookup,
+            self.nodeLookup, connection.sourceID, connection, 'outgoing');
+    });
+
+    return nodeConnectionLookup;
+};
+
+/// <summary>
+/// We define a simple neuron structure as a neuron that has a single outgoing or single incoming connection.
+/// With such a structure we can easily eliminate the neuron and shift it's connections to an adjacent neuron.
+/// If the neuron's non-linearity was not being used then such a mutation is a simplification of the network
+/// structure that shouldn't adversly affect its functionality.
+/// </summary>
+NeatGenome.prototype.mutate_DeleteSimpleNeuronStructure = function(newConnectionTable, np)
+{
+
+    var self = this;
+
+    // We will use the NeuronConnectionLookupTable to find the simple structures.
+    var nodeConnectionLookup = self.buildNeuronConnectionLookupTable();
+
+
+    // Build a list of candidate simple neurons to choose from.
+    var simpleNeuronIdList = [];
+
+    for(var lookupKey in nodeConnectionLookup)
+    {
+        var lookup = nodeConnectionLookup[lookupKey];
+
+
+        // If we test the connection count with <=1 then we also pick up neurons that are in dead-end circuits,
+        // RemoveSimpleNeuron is then able to delete these neurons from the network structure along with any
+        // associated connections.
+        // All neurons that are part of a module would appear to be dead-ended, but skip removing them anyway.
+        if (lookup.node.nodeType == NodeType.hidden
+            && !(lookup.node.activationFunction.functionID == 'ModuleInputNeuron')
+            && !(lookup.node.activationFunction.functionID == 'ModuleOutputNeuron') ) {
+            if((lookup.incoming.length<=1) || (lookup.outgoing.length<=1))
+                simpleNeuronIdList.push(lookup.node.gid);
+        }
+    }
+
+    // Are there any candiate simple neurons?
+    if(simpleNeuronIdList.length==0)
+    {	// No candidate neurons. As a fallback lets delete a connection.
+        self.mutate_DeleteConnection();
+        return false;
+    }
+
+    // Pick a simple neuron at random.
+    var idx = utilities.next(simpleNeuronIdList.length);//Math.floor(utilities.nextDouble() * simpleNeuronIdList.length);
+    var nid = simpleNeuronIdList[idx];
+    self.removeSimpleNeuron(nodeConnectionLookup, nid, newConnectionTable, np);
+
+    return true;
+};
+
+NeatGenome.prototype.removeSimpleNeuron = function(nodeConnectionLookup, nid, newConnectionTable, np)
+{
+    var self = this;
+    // Create new connections that connect all of the incoming and outgoing neurons
+    // that currently exist for the simple neuron.
+    var lookup = nodeConnectionLookup[nid];
+
+    lookup.incoming.forEach(function(incomingConnection)
+    {
+        lookup.outgoing.forEach(function(outgoingConnection){
+
+            if(!self.testForExistingConnectionInnovation(incomingConnection.sourceID, outgoingConnection.targetID))
+            {	// Connection doesnt already exists.
+
+                // Test for matching connection within NewConnectionGeneTable.
+                var connectionKey =  "(" + incomingConnection.sourceID + "," + outgoingConnection.targetID + ")";
+
+                //new ConnectionEndpointsStruct(incomingConnection.SourceNeuronId,
+//                   outgoi//ngConnection.TargetNeuronId);
+                var existingConnection = newConnectionTable[connectionKey];
+                var newConnection;
+                var nextID = NeatGenome.Help.nextInnovationID();
+                if(existingConnection==null)
+                {	// No matching connection found. Create a connection with a new ID.
+                    newConnection = new NeatConnection(nextID,
+                        (utilities.nextDouble() * np.connectionWeightRange) - np.connectionWeightRange/2.0,
+                        {sourceID:incomingConnection.sourceID, targetID: outgoingConnection.targetID});
+//                           new ConnectionGene(ea.NextInnovationId,
+//                           incomingConnection.SourceNeuronId,
+//                           outgoingConnection.TargetNeuronId,
+//                           (Utilities.NextDouble() * ea.NeatParameters.connectionWeightRange) - ea.NeatParameters.connectionWeightRange/2.0);
+
+                    // Register the new ID with NewConnectionGeneTable.
+                    newConnectionTable[connectionKey] = newConnection;
+
+                    // Add the new gene to the genome.
+                    self.connections.push(newConnection);
+                }
+                else
+                {	// Matching connection found. Re-use its ID.
+                    newConnection = new NeatConnection(existingConnection.gid,
+                        (utilities.nextDouble() * np.connectionWeightRange) - np.connectionWeightRange/2.0,
+                        {sourceID:incomingConnection.sourceID, targetID: outgoingConnection.targetID});
+
+                    // Add the new gene to the genome. Use InsertIntoPosition() to ensure we don't break the sort
+                    // order of the connection genes.
+                    NeatGenome.Help.insertByInnovation(newConnection, self.connections);
+                }
+
+            }
+
+        });
+
+    });
+
+
+    lookup.incoming.forEach(function(incomingConnection, inIx)
+    {
+        for(var i=0; i < self.connections.length; i++)
+        {
+            if(self.connections[i].gid == incomingConnection.gid)
+            {
+                self.connections.splice(i,1);
+                break;
+            }
+        }
+    });
+
+    lookup.outgoing.forEach(function(outgoingConnection, inIx)
+    {
+        if(outgoingConnection.targetID != nid)
+        {
+            for(var i=0; i < self.connections.length; i++)
+            {
+                if(self.connections[i].gid == outgoingConnection.gid)
+                {
+                    self.connections.splice(i,1);
+                    break;
+                }
+            }
+        }
+    });
+
+    // Delete the simple neuron - it no longer has any connections to or from it.
+    for(var i=0; i < self.nodes.length; i++)
+    {
+        if(self.nodes[i].gid == nid)
+        {
+            self.nodes.splice(i,1);
+            break;
+        }
+    }
+
+
+};
+
+});
+
+require.register("optimuslime~neatjs@master/neatHelp/neatDecoder.js", function (exports, module) {
+/**
+ * Module dependencies.
+ */
+
+//pull in our cppn lib
+var cppnjs = require('optimuslime~cppnjs@master');
+
+//grab our activation factory, cppn object and connections
+var CPPNactivationFactory = cppnjs.cppnActivationFactory;
+var CPPN = cppnjs.cppn;
+var CPPNConnection = cppnjs.cppnConnection;
+
+//going to need to read node types appropriately
+var NodeType = require('optimuslime~neatjs@master/types/nodeType.js');
+
+/**
+ * Expose `NeatDecoder`.
+ */
+
+var neatDecoder = {};
+
+module.exports = neatDecoder;
+
+/**
+ * Decodes a neatGenome in a cppn.
+ *
+ * @param {Object} ng
+ * @param {String} activationFunction
+ * @api public
+ */
+neatDecoder.DecodeToFloatFastConcurrentNetwork = function(ng, activationFunction)
+{
+    var outputNeuronCount = ng.outputNodeCount;
+    var neuronGeneCount = ng.nodes.length;
+
+    var biasList = [];
+    for(var b=0; b< neuronGeneCount; b++)
+        biasList.push(0);
+
+    // Slightly inefficient - determine the number of bias nodes. Fortunately there is not actually
+    // any reason to ever have more than one bias node - although there may be 0.
+
+    var activationFunctionArray = [];
+    for(var i=0; i < neuronGeneCount; i++){
+        activationFunctionArray.push("");
+    }
+
+    var nodeIdx=0;
+    for(; nodeIdx<neuronGeneCount; nodeIdx++)
+    {
+        activationFunctionArray[nodeIdx] = CPPNactivationFactory.getActivationFunction(ng.nodes[nodeIdx].activationFunction);
+        if(ng.nodes[nodeIdx].nodeType !=  NodeType.bias)
+            break;
+    }
+    var biasNodeCount = nodeIdx;
+    var inputNeuronCount = ng.inputNodeCount;
+    for (; nodeIdx < neuronGeneCount; nodeIdx++)
+    {
+        activationFunctionArray[nodeIdx] = CPPNactivationFactory.getActivationFunction(ng.nodes[nodeIdx].activationFunction);
+        biasList[nodeIdx] = ng.nodes[nodeIdx].bias;
+    }
+
+    // ConnectionGenes point to a neuron ID. We need to map this ID to a 0 based index for
+    // efficiency.
+
+    // Use a quick heuristic to determine which will be the fastest technique for mapping the connection end points
+    // to neuron indexes. This is heuristic is not 100% perfect but has been found to be very good in in real word
+    // tests. Feel free to perform your own calculation and create a more intelligent heuristic!
+    var  connectionCount= ng.connections.length;
+
+    var fastConnectionArray = [];
+    for(var i=0; i< connectionCount; i++){
+        fastConnectionArray.push(new CPPNConnection(0,0,0));
+    }
+
+    var nodeTable = {};// neuronIndexTable = new Hashtable(neuronGeneCount);
+    for(var i=0; i<neuronGeneCount; i++)
+        nodeTable[ng.nodes[i].gid] = i;
+
+    for(var connectionIdx=0; connectionIdx<connectionCount; connectionIdx++)
+    {
+        //fastConnectionArray[connectionIdx] = new FloatFastConnection();
+        //Note. Binary search algorithm assume that neurons are ordered by their innovation Id.
+        var connection = ng.connections[connectionIdx];
+        fastConnectionArray[connectionIdx].sourceIdx = nodeTable[connection.sourceID];
+        fastConnectionArray[connectionIdx].targetIdx = nodeTable[connection.targetID];
+
+        //save this for testing!
+//                System.Diagnostics.Debug.Assert(fastConnectionArray[connectionIdx].sourceNeuronIdx>=0 && fastConnectionArray[connectionIdx].targetNeuronIdx>=0, "invalid idx");
+
+        fastConnectionArray[connectionIdx].weight = connection.weight;
+        fastConnectionArray[connectionIdx].learningRate = connection.learningRate;
+        fastConnectionArray[connectionIdx].a = connection.a;
+        fastConnectionArray[connectionIdx].b = connection.b;
+        fastConnectionArray[connectionIdx].c = connection.c;
+
+//                connectionIdx++;
+    }
+
+    // Now sort the connection array on sourceNeuronIdx, secondary sort on targetNeuronIdx.
+    // Using Array.Sort is 10 times slower than the hand-coded sorting routine. See notes on that routine for more
+    // information. Also note that in tests that this sorting did no t actually improve the speed of the network!
+    // However, it may have a benefit for CPUs with small caches or when networks are very large, and since the new
+    // sort takes up hardly any time for even large networks, it seems reasonable to leave in the sort.
+    //Array.Sort(fastConnectionArray, fastConnectionComparer);
+    //if(fastConnectionArray.Length>1)
+    //	QuickSortFastConnections(0, fastConnectionArray.Length-1);
+
+    return new CPPN(biasNodeCount, inputNeuronCount,
+        outputNeuronCount, neuronGeneCount,
+        fastConnectionArray, biasList, activationFunctionArray);
+
+};
+
+
+});
+
+require.register("optimuslime~neatjs@master/neatHelp/neatHelp.js", function (exports, module) {
+/**
+* Module dependencies.
+*/
+var uuid = require('optimuslime~win-utils@master').cuid;
+/**
+* Expose `neatHelp`.
+*/
+
+var neatHelp = {};
+
+module.exports = neatHelp;
+
+//define helper types!
+neatHelp.CorrelationType =
+{
+    matchedConnectionGenes : 0,
+    disjointConnectionGene : 1,
+    excessConnectionGene : 2
+};
+
+neatHelp.CorrelationStatistics = function(){
+
+    var self= this;
+    self.matchingCount = 0;
+    self.disjointConnectionCount = 0;
+    self.excessConnectionCount = 0;
+    self.connectionWeightDelta = 0;
+};
+
+neatHelp.CorrelationItem = function(correlationType, conn1, conn2)
+{
+    var self= this;
+    self.correlationType = correlationType;
+    self.connection1 = conn1;
+    self.connection2 = conn2;
+};
+
+
+neatHelp.CorrelationResults = function()
+{
+    var self = this;
+
+    self.correlationStatistics = new neatHelp.CorrelationStatistics();
+    self.correlationList = [];
+
+};
+
+//TODO: Integrity check by GlobalID
+neatHelp.CorrelationResults.prototype.performIntegrityCheckByInnovation = function()
+{
+    var prevInnovationId= "";
+
+    var self = this;
+
+    for(var i=0; i< self.correlationList.length; i++){
+        var correlationItem =  self.correlationList[i];
+
+        switch(correlationItem.correlationType)
+        {
+            // Disjoint and excess genes.
+            case neatHelp.CorrelationType.disjointConnectionGene:
+            case neatHelp.CorrelationType.excessConnectionGene:
+                // Disjoint or excess gene.
+                if(		(!correlationItem.connection1 && !correlationItem.connection2)
+                    ||	(correlationItem.connection1 && correlationItem.connection2))
+                {	// Precisely one gene should be present.
+                    return false;
+                }
+                if(correlationItem.connection1)
+                {
+                    if(uuid.isLessThan(correlationItem.connection1.gid, prevInnovationId) || correlationItem.connection1.gid == prevInnovationId)
+                        return false;
+
+                    prevInnovationId = correlationItem.connection1.gid;
+                }
+                else // ConnectionGene2 is present.
+                {
+                    if(uuid.isLessThan(correlationItem.connection2.gid, prevInnovationId) || correlationItem.connection2.gid == prevInnovationId)
+                        return false;
+
+                    prevInnovationId = correlationItem.connection2.gid;
+                }
+
+                break;
+            case neatHelp.CorrelationType.matchedConnectionGenes:
+
+                if(!correlationItem.connection1 || !correlationItem.connection2)
+                    return false;
+
+                if(		(correlationItem.connection1.gid != correlationItem.connection2.gid)
+                    ||	(correlationItem.connection1.sourceID != correlationItem.connection2.sourceID)
+                    ||	(correlationItem.connection1.targetID != correlationItem.connection2.targetID))
+                    return false;
+
+                // Innovation ID's should be in order and not duplicated.
+                if(uuid.isLessThan(correlationItem.connection1.gid, prevInnovationId) || correlationItem.connection1.gid == prevInnovationId)
+                    return false;
+
+                prevInnovationId = correlationItem.connection1.gid;
+
+                break;
+        }
+    }
+
+    return true;
+};
+
+});
+
+require.register("optimuslime~neatjs@master/neatHelp/neatParameters.js", function (exports, module) {
+/**
+ * Module dependencies.
+ */
+//none
+
+/**
+ * Expose `neatParameters`.
+ */
+module.exports = NeatParameters;
+
+var	DEFAULT_POPULATION_SIZE = 150;
+var  DEFAULT_P_INITIAL_POPULATION_INTERCONNECTIONS = 1.00;//DAVID 0.05F;
+
+var DEFAULT_P_OFFSPRING_ASEXUAL = 0.5;
+var DEFAULT_P_OFFSPRING_SEXUAL = 0.5;
+var DEFAULT_P_INTERSPECIES_MATING = 0.01;
+
+var DEFAULT_P_DISJOINGEXCESSGENES_RECOMBINED = 0.1;
+
+//----- High level mutation proportions
+var DEFAULT_P_MUTATE_CONNECTION_WEIGHTS = 0.988;
+var DEFAULT_P_MUTATE_ADD_NODE = 0.002;
+var DEFAULT_P_MUTATE_ADD_MODULE = 0.0;
+var DEFAULT_P_MUTATE_ADD_CONNECTION = 0.018;
+var DEFAULT_P_MUTATE_CHANGE_ACTIVATIONS = 0.001;
+var DEFAULT_P_MUTATE_DELETE_CONNECTION = 0.001;
+var DEFAULT_P_MUTATE_DELETE_SIMPLENEURON = 0.00;
+var DEFAULT_N_MUTATE_ACTIVATION = 0.01;
+
+//-----
+var DEFAULT_COMPATIBILITY_THRESHOLD = 8 ;
+var DEFAULT_COMPATIBILITY_DISJOINT_COEFF = 1.0;
+var DEFAULT_COMPATIBILITY_EXCESS_COEFF = 1.0;
+var DEFAULT_COMPATIBILITY_WEIGHTDELTA_COEFF = 0.05;
+
+var DEFAULT_ELITISM_PROPORTION = 0.2;
+var DEFAULT_SELECTION_PROPORTION = 0.2;
+
+var DEFAULT_TARGET_SPECIES_COUNT_MIN = 6;
+var DEFAULT_TARGET_SPECIES_COUNT_MAX = 10;
+
+var DEFAULT_SPECIES_DROPOFF_AGE = 200;
+
+var DEFAULT_PRUNINGPHASE_BEGIN_COMPLEXITY_THRESHOLD = 50;
+var DEFAULT_PRUNINGPHASE_BEGIN_FITNESS_STAGNATION_THRESHOLD = 10;
+var DEFAULT_PRUNINGPHASE_END_COMPLEXITY_STAGNATION_THRESHOLD = 15;
+
+var DEFAULT_CONNECTION_WEIGHT_RANGE = 10.0;
+//		public const double DEFAULT_CONNECTION_MUTATION_SIGMA = 0.015;
+
+var DEFAULT_ACTIVATION_PROBABILITY = 1.0;
+
+NeatParameters.ConnectionPerturbationType =
+{
+    /// <summary>
+    /// Reset weights.
+    /// </summary>
+    reset : 0,
+
+        /// <summary>
+        /// Jiggle - even distribution
+        /// </summary>
+        jiggleEven :1
+
+        /// <summary>
+        /// Jiggle - normal distribution
+        /// </summary>
+//            jiggleND : 2
+};
+NeatParameters.ConnectionSelectionType =
+{
+    /// <summary>
+    /// Select a proportion of the weights in a genome.
+    /// </summary>
+    proportional :0,
+
+        /// <summary>
+        /// Select a fixed number of weights in a genome.
+        /// </summary>
+        fixedQuantity :1
+};
+
+NeatParameters.ConnectionMutationParameterGroup = function(
+     activationProportion,
+     perturbationType,
+     selectionType,
+     proportion,
+     quantity,
+     perturbationFactor,
+     sigma)
+{
+    var self = this;
+    /// <summary>
+    /// This group's activation proportion - relative to the totalled
+    /// ActivationProportion for all groups.
+    /// </summary>
+    self.activationProportion = activationProportion;
+
+    /// <summary>
+    /// The type of mutation that this group represents.
+    /// </summary>
+    self.perturbationType = perturbationType;
+
+    /// <summary>
+    /// The type of connection selection that this group represents.
+    /// </summary>
+    self.selectionType = selectionType;
+
+    /// <summary>
+    /// Specifies the proportion for SelectionType.Proportional
+    /// </summary>
+    self.proportion=proportion ;
+
+    /// <summary>
+    /// Specifies the quantity for SelectionType.FixedQuantity
+    /// </summary>
+    self.quantity= quantity;
+
+    /// <summary>
+    /// The perturbation factor for ConnectionPerturbationType.JiggleEven.
+    /// </summary>
+    self.perturbationFactor= perturbationFactor;
+
+    /// <summary>
+    /// Sigma for for ConnectionPerturbationType.JiggleND.
+    /// </summary>
+    self.sigma= sigma;
+};
+
+NeatParameters.ConnectionMutationParameterGroup.Copy = function(copyFrom)
+{
+    return new NeatParameters.ConnectionMutationParameterGroup(
+        copyFrom.ActivationProportion,
+         copyFrom.PerturbationType,
+           copyFrom.SelectionType,
+         copyFrom.Proportion,
+      copyFrom.Quantity,
+       copyFrom.PerturbationFactor,
+     copyFrom.Sigma
+    );
+};
+
+function NeatParameters()
+{
+    var self = this;
+    self.histogramBins = [];
+    self.archiveThreshold=3.00;
+    self.tournamentSize=4;
+    self.noveltySearch=false;
+    self.noveltyHistogram=false;
+    self.noveltyFixed=false;
+    self.noveltyFloat=false;
+    self.multiobjective=false;
+
+    self.allowSelfConnections = false;
+
+    self.populationSize = DEFAULT_POPULATION_SIZE;
+    self.pInitialPopulationInterconnections = DEFAULT_P_INITIAL_POPULATION_INTERCONNECTIONS;
+
+    self.pOffspringAsexual = DEFAULT_P_OFFSPRING_ASEXUAL;
+    self.pOffspringSexual = DEFAULT_P_OFFSPRING_SEXUAL;
+    self.pInterspeciesMating = DEFAULT_P_INTERSPECIES_MATING;
+
+    self.pDisjointExcessGenesRecombined = DEFAULT_P_DISJOINGEXCESSGENES_RECOMBINED;
+
+    //----- High level mutation proportions
+    self.pMutateConnectionWeights	= DEFAULT_P_MUTATE_CONNECTION_WEIGHTS;
+    self.pMutateAddNode = DEFAULT_P_MUTATE_ADD_NODE;
+    self.pMutateAddModule = DEFAULT_P_MUTATE_ADD_MODULE;
+    self.pMutateAddConnection = DEFAULT_P_MUTATE_ADD_CONNECTION;
+    self.pMutateDeleteConnection		= DEFAULT_P_MUTATE_DELETE_CONNECTION;
+    self.pMutateDeleteSimpleNeuron	= DEFAULT_P_MUTATE_DELETE_SIMPLENEURON;
+    self.pMutateChangeActivations = DEFAULT_P_MUTATE_CHANGE_ACTIVATIONS;
+    self.pNodeMutateActivationRate = DEFAULT_N_MUTATE_ACTIVATION;
+
+    //----- Build a default ConnectionMutationParameterGroupList.
+    self.connectionMutationParameterGroupList = [];
+
+    self.connectionMutationParameterGroupList.push(new NeatParameters.ConnectionMutationParameterGroup(0.125, NeatParameters.ConnectionPerturbationType.jiggleEven,
+        NeatParameters.ConnectionSelectionType.proportional, 0.5, 0, 0.05, 0.0));
+
+    self.connectionMutationParameterGroupList.push(new NeatParameters.ConnectionMutationParameterGroup(0.5, NeatParameters.ConnectionPerturbationType.jiggleEven,
+        NeatParameters.ConnectionSelectionType.proportional, 0.1, 0, 0.05, 0.0));
+
+    self.connectionMutationParameterGroupList.push(new NeatParameters.ConnectionMutationParameterGroup(0.125, NeatParameters.ConnectionPerturbationType.jiggleEven,
+        NeatParameters.ConnectionSelectionType.fixedQuantity, 0.0, 1, 0.05, 0.0));
+
+    self.connectionMutationParameterGroupList.push(new NeatParameters.ConnectionMutationParameterGroup(0.125, NeatParameters.ConnectionPerturbationType.reset,
+        NeatParameters.ConnectionSelectionType.proportional, 0.1, 0, 0.0, 0.0));
+
+    self.connectionMutationParameterGroupList.push(new NeatParameters.ConnectionMutationParameterGroup(0.125, NeatParameters.ConnectionPerturbationType.reset,
+        NeatParameters.ConnectionSelectionType.fixedQuantity, 0.0, 1, 0.0, 0.0));
+
+    //-----
+    self.compatibilityThreshold = DEFAULT_COMPATIBILITY_THRESHOLD;
+    self.compatibilityDisjointCoeff = DEFAULT_COMPATIBILITY_DISJOINT_COEFF;
+    self.compatibilityExcessCoeff = DEFAULT_COMPATIBILITY_EXCESS_COEFF;
+    self.compatibilityWeightDeltaCoeff = DEFAULT_COMPATIBILITY_WEIGHTDELTA_COEFF;
+
+    self.elitismProportion = DEFAULT_ELITISM_PROPORTION;
+    self.selectionProportion = DEFAULT_SELECTION_PROPORTION;
+
+    self.targetSpeciesCountMin = DEFAULT_TARGET_SPECIES_COUNT_MIN;
+    self.targetSpeciesCountMax = DEFAULT_TARGET_SPECIES_COUNT_MAX;
+
+    self.pruningPhaseBeginComplexityThreshold = DEFAULT_PRUNINGPHASE_BEGIN_COMPLEXITY_THRESHOLD;
+    self.pruningPhaseBeginFitnessStagnationThreshold = DEFAULT_PRUNINGPHASE_BEGIN_FITNESS_STAGNATION_THRESHOLD;
+    self.pruningPhaseEndComplexityStagnationThreshold = DEFAULT_PRUNINGPHASE_END_COMPLEXITY_STAGNATION_THRESHOLD;
+
+    self.speciesDropoffAge = DEFAULT_SPECIES_DROPOFF_AGE;
+
+    self.connectionWeightRange = DEFAULT_CONNECTION_WEIGHT_RANGE;
+
+    //DAVID
+    self.activationProbabilities = [];//new double[4];
+    self.activationProbabilities.push(DEFAULT_ACTIVATION_PROBABILITY);
+    self.activationProbabilities.push(0);
+    self.activationProbabilities.push(0);
+    self.activationProbabilities.push(0);
+};
+
+NeatParameters.Copy = function(copyFrom)
+{
+    var self = new NeatParameters();
+
+    //paul - joel originally
+    self.noveltySearch = copyFrom.noveltySearch;
+    self.noveltyHistogram = copyFrom.noveltyHistogram;
+    self.noveltyFixed = copyFrom.noveltyFixed;
+    self.noveltyFloat = copyFrom.noveltyFloat;
+    self.histogramBins = copyFrom.histogramBins;
+
+
+    self.allowSelfConnections = copyFrom.allowSelfConnections;
+
+    self.populationSize = copyFrom.populationSize;
+
+    self.pOffspringAsexual = copyFrom.pOffspringAsexual;
+    self.pOffspringSexual = copyFrom.pOffspringSexual;
+    self.pInterspeciesMating = copyFrom.pInterspeciesMating;
+
+    self.pDisjointExcessGenesRecombined = copyFrom.pDisjointExcessGenesRecombined;
+
+    self.pMutateConnectionWeights = copyFrom.pMutateConnectionWeights;
+    self.pMutateAddNode = copyFrom.pMutateAddNode;
+    self.pMutateAddModule = copyFrom.pMutateAddModule;
+    self.pMutateAddConnection = copyFrom.pMutateAddConnection;
+    self.pMutateDeleteConnection = copyFrom.pMutateDeleteConnection;
+    self.pMutateDeleteSimpleNeuron = copyFrom.pMutateDeleteSimpleNeuron;
+
+    // Copy the list.
+    self.connectionMutationParameterGroupList = [];
+    copyFrom.connectionMutationParameterGroupList.forEach(function(c){
+        self.connectionMutationParameterGroupList.push(NeatParameters.ConnectionMutationParameterGroup.Copy(c));
+
+    });
+
+    self.compatibilityThreshold = copyFrom.compatibilityThreshold;
+    self.compatibilityDisjointCoeff = copyFrom.compatibilityDisjointCoeff;
+    self.compatibilityExcessCoeff = copyFrom.compatibilityExcessCoeff;
+    self.compatibilityWeightDeltaCoeff = copyFrom.compatibilityWeightDeltaCoeff;
+
+    self.elitismProportion = copyFrom.elitismProportion;
+    self.selectionProportion = copyFrom.selectionProportion;
+
+    self.targetSpeciesCountMin = copyFrom.targetSpeciesCountMin;
+    self.targetSpeciesCountMax = copyFrom.targetSpeciesCountMax;
+
+    self.pruningPhaseBeginComplexityThreshold = copyFrom.pruningPhaseBeginComplexityThreshold;
+    self.pruningPhaseBeginFitnessStagnationThreshold = copyFrom.pruningPhaseBeginFitnessStagnationThreshold;
+    self.pruningPhaseEndComplexityStagnationThreshold = copyFrom.pruningPhaseEndComplexityStagnationThreshold;
+
+    self.speciesDropoffAge = copyFrom.speciesDropoffAge;
+
+    self.connectionWeightRange = copyFrom.connectionWeightRange;
+
+    return self;
+};
+
+
+
+});
+
+require.register("optimuslime~neatjs@master/types/nodeType.js", function (exports, module) {
+var NodeType =
+{
+    bias : "Bias",
+    input: "Input",
+    output: "Output",
+    hidden: "Hidden",
+    other : "Other"
+};
+
+module.exports = NodeType;
+});
+
+require.register("optimuslime~neatjs@master/utility/genomeSharpToJS.js", function (exports, module) {
+//Convert between C# SharpNEAT Genotype encoded in XML into a JS genotype in JSON
+//pretty simple
 
 /**
  * Module dependencies.
  */
 
-var events = require("component~event@0.1.4");
-var delegate = require("component~delegate@0.2.2");
+var NeatGenome = require('optimuslime~neatjs@master/genome/neatGenome.js');
+var NeatNode = require('optimuslime~neatjs@master/genome/neatNode.js');
+var NeatConnection = require('optimuslime~neatjs@master/genome/neatConnection.js');
+var NodeType = require('optimuslime~neatjs@master/types/nodeType.js');
+
 
 /**
- * Expose `Events`.
+ * Expose `GenomeConverter`.
  */
 
-module.exports = Events;
+var converter = {};
 
-/**
- * Initialize an `Events` with the given
- * `el` object which events will be bound to,
- * and the `obj` which will receive method calls.
- *
- * @param {Object} el
- * @param {Object} obj
- * @api public
- */
+//we export the convert object, with two functions
+module.exports = converter;
 
-function Events(el, obj) {
-  if (!(this instanceof Events)) return new Events(el, obj);
-  if (!el) throw new Error('element required');
-  if (!obj) throw new Error('object required');
-  this.el = el;
-  this.obj = obj;
-  this._events = {};
-}
-
-/**
- * Subscription helper.
- */
-
-Events.prototype.sub = function(event, method, cb){
-  this._events[event] = this._events[event] || {};
-  this._events[event][method] = cb;
+converter.NeuronTypeToNodeType = function(type)
+{
+    switch(type)
+    {
+        case "bias":
+            return NodeType.bias;
+        case "in":
+            return NodeType.input;
+        case "out":
+            return NodeType.output;
+        case "hid":
+            return NodeType.hidden;
+        default:
+            throw new Error("inpropper C# neuron type detected");
+    }
 };
 
-/**
- * Bind to `event` with optional `method` name.
- * When `method` is undefined it becomes `event`
- * with the "on" prefix.
- *
- * Examples:
- *
- *  Direct event handling:
- *
- *    events.bind('click') // implies "onclick"
- *    events.bind('click', 'remove')
- *    events.bind('click', 'sort', 'asc')
- *
- *  Delegated event handling:
- *
- *    events.bind('click li > a')
- *    events.bind('click li > a', 'remove')
- *    events.bind('click a.sort-ascending', 'sort', 'asc')
- *    events.bind('click a.sort-descending', 'sort', 'desc')
- *
- * @param {String} event
- * @param {String|function} [method]
- * @return {Function} callback
- * @api public
- */
+converter.ConvertCSharpToJS = function(xmlGenome)
+{
 
-Events.prototype.bind = function(event, method){
-  var e = parse(event);
-  var el = this.el;
-  var obj = this.obj;
-  var name = e.name;
-  var method = method || 'on' + name;
-  var args = [].slice.call(arguments, 2);
+    //we need to parse through a c# version of genome, and make a js genome from it
 
-  // callback
-  function cb(){
-    var a = [].slice.call(arguments).concat(args);
-    obj[method].apply(obj, a);
-  }
+    var aNeurons = xmlGenome['neurons']['neuron'] || xmlGenome['neurons'];
+    var aConnections = xmlGenome['connections']['connection'] || xmlGenome['connections'];
 
-  // bind
-  if (e.selector) {
-    cb = delegate.bind(el, e.selector, name, cb);
-  } else {
-    events.bind(el, name, cb);
-  }
 
-  // subscription for unbinding
-  this.sub(name, method, cb);
+    //we will use nodes and connections to make our genome
+    var nodes = [], connections = [];
+    var inCount = 0, outCount = 0;
 
-  return cb;
+    for(var i=0; i < aNeurons.length; i++)
+    {
+        var csNeuron = aNeurons[i];
+        var jsNode = new NeatNode(csNeuron.id, csNeuron.activationFunction, csNeuron.layer, {type: converter.NeuronTypeToNodeType(csNeuron.type)});
+        nodes.push(jsNode);
+
+        if(csNeuron.type == 'in') inCount++;
+        else if(csNeuron.type == 'out') outCount++;
+    }
+
+    for(var i=0; i < aConnections.length; i++)
+    {
+        var csConnection = aConnections[i];
+        var jsConnection = new NeatConnection(csConnection['innov-id'], csConnection.weight, {sourceID:csConnection['src-id'], targetID: csConnection['tgt-id']});
+        connections.push(jsConnection);
+    }
+
+    var ng = new NeatGenome(xmlGenome['id'], nodes, connections, inCount, outCount);
+    ng.adaptable = (xmlGenome['adaptable'] == 'True');
+    ng.modulated = (xmlGenome['modulated'] == 'True');
+    ng.fitness = xmlGenome['fitness'];
+    ng.realFitness = xmlGenome['realfitness'];
+    ng.age = xmlGenome['age'];
+
+    return ng;
 };
-
-/**
- * Unbind a single binding, all bindings for `event`,
- * or all bindings within the manager.
- *
- * Examples:
- *
- *  Unbind direct handlers:
- *
- *     events.unbind('click', 'remove')
- *     events.unbind('click')
- *     events.unbind()
- *
- * Unbind delegate handlers:
- *
- *     events.unbind('click', 'remove')
- *     events.unbind('click')
- *     events.unbind()
- *
- * @param {String|Function} [event]
- * @param {String|Function} [method]
- * @api public
- */
-
-Events.prototype.unbind = function(event, method){
-  if (0 == arguments.length) return this.unbindAll();
-  if (1 == arguments.length) return this.unbindAllOf(event);
-
-  // no bindings for this event
-  var bindings = this._events[event];
-  if (!bindings) return;
-
-  // no bindings for this method
-  var cb = bindings[method];
-  if (!cb) return;
-
-  events.unbind(this.el, event, cb);
-};
-
-/**
- * Unbind all events.
- *
- * @api private
- */
-
-Events.prototype.unbindAll = function(){
-  for (var event in this._events) {
-    this.unbindAllOf(event);
-  }
-};
-
-/**
- * Unbind all events for `event`.
- *
- * @param {String} event
- * @api private
- */
-
-Events.prototype.unbindAllOf = function(event){
-  var bindings = this._events[event];
-  if (!bindings) return;
-
-  for (var method in bindings) {
-    this.unbind(event, method);
-  }
-};
-
-/**
- * Parse `event`.
- *
- * @param {String} event
- * @return {Object}
- * @api private
- */
-
-function parse(event) {
-  var parts = event.split(/ +/);
-  return {
-    name: parts.shift(),
-    selector: parts.join(' ')
-  }
-}
 
 });
 
-require.modules["component-events"] = require.modules["component~events@master"];
-require.modules["component~events"] = require.modules["component~events@master"];
-require.modules["events"] = require.modules["component~events@master"];
+require.modules["optimuslime-neatjs"] = require.modules["optimuslime~neatjs@master"];
+require.modules["optimuslime~neatjs"] = require.modules["optimuslime~neatjs@master"];
+require.modules["neatjs"] = require.modules["optimuslime~neatjs@master"];
 
 
 require.register("component~indexof@0.0.1", function (exports, module) {
@@ -18826,7 +17083,7 @@ require.register("component~classes@master", function (exports, module) {
  * Module dependencies.
  */
 
-var index = require("component~indexof@0.0.1");
+var index = require('component~indexof@0.0.1');
 
 /**
  * Whitespace regexp.
@@ -18860,7 +17117,9 @@ module.exports = function(el){
  */
 
 function ClassList(el) {
-  if (!el) throw new Error('A DOM element reference is required');
+  if (!el || !el.nodeType) {
+    throw new Error('A DOM element reference is required');
+  }
   this.el = el;
   this.list = el.classList;
 }
@@ -19042,6 +17301,398 @@ require.modules["ramitos~resize"] = require.modules["ramitos~resize@master"];
 require.modules["resize"] = require.modules["ramitos~resize@master"];
 
 
+require.register("component~query@0.0.3", function (exports, module) {
+function one(selector, el) {
+  return el.querySelector(selector);
+}
+
+exports = module.exports = function(selector, el){
+  el = el || document;
+  return one(selector, el);
+};
+
+exports.all = function(selector, el){
+  el = el || document;
+  return el.querySelectorAll(selector);
+};
+
+exports.engine = function(obj){
+  if (!obj.one) throw new Error('.one callback required');
+  if (!obj.all) throw new Error('.all callback required');
+  one = obj.one;
+  exports.all = obj.all;
+  return exports;
+};
+
+});
+
+require.modules["component-query"] = require.modules["component~query@0.0.3"];
+require.modules["component~query"] = require.modules["component~query@0.0.3"];
+require.modules["query"] = require.modules["component~query@0.0.3"];
+
+
+require.register("component~matches-selector@0.1.5", function (exports, module) {
+/**
+ * Module dependencies.
+ */
+
+var query = require('component~query@0.0.3');
+
+/**
+ * Element prototype.
+ */
+
+var proto = Element.prototype;
+
+/**
+ * Vendor function.
+ */
+
+var vendor = proto.matches
+  || proto.webkitMatchesSelector
+  || proto.mozMatchesSelector
+  || proto.msMatchesSelector
+  || proto.oMatchesSelector;
+
+/**
+ * Expose `match()`.
+ */
+
+module.exports = match;
+
+/**
+ * Match `el` to `selector`.
+ *
+ * @param {Element} el
+ * @param {String} selector
+ * @return {Boolean}
+ * @api public
+ */
+
+function match(el, selector) {
+  if (!el || el.nodeType !== 1) return false;
+  if (vendor) return vendor.call(el, selector);
+  var nodes = query.all(selector, el.parentNode);
+  for (var i = 0; i < nodes.length; ++i) {
+    if (nodes[i] == el) return true;
+  }
+  return false;
+}
+
+});
+
+require.modules["component-matches-selector"] = require.modules["component~matches-selector@0.1.5"];
+require.modules["component~matches-selector"] = require.modules["component~matches-selector@0.1.5"];
+require.modules["matches-selector"] = require.modules["component~matches-selector@0.1.5"];
+
+
+require.register("component~closest@0.1.4", function (exports, module) {
+var matches = require('component~matches-selector@0.1.5')
+
+module.exports = function (element, selector, checkYoSelf, root) {
+  element = checkYoSelf ? {parentNode: element} : element
+
+  root = root || document
+
+  // Make sure `element !== document` and `element != null`
+  // otherwise we get an illegal invocation
+  while ((element = element.parentNode) && element !== document) {
+    if (matches(element, selector))
+      return element
+    // After `matches` on the edge case that
+    // the selector matches the root
+    // (when the root is not the document)
+    if (element === root)
+      return
+  }
+}
+
+});
+
+require.modules["component-closest"] = require.modules["component~closest@0.1.4"];
+require.modules["component~closest"] = require.modules["component~closest@0.1.4"];
+require.modules["closest"] = require.modules["component~closest@0.1.4"];
+
+
+require.register("component~event@0.1.4", function (exports, module) {
+var bind = window.addEventListener ? 'addEventListener' : 'attachEvent',
+    unbind = window.removeEventListener ? 'removeEventListener' : 'detachEvent',
+    prefix = bind !== 'addEventListener' ? 'on' : '';
+
+/**
+ * Bind `el` event `type` to `fn`.
+ *
+ * @param {Element} el
+ * @param {String} type
+ * @param {Function} fn
+ * @param {Boolean} capture
+ * @return {Function}
+ * @api public
+ */
+
+exports.bind = function(el, type, fn, capture){
+  el[bind](prefix + type, fn, capture || false);
+  return fn;
+};
+
+/**
+ * Unbind `el` event `type`'s callback `fn`.
+ *
+ * @param {Element} el
+ * @param {String} type
+ * @param {Function} fn
+ * @param {Boolean} capture
+ * @return {Function}
+ * @api public
+ */
+
+exports.unbind = function(el, type, fn, capture){
+  el[unbind](prefix + type, fn, capture || false);
+  return fn;
+};
+});
+
+require.modules["component-event"] = require.modules["component~event@0.1.4"];
+require.modules["component~event"] = require.modules["component~event@0.1.4"];
+require.modules["event"] = require.modules["component~event@0.1.4"];
+
+
+require.register("component~delegate@0.2.3", function (exports, module) {
+/**
+ * Module dependencies.
+ */
+
+var closest = require('component~closest@0.1.4')
+  , event = require('component~event@0.1.4');
+
+/**
+ * Delegate event `type` to `selector`
+ * and invoke `fn(e)`. A callback function
+ * is returned which may be passed to `.unbind()`.
+ *
+ * @param {Element} el
+ * @param {String} selector
+ * @param {String} type
+ * @param {Function} fn
+ * @param {Boolean} capture
+ * @return {Function}
+ * @api public
+ */
+
+exports.bind = function(el, selector, type, fn, capture){
+  return event.bind(el, type, function(e){
+    var target = e.target || e.srcElement;
+    e.delegateTarget = closest(target, selector, true, el);
+    if (e.delegateTarget) fn.call(el, e);
+  }, capture);
+};
+
+/**
+ * Unbind event `type`'s callback `fn`.
+ *
+ * @param {Element} el
+ * @param {String} type
+ * @param {Function} fn
+ * @param {Boolean} capture
+ * @api public
+ */
+
+exports.unbind = function(el, type, fn, capture){
+  event.unbind(el, type, fn, capture);
+};
+
+});
+
+require.modules["component-delegate"] = require.modules["component~delegate@0.2.3"];
+require.modules["component~delegate"] = require.modules["component~delegate@0.2.3"];
+require.modules["delegate"] = require.modules["component~delegate@0.2.3"];
+
+
+require.register("component~events@master", function (exports, module) {
+
+/**
+ * Module dependencies.
+ */
+
+var events = require('component~event@0.1.4');
+var delegate = require('component~delegate@0.2.3');
+
+/**
+ * Expose `Events`.
+ */
+
+module.exports = Events;
+
+/**
+ * Initialize an `Events` with the given
+ * `el` object which events will be bound to,
+ * and the `obj` which will receive method calls.
+ *
+ * @param {Object} el
+ * @param {Object} obj
+ * @api public
+ */
+
+function Events(el, obj) {
+  if (!(this instanceof Events)) return new Events(el, obj);
+  if (!el) throw new Error('element required');
+  if (!obj) throw new Error('object required');
+  this.el = el;
+  this.obj = obj;
+  this._events = {};
+}
+
+/**
+ * Subscription helper.
+ */
+
+Events.prototype.sub = function(event, method, cb){
+  this._events[event] = this._events[event] || {};
+  this._events[event][method] = cb;
+};
+
+/**
+ * Bind to `event` with optional `method` name.
+ * When `method` is undefined it becomes `event`
+ * with the "on" prefix.
+ *
+ * Examples:
+ *
+ *  Direct event handling:
+ *
+ *    events.bind('click') // implies "onclick"
+ *    events.bind('click', 'remove')
+ *    events.bind('click', 'sort', 'asc')
+ *
+ *  Delegated event handling:
+ *
+ *    events.bind('click li > a')
+ *    events.bind('click li > a', 'remove')
+ *    events.bind('click a.sort-ascending', 'sort', 'asc')
+ *    events.bind('click a.sort-descending', 'sort', 'desc')
+ *
+ * @param {String} event
+ * @param {String|function} [method]
+ * @return {Function} callback
+ * @api public
+ */
+
+Events.prototype.bind = function(event, method){
+  var e = parse(event);
+  var el = this.el;
+  var obj = this.obj;
+  var name = e.name;
+  var method = method || 'on' + name;
+  var args = [].slice.call(arguments, 2);
+
+  // callback
+  function cb(){
+    var a = [].slice.call(arguments).concat(args);
+    obj[method].apply(obj, a);
+  }
+
+  // bind
+  if (e.selector) {
+    cb = delegate.bind(el, e.selector, name, cb);
+  } else {
+    events.bind(el, name, cb);
+  }
+
+  // subscription for unbinding
+  this.sub(name, method, cb);
+
+  return cb;
+};
+
+/**
+ * Unbind a single binding, all bindings for `event`,
+ * or all bindings within the manager.
+ *
+ * Examples:
+ *
+ *  Unbind direct handlers:
+ *
+ *     events.unbind('click', 'remove')
+ *     events.unbind('click')
+ *     events.unbind()
+ *
+ * Unbind delegate handlers:
+ *
+ *     events.unbind('click', 'remove')
+ *     events.unbind('click')
+ *     events.unbind()
+ *
+ * @param {String|Function} [event]
+ * @param {String|Function} [method]
+ * @api public
+ */
+
+Events.prototype.unbind = function(event, method){
+  if (0 == arguments.length) return this.unbindAll();
+  if (1 == arguments.length) return this.unbindAllOf(event);
+
+  // no bindings for this event
+  var bindings = this._events[event];
+  if (!bindings) return;
+
+  // no bindings for this method
+  var cb = bindings[method];
+  if (!cb) return;
+
+  events.unbind(this.el, event, cb);
+};
+
+/**
+ * Unbind all events.
+ *
+ * @api private
+ */
+
+Events.prototype.unbindAll = function(){
+  for (var event in this._events) {
+    this.unbindAllOf(event);
+  }
+};
+
+/**
+ * Unbind all events for `event`.
+ *
+ * @param {String} event
+ * @api private
+ */
+
+Events.prototype.unbindAllOf = function(event){
+  var bindings = this._events[event];
+  if (!bindings) return;
+
+  for (var method in bindings) {
+    this.unbind(event, method);
+  }
+};
+
+/**
+ * Parse `event`.
+ *
+ * @param {String} event
+ * @return {Object}
+ * @api private
+ */
+
+function parse(event) {
+  var parts = event.split(/ +/);
+  return {
+    name: parts.shift(),
+    selector: parts.join(' ')
+  }
+}
+
+});
+
+require.modules["component-events"] = require.modules["component~events@master"];
+require.modules["component~events"] = require.modules["component~events@master"];
+require.modules["events"] = require.modules["component~events@master"];
+
+
 require.register("component~bind@1.0.0", function (exports, module) {
 /**
  * Slice reference.
@@ -19149,6 +17800,47 @@ require.modules["component~keyname"] = require.modules["component~keyname@0.0.1"
 require.modules["keyname"] = require.modules["component~keyname@0.0.1"];
 
 
+require.register("component~type@1.0.0", function (exports, module) {
+
+/**
+ * toString ref.
+ */
+
+var toString = Object.prototype.toString;
+
+/**
+ * Return the type of `val`.
+ *
+ * @param {Mixed} val
+ * @return {String}
+ * @api public
+ */
+
+module.exports = function(val){
+  switch (toString.call(val)) {
+    case '[object Function]': return 'function';
+    case '[object Date]': return 'date';
+    case '[object RegExp]': return 'regexp';
+    case '[object Arguments]': return 'arguments';
+    case '[object Array]': return 'array';
+    case '[object String]': return 'string';
+  }
+
+  if (val === null) return 'null';
+  if (val === undefined) return 'undefined';
+  if (val && val.nodeType === 1) return 'element';
+  if (val === Object(val)) return 'object';
+
+  return typeof val;
+};
+
+});
+
+require.modules["component-type"] = require.modules["component~type@1.0.0"];
+require.modules["component~type"] = require.modules["component~type@1.0.0"];
+require.modules["type"] = require.modules["component~type@1.0.0"];
+
+
 require.register("component~props@1.1.2", function (exports, module) {
 /**
  * Global Names
@@ -19251,9 +17943,9 @@ require.register("component~to-function@2.0.5", function (exports, module) {
 
 var expr;
 try {
-  expr = require("component~props@1.1.2");
+  expr = require('component~props@1.1.2');
 } catch(e) {
-  expr = require("component~props@1.1.2");
+  expr = require('component~props@1.1.2');
 }
 
 /**
@@ -19404,47 +18096,6 @@ require.modules["component~to-function"] = require.modules["component~to-functio
 require.modules["to-function"] = require.modules["component~to-function@2.0.5"];
 
 
-require.register("component~type@1.0.0", function (exports, module) {
-
-/**
- * toString ref.
- */
-
-var toString = Object.prototype.toString;
-
-/**
- * Return the type of `val`.
- *
- * @param {Mixed} val
- * @return {String}
- * @api public
- */
-
-module.exports = function(val){
-  switch (toString.call(val)) {
-    case '[object Function]': return 'function';
-    case '[object Date]': return 'date';
-    case '[object RegExp]': return 'regexp';
-    case '[object Arguments]': return 'arguments';
-    case '[object Array]': return 'array';
-    case '[object String]': return 'string';
-  }
-
-  if (val === null) return 'null';
-  if (val === undefined) return 'undefined';
-  if (val && val.nodeType === 1) return 'element';
-  if (val === Object(val)) return 'object';
-
-  return typeof val;
-};
-
-});
-
-require.modules["component-type"] = require.modules["component~type@1.0.0"];
-require.modules["component~type"] = require.modules["component~type@1.0.0"];
-require.modules["type"] = require.modules["component~type@1.0.0"];
-
-
 require.register("component~each@0.2.5", function (exports, module) {
 
 /**
@@ -19452,12 +18103,12 @@ require.register("component~each@0.2.5", function (exports, module) {
  */
 
 try {
-  var type = require("component~type@1.0.0");
+  var type = require('component~type@1.0.0');
 } catch (err) {
-  var type = require("component~type@1.0.0");
+  var type = require('component~type@1.0.0');
 }
 
-var toFunction = require("component~to-function@2.0.5");
+var toFunction = require('component~to-function@2.0.5');
 
 /**
  * HOP reference.
@@ -19799,14 +18450,14 @@ require.register("component~pillbox@master", function (exports, module) {
  * Module dependencies.
  */
 
-var Emitter = require("component~emitter@master")
-  , keyname = require("component~keyname@0.0.1")
-  , events = require("component~events@master")
-  , each = require("component~each@0.2.5")
-  , Set = require("component~set@1.0.0")
-  , bind = require("component~bind@1.0.0")
-  , trim = require("component~trim@0.0.1")
-  , normalize = require("stephenmathieson~normalize@0.0.1");
+var Emitter = require('component~emitter@master')
+  , keyname = require('component~keyname@0.0.1')
+  , events = require('component~events@master')
+  , each = require('component~each@0.2.5')
+  , Set = require('component~set@1.0.0')
+  , bind = require('component~bind@1.0.0')
+  , trim = require('component~trim@0.0.1')
+  , normalize = require('stephenmathieson~normalize@0.0.1');
 
 /**
  * Expose `Pillbox`.
@@ -20021,6 +18672,451 @@ require.modules["component~pillbox"] = require.modules["component~pillbox@master
 require.modules["pillbox"] = require.modules["component~pillbox@master"];
 
 
+require.register("timoxley~next-tick@0.0.2", function (exports, module) {
+"use strict"
+
+if (typeof setImmediate == 'function') {
+  module.exports = function(f){ setImmediate(f) }
+}
+// legacy node.js
+else if (typeof process != 'undefined' && typeof process.nextTick == 'function') {
+  module.exports = process.nextTick
+}
+// fallback for other environments / postMessage behaves badly on IE8
+else if (typeof window == 'undefined' || window.ActiveXObject || !window.postMessage) {
+  module.exports = function(f){ setTimeout(f) };
+} else {
+  var q = [];
+
+  window.addEventListener('message', function(){
+    var i = 0;
+    while (i < q.length) {
+      try { q[i++](); }
+      catch (e) {
+        q = q.slice(i);
+        window.postMessage('tic!', '*');
+        throw e;
+      }
+    }
+    q.length = 0;
+  }, true);
+
+  module.exports = function(fn){
+    if (!q.length) window.postMessage('tic!', '*');
+    q.push(fn);
+  }
+}
+
+});
+
+require.modules["timoxley-next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
+require.modules["timoxley~next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
+require.modules["next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
+
+
+require.register("ecarter~css-emitter@0.0.1", function (exports, module) {
+/**
+ * Module Dependencies
+ */
+
+var events = require('component~event@0.1.4');
+
+// CSS events
+
+var watch = [
+  'transitionend'
+, 'webkitTransitionEnd'
+, 'oTransitionEnd'
+, 'MSTransitionEnd'
+, 'animationend'
+, 'webkitAnimationEnd'
+, 'oAnimationEnd'
+, 'MSAnimationEnd'
+];
+
+/**
+ * Expose `CSSnext`
+ */
+
+module.exports = CssEmitter;
+
+/**
+ * Initialize a new `CssEmitter`
+ *
+ */
+
+function CssEmitter(element){
+  if (!(this instanceof CssEmitter)) return new CssEmitter(element);
+  this.el = element;
+}
+
+/**
+ * Bind CSS events.
+ *
+ * @api public
+ */
+
+CssEmitter.prototype.bind = function(fn){
+  for (var i=0; i < watch.length; i++) {
+    events.bind(this.el, watch[i], fn);
+  }
+  return this;
+};
+
+/**
+ * Unbind CSS events
+ * 
+ * @api public
+ */
+
+CssEmitter.prototype.unbind = function(fn){
+  for (var i=0; i < watch.length; i++) {
+    events.unbind(this.el, watch[i], fn);
+  }
+  return this;
+};
+
+/**
+ * Fire callback only once
+ * 
+ * @api public
+ */
+
+CssEmitter.prototype.once = function(fn){
+  var self = this;
+  function on(){
+    self.unbind(on);
+    fn.apply(self.el, arguments);
+  }
+  self.bind(on);
+  return this;
+};
+
+
+});
+
+require.modules["ecarter-css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
+require.modules["ecarter~css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
+require.modules["css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
+
+
+require.register("yields~has-transitions@0.0.1", function (exports, module) {
+
+/**
+ * Check if `el` or browser supports transitions.
+ *
+ * @param {Element} el
+ * @return {Boolean}
+ * @api public
+ */
+
+exports = module.exports = function(el){
+  switch (arguments.length) {
+    case 0: return bool;
+    case 1: return bool
+      ? transitions(el)
+      : bool;
+  }
+};
+
+/**
+ * Check if the given `el` has transitions.
+ *
+ * @param {Element} el
+ * @return {Boolean}
+ * @api private
+ */
+
+function transitions(el, styl){
+  if (el.transition) return true;
+  styl = window.getComputedStyle(el);
+  return !! styl.transition;
+}
+
+/**
+ * Style.
+ */
+
+var styl = document.body.style;
+
+/**
+ * Export support.
+ */
+
+var bool = 'transition' in styl
+  || 'webkitTransition' in styl
+  || 'MozTransition' in styl
+  || 'msTransition' in styl;
+
+});
+
+require.modules["yields-has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
+require.modules["yields~has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
+require.modules["has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
+
+
+require.register("component~once@0.0.1", function (exports, module) {
+
+/**
+ * Identifier.
+ */
+
+var n = 0;
+
+/**
+ * Global.
+ */
+
+var global = (function(){ return this })();
+
+/**
+ * Make `fn` callable only once.
+ *
+ * @param {Function} fn
+ * @return {Function}
+ * @api public
+ */
+
+module.exports = function(fn) {
+  var id = n++;
+
+  function once(){
+    // no receiver
+    if (this == global) {
+      if (once.called) return;
+      once.called = true;
+      return fn.apply(this, arguments);
+    }
+
+    // receiver
+    var key = '__called_' + id + '__';
+    if (this[key]) return;
+    this[key] = true;
+    return fn.apply(this, arguments);
+  }
+
+  return once;
+};
+
+});
+
+require.modules["component-once"] = require.modules["component~once@0.0.1"];
+require.modules["component~once"] = require.modules["component~once@0.0.1"];
+require.modules["once"] = require.modules["component~once@0.0.1"];
+
+
+require.register("yields~after-transition@0.0.1", function (exports, module) {
+
+/**
+ * dependencies
+ */
+
+var has = require('yields~has-transitions@0.0.1')
+  , emitter = require('ecarter~css-emitter@0.0.1')
+  , once = require('component~once@0.0.1');
+
+/**
+ * Transition support.
+ */
+
+var supported = has();
+
+/**
+ * Export `after`
+ */
+
+module.exports = after;
+
+/**
+ * Invoke the given `fn` after transitions
+ *
+ * It will be invoked only if the browser
+ * supports transitions __and__
+ * the element has transitions
+ * set in `.style` or css.
+ *
+ * @param {Element} el
+ * @param {Function} fn
+ * @return {Function} fn
+ * @api public
+ */
+
+function after(el, fn){
+  if (!supported || !has(el)) return fn();
+  emitter(el).bind(fn);
+  return fn;
+};
+
+/**
+ * Same as `after()` only the function is invoked once.
+ *
+ * @param {Element} el
+ * @param {Function} fn
+ * @return {Function}
+ * @api public
+ */
+
+after.once = function(el, fn){
+  var callback = once(fn);
+  after(el, fn = function(){
+    emitter(el).unbind(fn);
+    callback();
+  });
+};
+
+});
+
+require.modules["yields-after-transition"] = require.modules["yields~after-transition@0.0.1"];
+require.modules["yields~after-transition"] = require.modules["yields~after-transition@0.0.1"];
+require.modules["after-transition"] = require.modules["yields~after-transition@0.0.1"];
+
+
+require.register("segmentio~on-escape@master", function (exports, module) {
+
+var bind = require('component~event@0.1.4').bind
+  , indexOf = require('component~indexof@0.0.1');
+
+
+/**
+ * Expose `onEscape`.
+ */
+
+module.exports = exports = onEscape;
+
+
+/**
+ * Handlers.
+ */
+
+var fns = [];
+
+
+/**
+ * Escape binder.
+ *
+ * @param {Function} fn
+ */
+
+function onEscape (fn) {
+  fns.push(fn);
+}
+
+
+/**
+ * Bind a handler, for symmetry.
+ */
+
+exports.bind = onEscape;
+
+
+/**
+ * Unbind a handler.
+ *
+ * @param {Function} fn
+ */
+
+exports.unbind = function (fn) {
+  var index = indexOf(fns, fn);
+  if (index !== -1) fns.splice(index, 1);
+};
+
+
+/**
+ * Bind to `document` once.
+ */
+
+bind(document, 'keydown', function (e) {
+  if (27 !== e.keyCode) return;
+  for (var i = 0, fn; fn = fns[i]; i++) fn(e);
+});
+});
+
+require.modules["segmentio-on-escape"] = require.modules["segmentio~on-escape@master"];
+require.modules["segmentio~on-escape"] = require.modules["segmentio~on-escape@master"];
+require.modules["on-escape"] = require.modules["segmentio~on-escape@master"];
+
+
+require.register("segmentio~showable@0.1.1", function (exports, module) {
+var after = require('yields~after-transition@0.0.1').once;
+var nextTick = require('timoxley~next-tick@0.0.2');
+
+/**
+ * Hide the view
+ */
+function hide(fn){
+  var self = this;
+
+  if(this.hidden == null) {
+    this.hidden = this.el.classList.contains('hidden');
+  }
+
+  if(this.hidden || this.animating) return;
+
+  this.hidden = true;
+  this.animating = true;
+
+  after(self.el, function(){
+    self.animating = false;
+    self.emit('hide');
+    if(fn) fn();
+  });
+
+  self.el.classList.add('hidden');
+  this.emit('hiding');
+  return this;
+}
+
+/**
+ * Show the view. This waits until after any transitions
+ * are finished. It also removed the hide class on the next
+ * tick so that the transition actually paints.
+ */
+function show(fn){
+  var self = this;
+
+  if(this.hidden == null) {
+    this.hidden = this.el.classList.contains('hidden');
+  }
+
+  if(this.hidden === false || this.animating) return;
+
+  this.hidden = false;
+  this.animating = true;
+
+  this.emit('showing');
+
+  after(self.el, function(){
+    self.animating = false;
+    self.emit('show');
+    if(fn) fn();
+  });
+
+  this.el.offsetHeight;
+
+  nextTick(function(){
+    self.el.classList.remove('hidden');
+  });
+
+  return this;
+}
+
+/**
+ * Mixin methods into the view
+ *
+ * @param {Emitter} obj
+ */
+module.exports = function(obj) {
+  obj.hide = hide;
+  obj.show = show;
+  return obj;
+};
+});
+
+require.modules["segmentio-showable"] = require.modules["segmentio~showable@0.1.1"];
+require.modules["segmentio~showable"] = require.modules["segmentio~showable@0.1.1"];
+require.modules["showable"] = require.modules["segmentio~showable@0.1.1"];
+
+
 require.register("component~domify@master", function (exports, module) {
 
 /**
@@ -20137,461 +19233,16 @@ require.modules["component~domify"] = require.modules["component~domify@master"]
 require.modules["domify"] = require.modules["component~domify@master"];
 
 
-require.register("timoxley~next-tick@0.0.2", function (exports, module) {
-"use strict"
-
-if (typeof setImmediate == 'function') {
-  module.exports = function(f){ setImmediate(f) }
-}
-// legacy node.js
-else if (typeof process != 'undefined' && typeof process.nextTick == 'function') {
-  module.exports = process.nextTick
-}
-// fallback for other environments / postMessage behaves badly on IE8
-else if (typeof window == 'undefined' || window.ActiveXObject || !window.postMessage) {
-  module.exports = function(f){ setTimeout(f) };
-} else {
-  var q = [];
-
-  window.addEventListener('message', function(){
-    var i = 0;
-    while (i < q.length) {
-      try { q[i++](); }
-      catch (e) {
-        q = q.slice(i);
-        window.postMessage('tic!', '*');
-        throw e;
-      }
-    }
-    q.length = 0;
-  }, true);
-
-  module.exports = function(fn){
-    if (!q.length) window.postMessage('tic!', '*');
-    q.push(fn);
-  }
-}
-
-});
-
-require.modules["timoxley-next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
-require.modules["timoxley~next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
-require.modules["next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
-
-
-require.register("yields~has-transitions@0.0.1", function (exports, module) {
-
-/**
- * Check if `el` or browser supports transitions.
- *
- * @param {Element} el
- * @return {Boolean}
- * @api public
- */
-
-exports = module.exports = function(el){
-  switch (arguments.length) {
-    case 0: return bool;
-    case 1: return bool
-      ? transitions(el)
-      : bool;
-  }
-};
-
-/**
- * Check if the given `el` has transitions.
- *
- * @param {Element} el
- * @return {Boolean}
- * @api private
- */
-
-function transitions(el, styl){
-  if (el.transition) return true;
-  styl = window.getComputedStyle(el);
-  return !! styl.transition;
-}
-
-/**
- * Style.
- */
-
-var styl = document.body.style;
-
-/**
- * Export support.
- */
-
-var bool = 'transition' in styl
-  || 'webkitTransition' in styl
-  || 'MozTransition' in styl
-  || 'msTransition' in styl;
-
-});
-
-require.modules["yields-has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
-require.modules["yields~has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
-require.modules["has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
-
-
-require.register("ecarter~css-emitter@0.0.1", function (exports, module) {
-/**
- * Module Dependencies
- */
-
-var events = require("component~event@0.1.4");
-
-// CSS events
-
-var watch = [
-  'transitionend'
-, 'webkitTransitionEnd'
-, 'oTransitionEnd'
-, 'MSTransitionEnd'
-, 'animationend'
-, 'webkitAnimationEnd'
-, 'oAnimationEnd'
-, 'MSAnimationEnd'
-];
-
-/**
- * Expose `CSSnext`
- */
-
-module.exports = CssEmitter;
-
-/**
- * Initialize a new `CssEmitter`
- *
- */
-
-function CssEmitter(element){
-  if (!(this instanceof CssEmitter)) return new CssEmitter(element);
-  this.el = element;
-}
-
-/**
- * Bind CSS events.
- *
- * @api public
- */
-
-CssEmitter.prototype.bind = function(fn){
-  for (var i=0; i < watch.length; i++) {
-    events.bind(this.el, watch[i], fn);
-  }
-  return this;
-};
-
-/**
- * Unbind CSS events
- * 
- * @api public
- */
-
-CssEmitter.prototype.unbind = function(fn){
-  for (var i=0; i < watch.length; i++) {
-    events.unbind(this.el, watch[i], fn);
-  }
-  return this;
-};
-
-/**
- * Fire callback only once
- * 
- * @api public
- */
-
-CssEmitter.prototype.once = function(fn){
-  var self = this;
-  function on(){
-    self.unbind(on);
-    fn.apply(self.el, arguments);
-  }
-  self.bind(on);
-  return this;
-};
-
-
-});
-
-require.modules["ecarter-css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
-require.modules["ecarter~css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
-require.modules["css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
-
-
-require.register("component~once@0.0.1", function (exports, module) {
-
-/**
- * Identifier.
- */
-
-var n = 0;
-
-/**
- * Global.
- */
-
-var global = (function(){ return this })();
-
-/**
- * Make `fn` callable only once.
- *
- * @param {Function} fn
- * @return {Function}
- * @api public
- */
-
-module.exports = function(fn) {
-  var id = n++;
-
-  function once(){
-    // no receiver
-    if (this == global) {
-      if (once.called) return;
-      once.called = true;
-      return fn.apply(this, arguments);
-    }
-
-    // receiver
-    var key = '__called_' + id + '__';
-    if (this[key]) return;
-    this[key] = true;
-    return fn.apply(this, arguments);
-  }
-
-  return once;
-};
-
-});
-
-require.modules["component-once"] = require.modules["component~once@0.0.1"];
-require.modules["component~once"] = require.modules["component~once@0.0.1"];
-require.modules["once"] = require.modules["component~once@0.0.1"];
-
-
-require.register("yields~after-transition@0.0.1", function (exports, module) {
-
-/**
- * dependencies
- */
-
-var has = require("yields~has-transitions@0.0.1")
-  , emitter = require("ecarter~css-emitter@0.0.1")
-  , once = require("component~once@0.0.1");
-
-/**
- * Transition support.
- */
-
-var supported = has();
-
-/**
- * Export `after`
- */
-
-module.exports = after;
-
-/**
- * Invoke the given `fn` after transitions
- *
- * It will be invoked only if the browser
- * supports transitions __and__
- * the element has transitions
- * set in `.style` or css.
- *
- * @param {Element} el
- * @param {Function} fn
- * @return {Function} fn
- * @api public
- */
-
-function after(el, fn){
-  if (!supported || !has(el)) return fn();
-  emitter(el).bind(fn);
-  return fn;
-};
-
-/**
- * Same as `after()` only the function is invoked once.
- *
- * @param {Element} el
- * @param {Function} fn
- * @return {Function}
- * @api public
- */
-
-after.once = function(el, fn){
-  var callback = once(fn);
-  after(el, fn = function(){
-    emitter(el).unbind(fn);
-    callback();
-  });
-};
-
-});
-
-require.modules["yields-after-transition"] = require.modules["yields~after-transition@0.0.1"];
-require.modules["yields~after-transition"] = require.modules["yields~after-transition@0.0.1"];
-require.modules["after-transition"] = require.modules["yields~after-transition@0.0.1"];
-
-
-require.register("segmentio~on-escape@master", function (exports, module) {
-
-var bind = require("component~event@0.1.4").bind
-  , indexOf = require("component~indexof@0.0.1");
-
-
-/**
- * Expose `onEscape`.
- */
-
-module.exports = exports = onEscape;
-
-
-/**
- * Handlers.
- */
-
-var fns = [];
-
-
-/**
- * Escape binder.
- *
- * @param {Function} fn
- */
-
-function onEscape (fn) {
-  fns.push(fn);
-}
-
-
-/**
- * Bind a handler, for symmetry.
- */
-
-exports.bind = onEscape;
-
-
-/**
- * Unbind a handler.
- *
- * @param {Function} fn
- */
-
-exports.unbind = function (fn) {
-  var index = indexOf(fns, fn);
-  if (index !== -1) fns.splice(index, 1);
-};
-
-
-/**
- * Bind to `document` once.
- */
-
-bind(document, 'keydown', function (e) {
-  if (27 !== e.keyCode) return;
-  for (var i = 0, fn; fn = fns[i]; i++) fn(e);
-});
-});
-
-require.modules["segmentio-on-escape"] = require.modules["segmentio~on-escape@master"];
-require.modules["segmentio~on-escape"] = require.modules["segmentio~on-escape@master"];
-require.modules["on-escape"] = require.modules["segmentio~on-escape@master"];
-
-
-require.register("segmentio~showable@0.1.1", function (exports, module) {
-var after = require("yields~after-transition@0.0.1").once;
-var nextTick = require("timoxley~next-tick@0.0.2");
-
-/**
- * Hide the view
- */
-function hide(fn){
-  var self = this;
-
-  if(this.hidden == null) {
-    this.hidden = this.el.classList.contains('hidden');
-  }
-
-  if(this.hidden || this.animating) return;
-
-  this.hidden = true;
-  this.animating = true;
-
-  after(self.el, function(){
-    self.animating = false;
-    self.emit('hide');
-    if(fn) fn();
-  });
-
-  self.el.classList.add('hidden');
-  this.emit('hiding');
-  return this;
-}
-
-/**
- * Show the view. This waits until after any transitions
- * are finished. It also removed the hide class on the next
- * tick so that the transition actually paints.
- */
-function show(fn){
-  var self = this;
-
-  if(this.hidden == null) {
-    this.hidden = this.el.classList.contains('hidden');
-  }
-
-  if(this.hidden === false || this.animating) return;
-
-  this.hidden = false;
-  this.animating = true;
-
-  this.emit('showing');
-
-  after(self.el, function(){
-    self.animating = false;
-    self.emit('show');
-    if(fn) fn();
-  });
-
-  this.el.offsetHeight;
-
-  nextTick(function(){
-    self.el.classList.remove('hidden');
-  });
-
-  return this;
-}
-
-/**
- * Mixin methods into the view
- *
- * @param {Emitter} obj
- */
-module.exports = function(obj) {
-  obj.hide = hide;
-  obj.show = show;
-  return obj;
-};
-});
-
-require.modules["segmentio-showable"] = require.modules["segmentio~showable@0.1.1"];
-require.modules["segmentio~showable"] = require.modules["segmentio~showable@0.1.1"];
-require.modules["showable"] = require.modules["segmentio~showable@0.1.1"];
-
-
 require.register("jkroso~classes@1.1.0", function (exports, module) {
 
 module.exports = document.createElement('div').classList
-  ? require("jkroso~classes@1.1.0/modern.js")
-  : require("jkroso~classes@1.1.0/fallback.js")
+  ? require('jkroso~classes@1.1.0/modern.js')
+  : require('jkroso~classes@1.1.0/fallback.js')
 });
 
 require.register("jkroso~classes@1.1.0/fallback.js", function (exports, module) {
 
-var index = require("component~indexof@0.0.1")
+var index = require('component~indexof@0.0.1')
 
 exports.add = function(name, el){
 	var arr = exports.array(el)
@@ -20729,7 +19380,7 @@ require.modules["classes"] = require.modules["jkroso~classes@1.1.0"];
 
 require.register("ianstormtaylor~classes@0.1.0", function (exports, module) {
 
-var classes = require("jkroso~classes@1.1.0");
+var classes = require('jkroso~classes@1.1.0');
 
 
 /**
@@ -20810,11 +19461,11 @@ require.modules["classes"] = require.modules["ianstormtaylor~classes@0.1.0"];
 
 
 require.register("optimuslime~overlay@master", function (exports, module) {
-var template = require("optimuslime~overlay@master/lib/index.html");
-var domify = require("component~domify@master");
-var emitter = require("component~emitter@master");
-var showable = require("segmentio~showable@0.1.1");
-var classes = require("ianstormtaylor~classes@0.1.0");
+var template = require('optimuslime~overlay@master/lib/index.html');
+var domify = require('component~domify@master');
+var emitter = require('component~emitter@master');
+var showable = require('segmentio~showable@0.1.1');
+var classes = require('ianstormtaylor~classes@0.1.0');
 
 /**
  * Export `Overlay`
@@ -20877,13 +19528,13 @@ require.modules["overlay"] = require.modules["optimuslime~overlay@master"];
 
 
 require.register("optimuslime~modal@master", function (exports, module) {
-var domify = require("component~domify@master");
-var Emitter = require("component~emitter@master");
-var overlay = require("optimuslime~overlay@master");
-var onEscape = require("segmentio~on-escape@master");
-var template = require("optimuslime~modal@master/lib/index.html");
-var Showable = require("segmentio~showable@0.1.1");
-var Classes = require("ianstormtaylor~classes@0.1.0");
+var domify = require('component~domify@master');
+var Emitter = require('component~emitter@master');
+var overlay = require('optimuslime~overlay@master');
+var onEscape = require('segmentio~on-escape@master');
+var template = require('optimuslime~modal@master/lib/index.html');
+var Showable = require('segmentio~showable@0.1.1');
+var Classes = require('ianstormtaylor~classes@0.1.0');
 
 /**
  * Expose `Modal`.
@@ -21012,10 +19663,1030 @@ require.modules["optimuslime~modal"] = require.modules["optimuslime~modal@master
 require.modules["modal"] = require.modules["optimuslime~modal@master"];
 
 
-require.register("./libs/win-home-ui", function (exports, module) {
+require.register("./libs/evolution/win-neat/lib/neatSchema.js", function (exports, module) {
+//contains the neat schema setup -- default for neatjs stuff.
 
-var emitter = require("component~emitter@master");
-var element = require("optimuslime~el.js@master");
+//Need a way to override schema inside WIN -- for now, neat comes with its own schema. Will be able to add variations later
+//(for things looking to add extra neat features while still having all the custom code). 
+
+//Alternatively, they could just copy this module, and add their own stuff. Module is small. 
+ 
+module.exports = {
+    "nodes": {
+        "type" : "array",
+        "gid": "String",
+        "step": {"type": "Number"},
+        "activationFunction": "String",
+        "nodeType": "String",
+        "layer": {"type": "Number"},
+        "bias" : {"type": "Number"}
+    },
+    "connections": {
+        "type" : "array",
+        "gid" : "String",
+        // "step": {"type": "Number"},
+
+        "sourceID": "String",
+        "targetID": "String",
+        "weight": "Number"
+    }
+};
+
+
+
+});
+
+require.register("./libs/evolution/win-neat", function (exports, module) {
+//here we test the insert functions
+//making sure the database is filled with objects of the schema type
+var neat = require('optimuslime~neatjs@master');
+var neatSchema = require('./libs/evolution/win-neat/lib/neatSchema.js');
+var NodeType = neat.NodeType;
+var neatNode = neat.neatNode;
+var neatConnection = neat.neatConnection;
+var neatGenome = neat.neatGenome;
+
+var wMath = require('optimuslime~win-utils@master').math;
+
+module.exports = winneat;
+
+function defaultParameters()
+{
+	//make a new neat param object
+	var np = new neat.neatParameters();
+
+    //set up the defaults here
+    np.pMutateAddConnection = .13;
+    np.pMutateAddNode = .13;
+    np.pMutateDeleteSimpleNeuron = .00;
+    np.pMutateDeleteConnection = .00;
+    np.pMutateConnectionWeights = .72;
+    np.pMutateChangeActivations = .02;
+
+    np.pNodeMutateActivationRate = 0.2;
+    np.connectionWeightRange = 3.0;
+    np.disallowRecurrence = true;
+
+    //send it back
+    return np;
+}
+
+function selectXFromSmallObject(x, objects){
+
+	//the final ix object will be returned
+    var ixs = [];
+    //works with objects with count or arrays with length
+    var gCount = objects.count === undefined ? objects.length : objects.count;
+
+    for(var i=0; i<gCount;i++)
+        ixs.push(i);
+
+    //how many do we need back? we need x back. So we must remove (# of objects - x) leaving ... x objects
+    for(var i=0; i < gCount -x; i++)
+    {
+        //remove random index
+        ixs.splice(wMath.next(ixs.length),1);
+    }
+
+    //return a random collection of distinct indices
+    return ixs;
+};
+
+
+function winneat(backbone, globalConfig, localConfig)
+{
+	var self = this;
+
+	//boom, let's get right into the business of encoding
+
+	self.winFunction = "encoding";
+	//maintain backwards compat with old win versions -- use neat geno name
+	self.encodingName = "NEATGenotype";
+
+	self.log = backbone.getLogger(self);
+	//only vital stuff goes out for normal logs
+	self.log.logLevel = localConfig.logLevel || self.log.normal;
+
+	//either pass in your own, or we make some defaults
+	self.neatParameters = localConfig.neatParameters || defaultParameters();
+
+	//pull options from the local config object under options
+	self.options = localConfig.options || {};
+
+
+	self.eventCallbacks = function()
+	{ 
+		return {
+            "encoding:NEATGenotype-measureGenomeDistances" : self.calculateGenomicDistances,
+			//easy to handle neat geno full offspring
+			"encoding:NEATGenotype-createFullOffspring" : function(genProps, parentProps, sessionObject, done) { 
+				
+                //session might be undefined -- depending on win-gen behavior
+                //make sure session exists
+                sessionObject = sessionObject || {};
+
+				//need to engage parent creation here -- could be complicated
+				//taken from previous neatjs stuff -- added forced parents logic
+				var jsonParents = parentProps.parents;
+
+                // self.log("Create children from: ", jsonParents);
+
+				//we have the json parents above, now we need to convert into fresh actual parents 
+				var parents = [];
+				for(var i=0; i < jsonParents.length; i++)
+				{
+					//convert genotype json into full genotype with functions and stuff
+					var ng = genotypeFromJSON(jsonParents[i]);
+					parents.push(ng);
+				}
+
+                //how many to make
+				var count = genProps.count;
+
+                //these will be the final objects to return
+				var allParents = [];
+				var children = [];
+
+				//pull potential forced parents
+				var forced = sessionObject.forceParents;
+
+                //if we are forced to use particular parents, this helper will put the list of parents in an array for us
+				var getForceParents = function(parentList)
+				{
+                    var pIxMap = {};
+					var fullParents = [];
+					for(var i=0; i < parentList.length; i++)
+					{
+						//grab the index
+						var pIx = parentList[i];
+                        //given an index of fullParents, we can say what the original index was
+                        pIxMap[i] = pIx;
+						//use index to fetch full parent object -- push to parental list
+						fullParents.push(parents[pIx]);
+					}
+					return {parents: fullParents, ixMap: pIxMap};
+				}
+
+				//go through all the children -- using parents or force parents to create the new offspring
+				// keep in mind all parents are full neatgenomes that have all necessary functions
+				for(var c=0; c < count; c++)
+				{
+					//use the parents 
+					var oParents = parents;
+
+                    var fmap;
+					//forced has a full parental list
+					if(forced){    
+                        fmap = getForceParents(forced[c]);
+						oParents = fmap.parents;
+                        // self.log("Forced parents: ", oParents);
+                    }
+
+					//create offspring from the parents, hooray
+                    //session object potentially has things for handling newConnection/newNodes logic
+					var offObject = self.createNextGenome(oParents, sessionObject);
+
+					//back to JSON from whence you came!
+					var rOffspring = genotypeToJSON(offObject.offspring);
+
+					//grab the json offspring object
+					children.push(rOffspring);
+
+                    //parent ixs returned from create genome
+                    var rParentIxs = offObject.parentIxs;
+
+                    //parentixs tells us which of the forced parents was used 
+                    //but the forced parent index != original parent index
+                    //so we have to map back from the forced parents to the original parent index using ixMap
+                    if(forced)
+                    {
+                        realIxs = [];
+                        for(var p=0; p < rParentIxs.length; p++)
+                            realIxs.push(fmap.ixMap[rParentIxs[p]]);
+
+                        rParentIxs = realIxs;
+                    }
+
+					//createnext genome knows which parents were involved
+					allParents.push(rParentIxs);
+				}
+
+				//done, send er back
+				done(undefined, children, allParents);
+
+			 	return; 
+			 }
+		};
+	};
+
+	self.markParentConnections = function(parents, sessionObject){
+
+        for(var s=0; s < parents.length; s++)
+        {
+            var parent = parents[s];
+            for(var c =0; c < parent.connections.length; c++)
+            {
+                var sConn = parent.connections[c];
+                var cid = '(' + sConn.sourceID + ',' + sConn.targetID + ')';
+                sessionObject.newConnections[cid] = sConn;
+            }
+        }
+    };
+
+	self.createNextGenome = function(parents, sessionObject)
+    {
+        //make sure to have session object setup
+        sessionObject.newConnections = sessionObject.newConnections || {};
+        //nodes is just an array -- doesn't really do much ...
+        sessionObject.newNodes = sessionObject.newNodes || {};
+
+        self.markParentConnections(parents,sessionObject);
+
+        //IF we have 0 parents, we create a genome with the default configurations
+        var ng;
+        var initialMutationCount = self.options.initialMutationCount || 0,
+            postXOMutationCount = self.options.postMutationCount || 0;
+            
+        var moreThanTwoParents = self.options.moreThanTwoParents || 0.05;
+
+        var responsibleParents = [];
+
+        switch(parents.length)
+        {
+            case 0:
+                throw new Error("Cannot create new NEAT genome in win-NEAT without any parents.")
+            case 1:
+
+                //we have one parent
+                //asexual reproduction
+                ng = parents[0].createOffspringAsexual(sessionObject.newNodes, sessionObject.newConnections, self.neatParameters);
+                // self.log("\n\n\n\n\nPars: ".red, parents[0].createOffspringAsexual);
+                //parent at index 0 responsible
+                responsibleParents.push(0);
+
+                for(var m=0; m < postXOMutationCount; m++)
+                    ng.mutate(sessionObject.newNodes, sessionObject.newConnections, self.neatParameters);
+
+                break;
+            default:
+                //greater than 1 individual as a possible parent
+
+                //at least 1 parent, and at most self.activeParents.count # of parents
+                var parentCount = 1;
+
+                //if you are more than the probabiliy of having >2 parents, then it's just normal behavior -- 1 or 2 parents
+                if(Math.random() > moreThanTwoParents)
+                {
+                    parentCount = 1 + wMath.next(2);
+                  
+                }
+                else  //chance that parents will be more than 2 parents -- unusual for neat genotypes
+                    parentCount = 1 + wMath.next(parents.length);
+
+                if(parentCount == 1)
+                {
+                    //select a single parent for offspring
+                    var rIx = wMath.next(parents.length);
+
+                    ng = parents[rIx].createOffspringAsexual(sessionObject.newNodes, sessionObject.newConnections, self.neatParameters);
+                    //1 responsible parent at index 0
+                    responsibleParents.push(rIx);
+                    break;
+                }
+
+                //we expect active parents to be small, so we grab parentCount number of parents from a small array of parents
+                var parentIxs = selectXFromSmallObject(parentCount, parents);
+
+                var p1 = parents[parentIxs[0]], p2;
+                //if I have 3 parents, go in order composing the objects
+
+                responsibleParents.push(parentIxs[0]);
+
+                //p1 mates with p2 to create o1, o1 mates with p3, to make o2 -- p1,p2,p3 are all combined now inside of o2
+                for(var i=1; i < parentIxs.length; i++)
+                {
+                    p2 = parents[parentIxs[i]];
+                    ng = p1.createOffspringSexual(p2, self.neatParameters);
+                    p1 = ng;
+                    responsibleParents.push(parentIxs[i]);
+                }
+
+                for(var m=0; m < postXOMutationCount; m++)
+                    ng.mutate(sessionObject.newNodes, sessionObject.newConnections, self.neatParameters);
+
+
+                break;
+        }
+
+        //we have our genome, let's send it back
+
+        //the reason we don't end it inisde the switch loop is that later, we might be interested in saving this genome from some other purpose
+        return {offspring: ng, parentIxs: responsibleParents};
+    };
+
+        //currently not used, calculates genomic novelty objective for protecting innovation
+    //uses a rough characterization of topology, i.e. number of connections in the genome
+    self.calculateGenomicDistances = function(genomeMap, closestCount, finished) {
+
+        var sum=0.0;
+        var max_conn = 0;
+
+        var xx, yy;
+        // self.log('Geno obj: ', neatGenome.prototype);
+
+        //convert from json if it is json
+        var checkNotJSON = function(gObject)
+        {
+            //gneomes should have a compat function
+            if(typeof gObject.compat != "function")
+            {
+                gObject = genotypeFromJSON(gObject);
+            }
+
+            //don't touch object if not necessary
+            return gObject;
+        }
+
+        var gDiversity = {};
+        var gc = 0;
+        for(var wid in genomeMap) 
+        {
+            //keep count
+            gc++;
+
+            xx = checkNotJSON(genomeMap[wid]);
+            //quickly make sure our genomeMap is full of real objects
+            genomeMap[wid] = xx;
+            
+
+            var minDist=10000000.0;
+
+            var difference=0.0;
+            var delta=0.0;
+            //double array
+            var distances= [];
+
+            if(xx.connections.length > max_conn)
+                max_conn = xx.connections.length;
+
+            //int ccount=xx.ConnectionGeneList.Count;
+            for(var sWID in genomeMap) {
+
+                //make sure it's not json object -- we can do this before comparison cause it needs
+                //to happen anyways
+                yy = checkNotJSON(genomeMap[sWID]); 
+                genomeMap[sWID] = yy;
+
+                if(wid==sWID)
+                    continue;
+
+                //measure genomic compatability using neatparams
+                var d = xx.compat(yy, self.neatParameters);
+                //if(d<minDist)
+                //  minDist=d;
+
+                distances.push(d);
+            }
+
+            //ascending order
+            //want the closest individuals
+            distances.sort(function(a,b) {return a-b;});
+
+            //grab the 10 closest distances
+            var sz=Math.min(distances.length, closestCount);
+
+            var gDistance = 0.0;
+
+            for(var i=0;i<sz;i++)
+                gDistance+=distances[i];
+
+            sum += gDistance;
+
+            gDiversity[wid] = {distance: gDistance};
+        }
+
+        self.log("Sum Distance among genotypes: " + sum/gc + " with max connections in genome: " + max_conn);
+
+        var results = {genomeDistances: gDiversity, sumDistance: sum, averageDistance: sum/gc, genomeCount: gc};
+
+        //sync or asyn, don't matter to us -- as long as win-backbone supports it(not yet)
+        if(finished)
+            finished(undefined, results);
+        else
+            return results;
+
+    };
+
+	//need to be able to add our schema
+	self.requiredEvents = function() {
+		return [
+			"schema:addSchema"
+		];
+	};
+
+	self.initialize = function(done)
+    {
+    	self.log("Init win-neat encoding");
+
+		//how we talk to the backbone by emitting events
+    	var emitter = backbone.getEmitter(self);
+
+		//add our neat genotype schema -- loaded neatschema from another file -- 
+		//this is just the standard neat schema type -- others can make neatjs changes that require a different schema
+        emitter.emit("schema:addSchema", self.encodingName, neatSchema, function(err)
+        {
+        	if(err){
+        		done(new Error(err));
+        		return;
+        	}
+        	done();
+        });
+    }
+
+
+	return self;
+}
+
+
+//define genotypeto/fromjson functions
+winneat.genotypeToJSON = genotypeToJSON;
+winneat.genotypeFromJSON = genotypeFromJSON;
+
+function genotypeToJSON(ng)
+{
+    //need to match the schema
+    var ngJSON = {nodes:ng.nodes, connections: []};
+    for(var i=0; i < ng.connections.length; i++)
+    {   
+        var conJSON = {};
+        var conn = ng.connections[i];
+        for(var key in neatSchema.connections)
+        {
+            if(key != "type")
+            {
+                conJSON[key] = conn[key];
+            }
+        }
+        ngJSON.connections.push(conJSON);
+    }
+    return ngJSON;
+}
+
+function genotypeFromJSON(ngJSON)
+{   
+    var nodes = [];
+
+    var inCount = 0;
+    var outCount = 0;
+
+    for(var i=0; i < ngJSON.nodes.length; i++)
+    {
+        var dbNode = ngJSON.nodes[i];
+
+        switch(dbNode.nodeType)
+        {
+            case NodeType.input:
+                inCount++;
+                break;
+            case NodeType.output:
+                outCount++;
+                break;
+            case NodeType.bias:
+            case NodeType.hidden:
+            case NodeType.other:
+                break;
+            default:
+                // self.log('Erroneous node type: ' + dbNode.nodeType, " Node: ", dbNode);
+                throw new Error("Erroneous node type: " + dbNode.nodeType + " in node: " + JSON.stringify(dbNode));
+                // break;
+        }
+
+        var nNode = new neatNode(dbNode.gid, dbNode.activationFunction, dbNode.layer, {type: dbNode.nodeType});
+        nodes.push(nNode);
+    }
+
+    var connections = [];
+
+    for(var i=0; i < ngJSON.connections.length; i++)
+    {
+        //grab connection from db object
+        var dbConn = ngJSON.connections[i];
+
+        //convert to our neatConnection -- pretty simple
+        var nConn = new neatConnection(dbConn.gid, dbConn.weight, {sourceID: dbConn.sourceID, targetID: dbConn.targetID});
+
+        //push connection object
+        connections.push(nConn);
+    }
+
+    //here we goooooooooo
+    var ng = new neatGenome(ngJSON.wid, nodes, connections, inCount,outCount, false);
+    //note the wid we have from the db object (by default this is added)
+    ng.wid = ngJSON.wid;
+    //we also have parents already set as well -- make sure to transfer this inforas well -- it's very important
+    ng.parents = ngJSON.parents;
+    //we've converted back to ng
+    //we are finished!
+    return ng;
+}
+
+
+});
+
+require.modules["win-neat"] = require.modules["./libs/evolution/win-neat"];
+
+
+require.register("./libs/evolution/win-iec", function (exports, module) {
+//generating session info
+var uuid = require('optimuslime~win-utils@master').cuid;
+
+module.exports = winiec;
+
+function winiec(backbone, globalConfig, localConfig)
+{
+	//pull in backbone info, we gotta set our logger/emitter up
+	var self = this;
+
+	self.winFunction = "evolution";
+
+	if(!localConfig.genomeType)
+		throw new Error("win-IEC needs a genome type specified."); 
+
+	//this is how we talk to win-backbone
+	self.backEmit = backbone.getEmitter(self);
+
+	//grab our logger
+	self.log = backbone.getLogger(self);
+
+	//only vital stuff goes out for normal logs
+	self.log.logLevel = localConfig.logLevel || self.log.normal;
+
+	//we have logger and emitter, set up some of our functions
+
+	function clearEvolution(genomeType)
+	{
+		//optionally, we can change types if we need to 
+		if(genomeType)
+			self.genomeType = genomeType;
+
+		self.log("clear evo to type: ", self.genomeType)
+		self.selectedParents = {};
+		//all the evo objects we ceated -- parents are a subset
+		self.evolutionObjects = {};
+
+		//count it up
+		self.parentCount = 0;
+
+		//session information -- new nodes and connections yo! that's all we care about after all-- new innovative stuff
+		//i rambled just then. For no reason. Still doing it. Sucks that you're reading this. trolololol
+		self.sessionObject = {};
+
+		//everything we publish is linked by this session information
+		self.evolutionSessionID = uuid();
+
+		//save our seeds!
+		self.seeds = {};
+
+		//map children to parents for all objects
+		self.childrenToParents = {};
+
+		self.seedParents = {};
+	}
+
+	//we setup all our basic 
+	clearEvolution(localConfig.genomeType);
+
+	//what events do we need?
+	self.requiredEvents = function()
+	{
+		return [
+		//need to be able to create artifacts
+			"generator:createArtifacts",
+			"schema:replaceParentReferences",
+			"schema:getReferencesAndParents",
+			"publish:publishArtifacts",
+			//in the future we will also need to save objects according to our save tendencies
+			//for now, we'll offload that to UI decisions
+		];
+	}
+
+	//what events do we respond to?
+	self.eventCallbacks = function()
+	{ 
+		return {
+			"evolution:selectParents" : self.selectParents,
+			"evolution:unselectParents" : self.unselectParents,
+			"evolution:publishArtifact" : self.publishArtifact,
+			//we fetch a list of objects based on IDs, if they don't exist we create them
+			"evolution:getOrCreateOffspring" : self.getOrCreateOffspring,
+			"evolution:loadSeeds" : self.loadSeeds,
+			"evolution:resetEvolution" : clearEvolution
+
+		};
+	}
+
+	
+
+	// self.findSeedOrigins = function(eID)
+	// {
+	// 	//let's look through parents until we find the seed you originated from -- then you are considered a decendant
+	// 	var alreadyChecked = {};
+
+	// 	var originObjects = {};
+	// 	var startingParents = self.childrenToParents[eID];
+
+	// 	while(startingParents.length)
+	// 	{
+	// 		var nextCheck = [];
+	// 		for(var i=0; i < startingParents.length; i++)
+	// 		{
+	// 			var parentWID = startingParents[i];
+
+	// 			if(!alreadyChecked[parentWID])
+	// 			{
+	// 				//mark it as checked
+	// 				alreadyChecked[parentWID] = true;
+
+	// 				if(self.seeds[parentWID])
+	// 				{
+	// 					//this is a seed!
+	// 					originObjects[parentWID] = self.seeds[parentWID];
+	// 				}
+
+	// 				//otherwise, it's not of interested, but perhaps it's parents are!
+
+	// 				//let's look at the parents parents
+	// 				var grandparents = self.childrenToParents[parentWID];
+
+	// 				if(grandparents)
+	// 				{
+	// 					nextCheck = nextCheck.concat(grandparents);
+	// 				}
+	// 			}
+	// 		}
+
+	// 		//continue the process - don't worry about loops, we're checking!
+	// 		startingParents = nextCheck;
+	// 	}
+
+	// 	//send back all the seed objects
+	// 	return originObjects
+	// }
+
+	self.publishArtifact = function(id, meta, finished)
+	{
+		//don't always have to send meta info -- since we don't know what to do with it anyways
+		if(typeof meta == "function")
+		{
+			finished = meta;
+			meta = {};
+		}
+		//we fetch the object from the id
+
+		var evoObject = self.evolutionObjects[id];
+
+		if(!evoObject)
+		{
+			finished("Evolutionary artifactID to publish is invalid: " + id);
+			return;
+		}
+		//we also want to store some meta info -- don't do anything about that for now 
+
+		// var seedParents = self.findSeedOrigins(id);
+
+		//
+		var seedList = [];
+
+		//here is what needs to happen, the incoming evo object has the "wrong" parents
+		//the right parents are the published parents -- the other parents 
+
+		//this will need to be fixed in the future -- we need to know private vs public parents
+		//but for now, we simply send in the public parents -- good enough for picbreeder iec applications
+		//other types of applications might need more info.
+
+		var widObject = {};
+		widObject[evoObject.wid] = evoObject;
+		self.backEmit("schema:getReferencesAndParents", self.genomeType, widObject, function(err, refsAndParents){
+
+			//now we know our references
+			var refParents = refsAndParents[evoObject.wid];
+
+			//so we simply fetch our appropraite seed parents 
+			var evoSeedParents = self.noDuplicatSeedParents(refParents);
+
+			//now we have all the info we need to replace all our parent refs
+			self.backEmit("schema:replaceParentReferences", self.genomeType, evoObject, evoSeedParents, function(err, cloned)
+			{
+				//now we have a cloned version for publishing, where it has public seeds
+
+				 //just publish everything public for now!
+		        var session = {sessionID: self.evolutionSessionID, publish: true};
+
+		        //we can also save private info
+		        //this is where we would grab all the parents of the individual
+		        var privateObjects = [];
+
+				self.backEmit("publish:publishArtifacts", self.genomeType, session, [cloned], [], function(err)
+				{
+					if(err)
+					{
+						finished(err);
+					}
+					else //no error publishing, hooray!
+						finished(undefined, cloned);
+
+				})
+
+			})
+
+		});
+       
+	}
+
+	//no need for a callback here -- nuffin to do but load
+	self.loadSeeds = function(idAndSeeds, finished)
+	{
+		//we have all the seeds and their ids, we just absorb them immediately
+		for(var eID in idAndSeeds)
+		{
+			var seed = idAndSeeds[eID];
+			//grab the objects and save them
+			self.evolutionObjects[eID] = seed;
+
+			//save our seeds
+			self.seeds[seed.wid] = seed;
+		}
+
+		self.log("seed objects: ", self.seeds);
+
+		self.backEmit("schema:getReferencesAndParents", self.genomeType, self.seeds, function(err, refsAndParents)
+		{
+			if(err)
+			{
+				//pass on the error if it happened
+				if(finished)
+					finished(err);
+				else
+					throw err;
+				return;
+			}
+			//there are no parent refs for seeds, just the refs themselves which are important
+			for(var wid in self.seeds)
+			{
+				var refs = Object.keys(refsAndParents[wid]);
+				for(var i=0; i < refs.length; i++)
+				{
+					//who is the parent seed of a particular wid? why itself duh!
+					self.seedParents[refs[i]] = [refs[i]];
+				}
+			}
+
+			// self.log("Seed parents: ", self.seedParents);
+
+			//note, there is no default behavior with seeds -- as usual, you must still tell iec to select parents
+			//there is no subsitute for parent selection
+			if(finished)
+				finished();
+
+		});
+
+
+	}
+
+	//just grab from evo objects -- throw error if issue
+	self.selectParents = function(eIDList, finished)
+	{
+		if(typeof eIDList == "string")
+			eIDList = [eIDList];
+
+		var selectedObjects = {};
+
+		for(var i=0; i < eIDList.length; i++)
+		{	
+			var eID = eIDList[i];
+
+			//grab from evo
+			var evoObject = self.evolutionObjects[eID];
+
+			if(!evoObject){
+				//wrong id 
+				finished("Invalid parent selection: " + eID);
+				return;
+			}
+
+			selectedObjects[eID] = evoObject;
+
+			//save as a selected parent
+			self.selectedParents[eID] = evoObject;
+			self.parentCount++;
+		}
+	
+		//send back the evolutionary object that is linked to this parentID
+		finished(undefined, selectedObjects);
+	}
+
+	self.unselectParents = function(eIDList, finished)
+	{
+		if(typeof eIDList == "string")
+			eIDList = [eIDList];
+
+		for(var i=0; i < eIDList.length; i++)
+		{	
+			var eID = eIDList[i];
+
+			//remove this parent from the selected parents -- doesn't delete from all the individuals
+			if(self.selectedParents[eID])
+				self.parentCount--;
+
+			delete self.selectedParents[eID];
+		}
+
+		//callback optional really, here for backwards compat 
+		if(finished)
+			finished();
+
+	}
+
+	self.noDuplicatSeedParents = function(refsAndParents)
+	{
+		var allSeedNoDup = {};
+
+		//this is a map from the wid to the associated parent wids
+		for(var refWID in refsAndParents)
+		{
+			var parents = refsAndParents[refWID];
+
+			var mergeParents = [];
+
+			for(var i=0; i < parents.length; i++)
+			{
+				var seedsForEachParent = self.seedParents[parents[i]];
+
+				//now we just merge all these together
+				mergeParents = mergeParents.concat(seedsForEachParent);
+			}
+
+			//then we get rid of any duplicates
+			var nodups = {};
+			for(var i=0; i < mergeParents.length; i++)
+				nodups[mergeParents[i]] = true;
+
+			//by induction, each wid generated knows it's seed parents (where each seed reference wid references itself in array form)
+			//therefore, you just look at your reference's parents to see who they believe is their seed 
+			//and concat those results together -- pretty simple, just remove duplicates
+			allSeedNoDup[refWID] = Object.keys(nodups);
+		}	
+
+		return allSeedNoDup;	
+	}
+
+	self.callGenerator = function(allObjects, toCreate, finished)
+	{
+		var parents = self.getOffspringParents();
+
+		//we need to go fetch some stuff
+		self.backEmit("generator:createArtifacts", self.genomeType, toCreate.length, parents, self.sessionObject, function(err, artifacts)
+		{
+			if(err)
+			{
+				//pass on the error if it happened
+				finished(err);
+				return;
+			}
+
+			// self.log("iec generated " + toCreate.length + " individuals: ", artifacts);
+
+			//otherwise, let's do this thang! match artifacts to offspring -- arbitrary don't worry
+			var off = artifacts.offspring;
+
+			var widOffspring = {};
+
+			for(var i=0; i < off.length; i++)
+			{
+				var oObject = off[i];
+				var eID = toCreate[i];
+				//save our evolution object internally -- no more fetches required
+				self.evolutionObjects[eID] = oObject;
+
+				//store objects relateive to their requested ids for return
+				allObjects[eID] = (oObject);
+
+
+				//clone the parent objects for the child!
+				widOffspring[oObject.wid] = oObject;
+
+				// var util = require('util')
+				// self.log("off returned: ".magenta, util.inspect(oObject, false, 3));
+			}
+
+			self.backEmit("schema:getReferencesAndParents", self.genomeType, widOffspring, function(err, refsAndParents)
+			{
+				if(err)
+				{
+					finished(err);
+					return;
+				}
+
+				//check the refs for each object
+				for(var wid in widOffspring)
+				{
+					//here we are with refs and parents
+					var rAndP = refsAndParents[wid];
+
+					var widSeedParents = self.noDuplicatSeedParents(rAndP);
+
+					// self.log("\n\nwid seed parents: ".magenta, rAndP);
+
+
+					//for each key, we set our seed parents appropriately	
+					for(var key in widSeedParents)
+					{
+						self.seedParents[key] = widSeedParents[key];
+					}
+				}
+
+				// self.log("\n\nSeed parents: ".magenta, self.seedParents);
+
+				//mark the offspring as the list objects
+				finished(undefined, allObjects);
+
+			});
+
+
+
+		});
+	}
+
+	//generator yo face!
+	self.getOrCreateOffspring = function(eIDList, finished)
+	{
+		//don't bother doing anything if you havne't selected parents
+		if(self.parentCount ==0){
+			finished("Cannot generate offspring without parents");
+			return;
+		}
+
+		//we need to make a bunch, as many as requested
+		var toCreate = [];
+
+		var allObjects = {};
+
+		//first we check to see which ids we already know
+		for(var i=0; i < eIDList.length; i++)
+		{
+			var eID = eIDList[i];
+			var evoObject = self.evolutionObjects[eID];
+			if(!evoObject)
+			{
+				toCreate.push(eID);
+			}
+			else
+			{
+				//otherwise add to objects that will be sent back
+				allObjects[eID] = evoObject;
+			}
+		}
+
+		//now we have a list of objects that must be created
+		if(toCreate.length)
+		{
+			//this will handle the finished call for us -- after it gets artifacts from the generator
+			self.callGenerator(allObjects, toCreate, finished);	
+		}
+		else
+		{
+			//all ready to go -- send back our objects
+			finished(undefined, allObjects)
+		}
+
+	}
+
+	self.getOffspringParents = function()
+	{
+		var parents = [];
+
+		for(var key in self.selectedParents)
+			parents.push(self.selectedParents[key]);
+
+		return parents;
+	}
+
+	return self;
+}
+
+
+
+
+
+});
+
+require.modules["win-iec"] = require.modules["./libs/evolution/win-iec"];
+
+
+require.register("./libs/ui/home/win-home-ui", function (exports, module) {
+
+var emitter = require('component~emitter@master');
+var element = require('optimuslime~el.js@master');
 // var dimensions = require('dimensions');
 
 module.exports = winhome; 
@@ -21259,1101 +20930,12 @@ function winhome(backbone, globalConfig, localConfig)
 
 });
 
-require.modules["win-home-ui"] = require.modules["./libs/win-home-ui"];
+require.modules["win-home-ui"] = require.modules["./libs/ui/home/win-home-ui"];
 
 
-require.register("./libs/geno-to-picture", function (exports, module) {
-//here we test the insert functions
-//making sure the database is filled with objects of the schema type
-// var wMath = require('win-utils').math;
+require.register("./libs/ui/iec/flexstatic", function (exports, module) {
 
-module.exports = genoToPicture;
-
-var cppnjs = require("optimuslime~cppnjs@master");
-//need to add the pure cppn functions -- for enclosure stuff
-cppnjs.addPureCPPN();
-
-var neatjs = require("optimuslime~neatjs@master");
-var winneat = require("optimuslime~win-neat@0.0.1-9");
-
-var generateBitmap = require("./libs/geno-to-picture/generateBitmap.js");
-
-function genoToPicture(size, ngJSON)
-{ 
-    var ngObject = winneat.genotypeFromJSON(ngJSON);
-
-    //then we are going to do this crazy thing where we grab the function representing the genome
-    //then we run the function a bunch of times looping over our image, compiling the data
-    //that data is then turned into a string which is sent to the dataurl object of a picture
-
-    return createImageFromGenome(size, ngObject);
-}
-
-function createImageFromGenome(size, ng)
-{
-    var cppn = ng.networkDecode();
-
-    // console.log('Decoded now recrusive processing!');
-    // console.log(ng);
-
-    var dt = Date.now();
-
-    console.log(cppn);
-
-    var functionObject = cppn.createPureCPPNFunctions();
-    console.log("Pure cppn: ", functionObject);
-    var activationFunction= functionObject.contained;
-
-
-    var inSqrt2 = Math.sqrt(2);
-
-    var allX = size.width, allY = size.height;
-    var width = size.width, height= size.height;
-
-    var startX = -1, startY = -1;
-    var dx = 2.0/(allX-1), dy = 2.0/(allY-1);
-
-    var currentX = startX, currentY = startY;
-
-    var newRow;
-    var rows = [];
-
-    var clampZeroOne = function(val)
-    {
-        return Math.max(0.0, Math.min(val,1.0));
-    };
-    // 0 to 1
-    var zeroToOne = function(val) {
-        return (val+1)/2;//Math.floor(Math.max(0, Math.min(255, (val + 1)/2*255)));
-    };
-
-    var inRange = function(val) {
-        if(val < 0) return (val+1);
-
-        return val;//Math.floor(Math.max(0, Math.min(255, (val + 1)/2*255)));
-    };
-
-
-    var oCount = 0;
-    var inputs = [];
-
-    //we go by the rows
-    for(var y=allY-1; y >=0; y--){
-
-        //init and push new row
-        var newRow = [];
-        rows.push(newRow);
-        for(var x=0; x < allX; x++){
-
-            //just like in picbreeder!
-            var currentX = ((x << 1) - width + 1) / width;
-            var currentY = ((y << 1) - height + 1) / height;
-
-
-            var output0, output1, output2;
-            var rgb;
-
-            inputs = [currentX, currentY, Math.sqrt(currentX*currentX + currentY*currentY)*inSqrt2];
-
-            var newActivation = true;
-            var outputs;
-
-            outputs = activationFunction(inputs);
-
-            if(outputs.length ==1 || ng.phenotype == 'structure')
-            {
-                var singleOutput = ng.phenotype == 'structure' ? outputs[2] : outputs[0];
-                var byte = Math.floor(Math.min(Math.abs(singleOutput), 1.0)*255.0);
-                //var byte = Math.floor(Math.max(0.0, Math.min(1.0, output0))*255.0);
-
-                rgb= [byte,byte,byte];//generateBitmap.HSVtoRGB(zeroToOne(output0), zeroToOne(output0), zeroToOne(output0));
-
-            }
-            else
-            {
-                rgb = generateBitmap.FloatToByte(generateBitmap.PicHSBtoRGB(outputs[0], clampZeroOne(outputs[1]), Math.abs(outputs[2])));
-            }
-
-            newRow.push(rgb);
-
-        }
-
-    }
-
-
-    //let's get our bitmap from rbg results!
-    var imgSrc = generateBitmap.generateBitmapDataURL(rows);
-
-    console.log("Gen time: ", (Date.now() - dt));
-
-    return imgSrc;
-}
-});
-
-require.register("./libs/geno-to-picture/generateBitmap.js", function (exports, module) {
-
-var base64 = require("./libs/geno-to-picture/base64.js");
-
-var generateBitmap = {};
-module.exports = generateBitmap;
-
-/*
-* Code to generate Bitmap images (using data urls) from rows of RGB arrays.
-* Specifically for use with http://mrcoles.com/low-rest-paint/
-*
-* Research:
-*
-* RFC 2397 data URL
-* http://www.xs4all.nl/~wrb/Articles/Article_IMG_RFC2397_P1_01.htm
-*
-* BMP file Format
-* http://en.wikipedia.org/wiki/BMP_file_format#Example_of_a_2.C3.972_Pixel.2C_24-Bit_Bitmap_.28Windows_V3_DIB.29
-*
-* BMP Notes
-*
-* - Integer values are little-endian, including RGB pixels, e.g., (255, 0, 0) -> \x00\x00\xFF
-* - Bitmap data starts at lower left (and reads across rows)
-* - In the BMP data, padding bytes are inserted in order to keep the lines of data in multiples of four,
-*   e.g., a 24-bit bitmap with width 1 would have 3 bytes of data per row (R, G, B) + 1 byte of padding
-*/
-
-function _asLittleEndianHex(value, bytes) {
-    // Convert value into little endian hex bytes
-    // value - the number as a decimal integer (representing bytes)
-    // bytes - the number of bytes that this value takes up in a string
-
-    // Example:
-    // _asLittleEndianHex(2835, 4)
-    // > '\x13\x0b\x00\x00'
-
-    var result = [];
-
-    for (; bytes>0; bytes--) {
-        result.push(String.fromCharCode(value & 255));
-        value >>= 8;
-    }
-
-    return result.join('');
-}
-
-function _collapseData(rows, row_padding) {
-    // Convert rows of RGB arrays into BMP data
-    var i,
-        rows_len = rows.length,
-        j,
-        pixels_len = rows_len ? rows[0].length : 0,
-        pixel,
-        padding = '',
-        result = [];
-
-    for (; row_padding > 0; row_padding--) {
-        padding += '\x00';
-    }
-
-    for (i=0; i<rows_len; i++) {
-        for (j=0; j<pixels_len; j++) {
-            pixel = rows[i][j];
-            result.push(String.fromCharCode(pixel[2]) +
-                String.fromCharCode(pixel[1]) +
-                String.fromCharCode(pixel[0]));
-        }
-        result.push(padding);
-    }
-
-    return result.join('');
-}
-
-function _scaleRows(rows, scale) {
-    // Simplest scaling possible
-    var real_w = rows.length,
-        scaled_w = parseInt(real_w * scale),
-        real_h = real_w ? rows[0].length : 0,
-        scaled_h = parseInt(real_h * scale),
-        new_rows = [],
-        new_row, x, y;
-
-    for (y=0; y<scaled_h; y++) {
-        new_rows.push(new_row = []);
-        for (x=0; x<scaled_w; x++) {
-            new_row.push(rows[parseInt(y/scale)][parseInt(x/scale)]);
-        }
-    }
-    return new_rows;
-}
-
-//generate bitmaps from rows of rgb values
-//from: http://mrcoles.com/low-res-paint/
-//and: http://mrcoles.com/blog/making-images-byte-by-byte-javascript/
-generateBitmap.generateBitmapDataURL = function(rows, scale) {
-    // Expects rows starting in bottom left
-    // formatted like this: [[[255, 0, 0], [255, 255, 0], ...], ...]
-    // which represents: [[red, yellow, ...], ...]
-
-    if (!base64) {
-        alert('Oops, base64 encode fail!!');
-        return false;
-    }
-
-    scale = scale || 1;
-    if (scale != 1) {
-        rows = _scaleRows(rows, scale);
-    }
-
-    var height = rows.length,                                // the number of rows
-        width = height ? rows[0].length : 0,                 // the number of columns per row
-        row_padding = (4 - (width * 3) % 4) % 4,             // pad each row to a multiple of 4 bytes
-        num_data_bytes = (width * 3 + row_padding) * height, // size in bytes of BMP data
-        num_file_bytes = 54 + num_data_bytes,                // full header size (offset) + size of data
-        file;
-
-    height = _asLittleEndianHex(height, 4);
-    width = _asLittleEndianHex(width, 4);
-    num_data_bytes = _asLittleEndianHex(num_data_bytes, 4);
-    num_file_bytes = _asLittleEndianHex(num_file_bytes, 4);
-
-    // these are the actual bytes of the file...
-
-    file = ('BM' +               // "Magic Number"
-        num_file_bytes +     // size of the file (bytes)*
-        '\x00\x00' +         // reserved
-        '\x00\x00' +         // reserved
-        '\x36\x00\x00\x00' + // offset of where BMP data lives (54 bytes)
-        '\x28\x00\x00\x00' + // number of remaining bytes in header from here (40 bytes)
-        width +              // the width of the bitmap in pixels*
-        height +             // the height of the bitmap in pixels*
-        '\x01\x00' +         // the number of color planes (1)
-        '\x18\x00' +         // 24 bits / pixel
-        '\x00\x00\x00\x00' + // No compression (0)
-        num_data_bytes +     // size of the BMP data (bytes)*
-        '\x13\x0B\x00\x00' + // 2835 pixels/meter - horizontal resolution
-        '\x13\x0B\x00\x00' + // 2835 pixels/meter - the vertical resolution
-        '\x00\x00\x00\x00' + // Number of colors in the palette (keep 0 for 24-bit)
-        '\x00\x00\x00\x00' + // 0 important colors (means all colors are important)
-        _collapseData(rows, row_padding)
-        );
-
-    return 'data:image/bmp;base64,' + base64.encode(file);
-};
-
-
-generateBitmap.CMYKtoRGB = function (c,m,y,k)
-{
-    var r = 1 - Math.min( 1, c * ( 1 - k ) + k );
-    var g = 1 - Math.min( 1, m * ( 1 - k ) + k );
-    var b = 1 - Math.min( 1, y * ( 1 - k ) + k );
-
-    r = Math.round( r * 255 );
-    g = Math.round( g * 255 );
-    b = Math.round( b * 255 );
-
-    return [r,g,b];
-};
-
-generateBitmap.HSVtoRGB = function(h,s,v) {
-    //javascript from: http://jsres.blogspot.com/2008/01/convert-hsv-to-rgb-equivalent.html
-    // Adapted from http://www.easyrgb.com/math.html
-    // hsv values = 0 - 1, rgb values = 0 - 255
-    var r, g, b;
-    var RGB = [];
-    if(s==0){
-        var equalRGB = Math.round(v*255);
-        RGB.push(equalRGB); RGB.push(equalRGB); RGB.push(equalRGB);
-    }else{
-
-        var var_r, var_g, var_b;
-        // h must be < 1
-        var var_h = h * 6;
-        if (var_h==6) var_h = 0;
-        //Or ... var_i = floor( var_h )
-        var var_i = Math.floor( var_h );
-        var var_1 = v*(1-s);
-        var var_2 = v*(1-s*(var_h-var_i));
-        var var_3 = v*(1-s*(1-(var_h-var_i)));
-        if(var_i==0){
-            var_r = v;
-            var_g = var_3;
-            var_b = var_1;
-        }else if(var_i==1){
-            var_r = var_2;
-            var_g = v;
-            var_b = var_1;
-        }else if(var_i==2){
-            var_r = var_1;
-            var_g = v;
-            var_b = var_3
-        }else if(var_i==3){
-            var_r = var_1;
-            var_g = var_2;
-            var_b = v;
-        }else if (var_i==4){
-            var_r = var_3;
-            var_g = var_1;
-            var_b = v;
-        }else{
-            var_r = v;
-            var_g = var_1;
-            var_b = var_2
-        }
-        //rgb results = 0 ÷ 255
-        RGB.push(Math.round(var_r * 255));
-        RGB.push(Math.round(var_g * 255));
-        RGB.push(Math.round(var_b * 255));
-    }
-    return RGB;
-};
-
-var count = 0;
-
-generateBitmap.FloatToByte = function(arr)
-{
-    var conv = [];
-
-    arr.forEach(function(col)
-    {
-        conv.push(Math.floor(col*255.0));
-    });
-
-    return conv;
-};
-
-generateBitmap.PicHSBtoRGB = function(h,s,v)
-{
-
-    h = (h*6.0)%6.0;//Math.min(6.0, (h * 6.0));
-
-//        if(++count % 2000 === 0)
-//            console.log(h + ' and mod: ' + (h%6.0));
-
-    var r = 0.0, g = 0.0, b = 0.0;
-
-    if(h < 0.0) h += 6.0;
-    var hi = Math.floor(h);
-    var f = h - hi;
-
-    var vs = v * s;
-    var vsf = vs * f;
-
-    var p = v - vs;
-    var q = v - vsf;
-    var t = v - vs + vsf;
-
-    switch(hi) {
-        case 0: r = v; g = t; b = p; break;
-        case 1: r = q; g = v; b = p; break;
-        case 2: r = p; g = v; b = t; break;
-        case 3: r = p; g = q; b = v; break;
-        case 4: r = t; g = p; b = v; break;
-        case 5: r = v; g = p; b = q; break;
-    }
-
-
-
-    return [r,g,b];
-};
-});
-
-require.register("./libs/geno-to-picture/base64.js", function (exports, module) {
-
-var base64 = {};
-
-//send out our base64 object!
-module.exports = base64;
-
-//from:
-//https://code.google.com/p/stringencoders/source/browse/trunk/javascript/base64.js?r=230
-
-/*
- * Copyright (c) 2010 Nick Galbreath
- * http://code.google.com/p/stringencoders/source/browse/#svn/trunk/javascript
- *
- * Permission is hereby granted, free of charge, to any person
- * obtaining a copy of this software and associated documentation
- * files (the "Software"), to deal in the Software without
- * restriction, including without limitation the rights to use,
- * copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following
- * conditions:
- *
- * The above copyright notice and this permission notice shall be
- * included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
- * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
- * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
- * OTHER DEALINGS IN THE SOFTWARE.
- */
-
-/* base64 encode/decode compatible with window.btoa/atob
- *
- * window.atob/btoa is a Firefox extension to convert binary data (the "b")
- * to base64 (ascii, the "a").
- *
- * It is also found in Safari and Chrome.  It is not available in IE.
- *
- * if (!window.btoa) window.btoa = base64.encode
- * if (!window.atob) window.atob = base64.decode
- *
- * The original spec's for atob/btoa are a bit lacking
- * https://developer.mozilla.org/en/DOM/window.atob
- * https://developer.mozilla.org/en/DOM/window.btoa
- *
- * window.btoa and base64.encode takes a string where charCodeAt is [0,255]
- * If any character is not [0,255], then an DOMException(5) is thrown.
- *
- * window.atob and base64.decode take a base64-encoded string
- * If the input length is not a multiple of 4, or contains invalid characters
- *   then an DOMException(5) is thrown.
- */
-
-base64.PADCHAR = '=';
-base64.ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-
-base64.makeDOMException = function() {
-    // sadly in FF,Safari,Chrome you can't make a DOMException
-    var e, tmp;
-
-    try {
-        return new DOMException(DOMException.INVALID_CHARACTER_ERR);
-    } catch (tmp) {
-        // not available, just passback a duck-typed equiv
-        // https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Global_Objects/Error
-        // https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Global_Objects/Error/prototype
-        var ex = new Error("DOM Exception 5");
-
-        // ex.number and ex.description is IE-specific.
-        ex.code = ex.number = 5;
-        ex.name = ex.description = "INVALID_CHARACTER_ERR";
-
-        // Safari/Chrome output format
-        ex.toString = function() { return 'Error: ' + ex.name + ': ' + ex.message; };
-        return ex;
-    }
-};
-
-base64.getbyte64 = function(s,i) {
-    // This is oddly fast, except on Chrome/V8.
-    //  Minimal or no improvement in performance by using a
-    //   object with properties mapping chars to value (eg. 'A': 0)
-    var idx = base64.ALPHA.indexOf(s.charAt(i));
-    if (idx === -1) {
-        throw base64.makeDOMException();
-    }
-    return idx;
-};
-
-base64.decode = function(s) {
-    // convert to string
-    s = '' + s;
-    var getbyte64 = base64.getbyte64;
-    var pads, i, b10;
-    var imax = s.length;
-    if (imax === 0) {
-        return s;
-    }
-
-    if (imax % 4 !== 0) {
-        throw base64.makeDOMException();
-    }
-
-    pads = 0
-    if (s.charAt(imax - 1) === base64.PADCHAR) {
-        pads = 1;
-        if (s.charAt(imax - 2) === base64.PADCHAR) {
-            pads = 2;
-        }
-        // either way, we want to ignore this last block
-        imax -= 4;
-    }
-
-    var x = [];
-    for (i = 0; i < imax; i += 4) {
-        b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12) |
-            (getbyte64(s,i+2) << 6) | getbyte64(s,i+3);
-        x.push(String.fromCharCode(b10 >> 16, (b10 >> 8) & 0xff, b10 & 0xff));
-    }
-
-    switch (pads) {
-        case 1:
-            b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12) | (getbyte64(s,i+2) << 6);
-            x.push(String.fromCharCode(b10 >> 16, (b10 >> 8) & 0xff));
-            break;
-        case 2:
-            b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12);
-            x.push(String.fromCharCode(b10 >> 16));
-            break;
-    }
-    return x.join('');
-};
-
-base64.getbyte = function(s,i) {
-    var x = s.charCodeAt(i);
-    if (x > 255) {
-        throw base64.makeDOMException();
-    }
-    return x;
-};
-
-base64.encode = function(s) {
-    if (arguments.length !== 1) {
-        throw new SyntaxError("Not enough arguments");
-    }
-    var padchar = base64.PADCHAR;
-    var alpha   = base64.ALPHA;
-    var getbyte = base64.getbyte;
-
-    var i, b10;
-    var x = [];
-
-    // convert to string
-    s = '' + s;
-
-    var imax = s.length - s.length % 3;
-
-    if (s.length === 0) {
-        return s;
-    }
-    for (i = 0; i < imax; i += 3) {
-        b10 = (getbyte(s,i) << 16) | (getbyte(s,i+1) << 8) | getbyte(s,i+2);
-        x.push(alpha.charAt(b10 >> 18));
-        x.push(alpha.charAt((b10 >> 12) & 0x3F));
-        x.push(alpha.charAt((b10 >> 6) & 0x3f));
-        x.push(alpha.charAt(b10 & 0x3f));
-    }
-    switch (s.length - imax) {
-        case 1:
-            b10 = getbyte(s,i) << 16;
-            x.push(alpha.charAt(b10 >> 18) + alpha.charAt((b10 >> 12) & 0x3F) +
-                padchar + padchar);
-            break;
-        case 2:
-            b10 = (getbyte(s,i) << 16) | (getbyte(s,i+1) << 8);
-            x.push(alpha.charAt(b10 >> 18) + alpha.charAt((b10 >> 12) & 0x3F) +
-                alpha.charAt((b10 >> 6) & 0x3f) + padchar);
-            break;
-    }
-    return x.join('');
-};
-
-
-});
-
-require.modules["geno-to-picture"] = require.modules["./libs/geno-to-picture"];
-
-
-require.register("./libs/webworker-queue", function (exports, module) {
-
-var WebWorkerClass = require("component~worker@master");
-
-module.exports = webworkerqueue;
-
-function webworkerqueue(scriptName, workerCount)
-{ 
-    var self = this;
-
-    self.nextWorker = 0;
-    
-    //queue to pull from 
-    self.taskQueue = [];
-    self.taskCallbacks = {};
-
-    //store the web workers
-    self.workers = [];
-
-    //how many workers available
-    self.availableWorkers = workerCount;
-
-    //note who is in use
-    self.inUseWorkers = {};
-    
-    //and the full count of workers
-    self.totalWorkers = workerCount;
-
-    for(var i=0; i < workerCount; i++){
-
-        var webworker = new WebWorkerClass(scriptName);
-
-        //create a new worker id (simply the index will do)
-        var workerID = i;
-
-        //label our workers
-        webworker.workerID = workerID;
-
-        //create a webworker message callback unique for this worker
-        //webworker in this case is not a raw webworker, but an emitter object -- so we attach to the message object
-        webworker.on('message', uniqueWorkerCallback(workerID));
-
-        //store the worker inside here
-        self.workers.push(webworker);
-    }
-
-
-    function uniqueWorkerCallback(workerID)
-    {
-        return function(data){
-            //simply pass on the message with the tagged worker
-            workerMessage(workerID, data);
-        }
-    }
-
-    function getNextAvailableWorker()
-    {
-        //none available, return null
-        if(self.availableWorkers == 0)
-            return;
-
-        //otherwise, we know someone is available
-        setNextAvailableIx();
-
-        //grab the next worker available
-        var worker = self.workers[self.nextWorker];
-
-        //note that it's now in use
-        self.inUseWorkers[self.nextWorker] = true;
-
-        //less workers available
-        self.availableWorkers--;
-
-        //send back the worker
-        return worker;
-    }
-
-    function setNextAvailableIx()
-    {
-        for(var i=0; i < self.totalWorkers; i++)
-        {
-            //check if it's in use
-            if(!self.inUseWorkers[i])
-            {
-                self.nextWorker = i;
-                break;
-            }
-        }
-    }
-
-    //this function takes a workerID and a data object -- called from the worker
-    function workerMessage(workerID, data)
-    {
-        //we got our message, we pass it for callback
-
-        //we know what workerID, so pull the associated callback
-        var cb = self.taskCallbacks[workerID];
-
-        //now remove all things associated with the task
-        delete self.taskCallbacks[workerID];
-
-        //free the worker
-        delete self.inUseWorkers[workerID];
-
-        //now on the market :)
-        self.availableWorkers++;
-
-        //prepare the callback -- if it exists
-        if(cb)
-        {
-            //send the data back, pure and simple
-            cb(data);
-        }
-
-        //now, do we have any queue events waiting?
-        if(self.taskQueue.length > 0)
-        {
-            //now we need to process the task
-            var taskObject = self.taskQueue.shift();
-
-            //okay, queue it up! -- this should work immediately becuase we just freed a worker
-            self.queueJob(taskObject.data, taskObject.callback);
-        }
-    }
-
-
-    self.queueJob = function(data, callback)
-    {
-
-        //if we have any available workers, just assign it directly, with a callback stored
-        var worker = getNextAvailableWorker();
-
-        if(worker)
-        {
-            //we have a worker to issue commands to now
-            //this is the callback we engage once the message comes back
-            self.taskCallbacks[worker.workerID] = callback;
-
-            //send the data now, thanks -- we'll handle callback in workerMessage function
-            worker.send(data);
-        }
-        else
-        {   
-            //otherwise, we need to add the item to the queue
-            self.taskQueue.push({data: data, callback: callback});
-            //the queue is cleared when the other workers return from their functions
-        }
-    }
-
-}
-
-});
-
-require.modules["webworker-queue"] = require.modules["./libs/webworker-queue"];
-
-
-require.register("./libs/win-setup", function (exports, module) {
-//here we test the insert functions
-//making sure the database is filled with objects of the schema type
-// var wMath = require('win-utils').math;
-
-module.exports = winsetup;
-
-function winsetup(requiredEvents, moduleJSON, moduleConfigs, finished)
-{ 
-    var winback = require("optimuslime~win-backbone@0.0.4-5");
-
-    var Q = require("techjacker~q@master");
-
-    var backbone, generator, backEmit, backLog;
-
-    var emptyModule = 
-    {
-        winFunction : "experiment",
-        eventCallbacks : function(){ return {}; },
-        requiredEvents : function() {
-            return requiredEvents;
-        }
-    };
-
-    //add our own empty module onto this object
-    moduleJSON["setupExperiment"] = emptyModule;
-    
-    var qBackboneResponse = function()
-    {
-        var defer = Q.defer();
-        // self.log('qBBRes: Original: ', arguments);
-
-        //first add our own function type
-        var augmentArgs = arguments;
-        // [].splice.call(augmentArgs, 0, 0, self.winFunction);
-        //make some assumptions about the returning call
-        var callback = function(err)
-        {
-            if(err)
-            {
-              backLog("QCall fail: ", err);
-                defer.reject(err);
-            }
-            else
-            {
-                //remove the error object, send the info onwards
-                [].shift.call(arguments);
-                if(arguments.length > 1)
-                    defer.resolve(arguments);
-                else
-                    defer.resolve.apply(defer, arguments);
-            }
-        };
-
-        //then we add our callback to the end of our function -- which will get resolved here with whatever arguments are passed back
-        [].push.call(augmentArgs, callback);
-
-        // self.log('qBBRes: Augmented: ', augmentArgs);
-        //make the call, we'll catch it inside the callback!
-        backEmit.apply(backEmit, augmentArgs);
-
-        return defer.promise;
-    }
-
-    //do this up front yo
-    backbone = new winback();
-
-    backbone.logLevel = backbone.testing;
-
-    backEmit = backbone.getEmitter(emptyModule);
-    backLog = backbone.getLogger({winFunction:"experiment"});
-    backLog.logLevel = backbone.testing;
-
-    //loading modules is synchronous
-    backbone.loadModules(moduleJSON, moduleConfigs);
-
-    var registeredEvents = backbone.registeredEvents();
-    var requiredEvents = backbone.moduleRequirements();
-      
-    backLog('Backbone Events registered: ', registeredEvents);
-    backLog('Required: ', requiredEvents);
-
-    backbone.initializeModules(function(err)
-    {
-      backLog("Finished Module Init");
-      finished(err, {logger: backLog, emitter: backEmit, backbone: backbone, qCall: qBackboneResponse});
-    });
-}
-});
-
-require.modules["win-setup"] = require.modules["./libs/win-setup"];
-
-
-require.register("./libs/cppn-additions", function (exports, module) {
-//here we test the insert functions
-//making sure the database is filled with objects of the schema type
-// var wMath = require('win-utils').math;
-
-module.exports = cppnAdditions;
-
-var cppnjs = require("optimuslime~cppnjs@master");
-
-function cppnAdditions()
-{ 
-   var self = this;
-
-
-   self.winFunction = "cppnAdditions";
-   
-   self.requiredEvents = function(){return [];};
-   self.eventCallbacks = function(){return {};};
-
-   self.initialize = function(done)
-   {
-        //we do our damage here!
-         self.addCPPNFunctionsToLibrary();
-         done();
-   };
-
-   //these are the names of our cppn objects
-   var pbActivationFunctions = {sigmoid: 'PBBipolarSigmoid', gaussian: 'PBGaussian', sine: 'Sine', cos: "PBCos", identity: 'pbLinear'};
-
-    //in order to use certain activation functions
-    self.addCPPNFunctionsToLibrary = function()
-    {
-        var actFunctions = cppnjs.cppnActivationFunctions;
-        var actFactory = cppnjs.cppnActivationFactory;
-
-         actFunctions[pbActivationFunctions.sigmoid] = function(){
-                return new actFunctions.ActivationFunction({
-                    functionID: pbActivationFunctions.sigmoid ,
-                    functionString: "2.0/(1.0+(exp(-inputSignal))) - 1.0",
-                    functionDescription: "Plain sigmoid [xrange -5.0,5.0][yrange, 0.0,1.0]",
-                    functionCalculate: function(inputSignal)
-                    {
-                        return 2.0/(1.0+(Math.exp(-inputSignal))) - 1.0;
-                    },
-                    functionEnclose: function(stringToEnclose)
-                    {
-                        return "(2.0/(1.0+(Math.exp(-1.0*" + stringToEnclose + "))) - 1.0)";
-                    }
-                });
-            };
-
-        actFunctions[pbActivationFunctions.gaussian] = function(){
-            return new actFunctions.ActivationFunction({
-                    functionID: pbActivationFunctions.gaussian,
-                    functionString: "2*e^(-(input)^2) - 1",
-                    functionDescription:"bimodal gaussian",
-                    functionCalculate :function(inputSignal)
-                    {
-                        return 2 * Math.exp(-Math.pow(inputSignal, 2)) - 1;
-                    },
-                    functionEnclose: function(stringToEnclose)
-                    {
-                        return "(2.0 * Math.exp(-Math.pow(" + stringToEnclose + ", 2.0)) - 1.0)";
-                    }
-                });
-            };
-
-        actFunctions[pbActivationFunctions.identity] = function(){
-            return new actFunctions.ActivationFunction({
-                functionID: pbActivationFunctions.identity,
-                functionString: "x",
-                functionDescription:"Linear",
-                functionCalculate: function(inputSignal)
-                {
-                    return inputSignal;
-                },
-                functionEnclose: function(stringToEnclose)
-                {
-                    return "(" + stringToEnclose + ")";
-                }
-            });
-        };
-
-        actFunctions[pbActivationFunctions.cos] = function(){
-           return new actFunctions.ActivationFunction({
-                functionID: pbActivationFunctions.cos,
-                functionString: "Cos(inputSignal)",
-                functionDescription: "Cos function with normal period",
-                functionCalculate: function(inputSignal)
-                {
-                    return Math.cos(inputSignal);
-                },
-                functionEnclose: function(stringToEnclose)
-                {
-                    return "(Math.cos(" + stringToEnclose + "))";
-                }
-            });
-        };
-
-        //makes these the only activation functions being generated by picbreeder genotypes
-        var probs = {};
-        probs[pbActivationFunctions.sigmoid] = .22;
-        probs[pbActivationFunctions.gaussian] = .22;
-        probs[pbActivationFunctions.sine] = .22;
-        probs[pbActivationFunctions.cos] = .22;
-        probs[pbActivationFunctions.identity] = .12;
-        actFactory.setProbabilities(probs);
-    };
-
-
-
-    return self;
-}
-});
-
-require.modules["cppn-additions"] = require.modules["./libs/cppn-additions"];
-
-
-require.register("./libs/pbEncoding", function (exports, module) {
-//here we test the insert functions
-//making sure the database is filled with objects of the schema type
-// var wMath = require('win-utils').math;
-
-var picbreederSchema = require("./libs/pbEncoding/picbreederSchema.js");
-
-module.exports = pbEncoding;
-
-function pbEncoding(backbone, globalConfig, localConfig)
-{
-	var self = this;
-
-	//boom, let's get right into the business of encoding
-	self.winFunction = "encoding";
-
-    //for convenience, this is our artifact type
-	self.encodingName = "picArtifact";
-
-	self.log = backbone.getLogger(self);
-	//only vital stuff goes out for normal logs
-	self.log.logLevel = localConfig.logLevel || self.log.normal;
-
-	self.eventCallbacks = function()
-	{ 
-		return {
-			// //easy to handle neat geno full offspring
-			// "encoding:iesor-createNonReferenceOffspring" : function(genProps, parentProps, sessionObject, done) { 
-				
-   //              //session might be undefined -- depending on win-gen behavior
-   //              //make sure session exists
-   //              sessionObject = sessionObject || {};
-
-			// 	//need to engage parent creation here -- could be complicated
-			// 	var parents = parentProps.parents;
-
-   //              //how many to make
-			// 	var count = genProps.count;
-
-   //              //these will be the final objects to return
-			// 	var allParents = [];
-			// 	var children = [];
-
-			// 	//pull potential forced parents
-			// 	var forced = sessionObject.forceParents;
-
-   //              //go through all the children -- using parents or force parents to create the new offspring
-   //              for(var c=0; c < count; c++)
-   //              {
-   //                  //we simply randomly pull environment from a parent
-   //                  var randomParentIx = wMath.next(parents.length);
-
-   //                  //if we have parents that are forced upon us
-   //                  if(forced){
-   //                      //pull random ix
-   //                      var rIx = wMath.next(forced[c].length);
-   //                      //use random index of forced parent as the actual ix
-   //                      randomParentIx = forced[c][rIx];
-   //                  }
-
-   //                  //our child together!
-   //                  var rOffspring = {};
-
-   //                  //all we need to do (for the current schema)
-   //                  //is to copy the environment
-   //                  rOffspring.meta = JSON.parse(JSON.stringify(parents[randomParentIx].meta));
-
-   //                  //just return our simple object with a randomly chosen environment
-   //                  children.push(rOffspring);
-
-   //                  //random parent was involved, make sure to mark who!
-   //                  allParents.push([randomParentIx]);
-   //              }
-
-			// 	//done, send er back
-			// 	done(undefined, children, allParents);
-
-			//  	return; 
-			//  }
-		};
-	};
-
-	//need to be able to add our schema
-	self.requiredEvents = function() {
-		return [
-			"schema:addSchema"
-		];
-	};
-
-	self.initialize = function(done)
-    {
-    	self.log("Init win-iesor encoding: ", picbreederSchema);
-
-		//how we talk to the backbone by emitting events
-    	var emitter = backbone.getEmitter(self);
-
-		//add our neat genotype schema -- loaded neatschema from another file -- 
-		//this is just the standard neat schema type -- others can make neatjs changes that require a different schema
-        emitter.emit("schema:addSchema", self.encodingName, picbreederSchema, function(err)
-        {
-        	if(err){
-        		done(new Error(err));
-        		return;
-        	}
-        	done();
-        });
-    }
-
-
-	return self;
-}
-});
-
-require.register("./libs/pbEncoding/picbreederSchema.js", function (exports, module) {
-//contains the neat schema setup -- default for neatjs stuff.
-
-//Need a way to override schema inside WIN -- for now, neat comes with its own schema. Will be able to add variations later
-//(for things looking to add extra neat features while still having all the custom code). 
-
-//Alternatively, they could just copy this module, and add their own stuff. Module is small. 
- 
-module.exports = {
-    "genome": { 
-        "$ref" : "NEATGenotype"
-    }
-    //some meta info about this object being stored
-    ,"meta": {
-        "imageTitle": "string",
-        "imageTags": {type: "array", items: {type: "string"}}
-    }
-};
-
-
-
-});
-
-require.modules["pbEncoding"] = require.modules["./libs/pbEncoding"];
-
-
-require.register("./libs/flexstatic", function (exports, module) {
-
-var Emitter = require("component~emitter@master");
+var Emitter = require('component~emitter@master');
 // var dimensions = require('dimensions');
 
 module.exports = flexstatic; 
@@ -22615,13 +21197,13 @@ function flexstatic(divValue, reqOptions)
 
 });
 
-require.modules["flexstatic"] = require.modules["./libs/flexstatic"];
+require.modules["flexstatic"] = require.modules["./libs/ui/iec/flexstatic"];
 
 
-require.register("./libs/flexparents", function (exports, module) {
+require.register("./libs/ui/iec/flexparents", function (exports, module) {
 
-var Emitter = require("component~emitter@master");
-var resize = require("ramitos~resize@master");
+var Emitter = require('component~emitter@master');
+var resize = require('ramitos~resize@master');
 // var dimensions = require('dimensions');
 
 module.exports = parentList; 
@@ -22833,16 +21415,16 @@ function parentList(divValue, reqOptions)
 
 });
 
-require.modules["flexparents"] = require.modules["./libs/flexparents"];
+require.modules["flexparents"] = require.modules["./libs/ui/iec/flexparents"];
 
 
-require.register("./libs/publishui", function (exports, module) {
+require.register("./libs/ui/iec/publishui", function (exports, module) {
 
-var modal = require("optimuslime~modal@master");
-var emitter = require("component~emitter@master");
-var element = require("optimuslime~el.js@master");
-var pillbox = require("component~pillbox@master");
-var classes = require("component~classes@master");
+var modal = require('optimuslime~modal@master');
+var emitter = require('component~emitter@master');
+var element = require('optimuslime~el.js@master');
+var pillbox = require('component~pillbox@master');
+var classes = require('component~classes@master');
 
       
 module.exports = function(options)
@@ -23003,23 +21585,23 @@ module.exports = function(options)
 
 });
 
-require.modules["publishui"] = require.modules["./libs/publishui"];
+require.modules["publishui"] = require.modules["./libs/ui/iec/publishui"];
 
 
-require.register("./libs/flexiec", function (exports, module) {
+require.register("./libs/ui/iec/flexiec", function (exports, module) {
 
-var Emitter = require("component~emitter@master");
-var resize = require("ramitos~resize@master");
-var classes = require("component~classes@master");
-var events = require("component~events@master");
+var Emitter = require('component~emitter@master');
+var resize = require('ramitos~resize@master');
+var classes = require('component~classes@master');
+var events = require('component~events@master');
 
-var publish = require("./libs/publishui");
+var publish = require('./libs/ui/iec/publishui');
 
 //
-var element = require("optimuslime~el.js@master");
+var element = require('optimuslime~el.js@master');
 
-var flexstatic = require("./libs/flexstatic");
-var flexparents = require("./libs/flexparents");
+var flexstatic = require('./libs/ui/iec/flexstatic');
+var flexparents = require('./libs/ui/iec/flexparents');
 // var dimensions = require('dimensions');
 
 module.exports = flexIEC; 
@@ -23377,14 +21959,14 @@ function flexIEC(divValue, reqOptions)
 
 });
 
-require.modules["flexiec"] = require.modules["./libs/flexiec"];
+require.modules["flexiec"] = require.modules["./libs/ui/iec/flexiec"];
 
 
-require.register("./libs/win-flexIEC", function (exports, module) {
-var flexIEC = require("./libs/flexiec");
-var winIEC = require("optimuslime~win-iec@master");
+require.register("./libs/ui/iec/win-flexIEC", function (exports, module) {
+var flexIEC = require('./libs/ui/iec/flexiec');
+var winIEC = require('./libs/evolution/win-iec');
 
-var emitter = require("component~emitter@master");
+var emitter = require('component~emitter@master');
 
 //we need to combine the two! Also, we're a win module -- so shape up!
 module.exports = winflex;
@@ -23613,11 +22195,1100 @@ function winflex(backbone, globalConfig, localConfig)
 
 });
 
-require.modules["win-flexIEC"] = require.modules["./libs/win-flexIEC"];
+require.modules["win-flexIEC"] = require.modules["./libs/ui/iec/win-flexIEC"];
+
+
+require.register("./libs/webworkers/webworker-queue", function (exports, module) {
+
+var WebWorkerClass = require('component~worker@master');
+
+module.exports = webworkerqueue;
+
+function webworkerqueue(scriptName, workerCount)
+{ 
+    var self = this;
+
+    self.nextWorker = 0;
+    
+    //queue to pull from 
+    self.taskQueue = [];
+    self.taskCallbacks = {};
+
+    //store the web workers
+    self.workers = [];
+
+    //how many workers available
+    self.availableWorkers = workerCount;
+
+    //note who is in use
+    self.inUseWorkers = {};
+    
+    //and the full count of workers
+    self.totalWorkers = workerCount;
+
+    for(var i=0; i < workerCount; i++){
+
+        var webworker = new WebWorkerClass(scriptName);
+
+        //create a new worker id (simply the index will do)
+        var workerID = i;
+
+        //label our workers
+        webworker.workerID = workerID;
+
+        //create a webworker message callback unique for this worker
+        //webworker in this case is not a raw webworker, but an emitter object -- so we attach to the message object
+        webworker.on('message', uniqueWorkerCallback(workerID));
+
+        //store the worker inside here
+        self.workers.push(webworker);
+    }
+
+
+    function uniqueWorkerCallback(workerID)
+    {
+        return function(data){
+            //simply pass on the message with the tagged worker
+            workerMessage(workerID, data);
+        }
+    }
+
+    function getNextAvailableWorker()
+    {
+        //none available, return null
+        if(self.availableWorkers == 0)
+            return;
+
+        //otherwise, we know someone is available
+        setNextAvailableIx();
+
+        //grab the next worker available
+        var worker = self.workers[self.nextWorker];
+
+        //note that it's now in use
+        self.inUseWorkers[self.nextWorker] = true;
+
+        //less workers available
+        self.availableWorkers--;
+
+        //send back the worker
+        return worker;
+    }
+
+    function setNextAvailableIx()
+    {
+        for(var i=0; i < self.totalWorkers; i++)
+        {
+            //check if it's in use
+            if(!self.inUseWorkers[i])
+            {
+                self.nextWorker = i;
+                break;
+            }
+        }
+    }
+
+    //this function takes a workerID and a data object -- called from the worker
+    function workerMessage(workerID, data)
+    {
+        //we got our message, we pass it for callback
+
+        //we know what workerID, so pull the associated callback
+        var cb = self.taskCallbacks[workerID];
+
+        //now remove all things associated with the task
+        delete self.taskCallbacks[workerID];
+
+        //free the worker
+        delete self.inUseWorkers[workerID];
+
+        //now on the market :)
+        self.availableWorkers++;
+
+        //prepare the callback -- if it exists
+        if(cb)
+        {
+            //send the data back, pure and simple
+            cb(data);
+        }
+
+        //now, do we have any queue events waiting?
+        if(self.taskQueue.length > 0)
+        {
+            //now we need to process the task
+            var taskObject = self.taskQueue.shift();
+
+            //okay, queue it up! -- this should work immediately becuase we just freed a worker
+            self.queueJob(taskObject.data, taskObject.callback);
+        }
+    }
+
+
+    self.queueJob = function(data, callback)
+    {
+
+        //if we have any available workers, just assign it directly, with a callback stored
+        var worker = getNextAvailableWorker();
+
+        if(worker)
+        {
+            //we have a worker to issue commands to now
+            //this is the callback we engage once the message comes back
+            self.taskCallbacks[worker.workerID] = callback;
+
+            //send the data now, thanks -- we'll handle callback in workerMessage function
+            worker.send(data);
+        }
+        else
+        {   
+            //otherwise, we need to add the item to the queue
+            self.taskQueue.push({data: data, callback: callback});
+            //the queue is cleared when the other workers return from their functions
+        }
+    }
+
+}
+
+});
+
+require.modules["webworker-queue"] = require.modules["./libs/webworkers/webworker-queue"];
+
+
+require.register("./libs/encoding/geno-to-picture", function (exports, module) {
+//here we test the insert functions
+//making sure the database is filled with objects of the schema type
+// var wMath = require('win-utils').math;
+
+module.exports = genoToPicture;
+
+var cppnjs = require('optimuslime~cppnjs@master');
+//need to add the pure cppn functions -- for enclosure stuff
+cppnjs.addPureCPPN();
+
+var neatjs = require('optimuslime~neatjs@master');
+var winneat = require('./libs/evolution/win-neat');
+
+var generateBitmap = require('./libs/encoding/geno-to-picture/generateBitmap.js');
+
+function genoToPicture(size, ngJSON)
+{ 
+    var ngObject = winneat.genotypeFromJSON(ngJSON);
+
+    //then we are going to do this crazy thing where we grab the function representing the genome
+    //then we run the function a bunch of times looping over our image, compiling the data
+    //that data is then turned into a string which is sent to the dataurl object of a picture
+
+    return createImageFromGenome(size, ngObject);
+}
+
+function createImageFromGenome(size, ng)
+{
+    var cppn = ng.networkDecode();
+
+    // console.log('Decoded now recrusive processing!');
+    // console.log(ng);
+
+    var dt = Date.now();
+
+    console.log(cppn);
+
+    var functionObject = cppn.createPureCPPNFunctions();
+    console.log("Pure cppn: ", functionObject);
+    var activationFunction= functionObject.contained;
+
+
+    var inSqrt2 = Math.sqrt(2);
+
+    var allX = size.width, allY = size.height;
+    var width = size.width, height= size.height;
+
+    var startX = -1, startY = -1;
+    var dx = 2.0/(allX-1), dy = 2.0/(allY-1);
+
+    var currentX = startX, currentY = startY;
+
+    var newRow;
+    var rows = [];
+
+    var clampZeroOne = function(val)
+    {
+        return Math.max(0.0, Math.min(val,1.0));
+    };
+    // 0 to 1
+    var zeroToOne = function(val) {
+        return (val+1)/2;//Math.floor(Math.max(0, Math.min(255, (val + 1)/2*255)));
+    };
+
+    var inRange = function(val) {
+        if(val < 0) return (val+1);
+
+        return val;//Math.floor(Math.max(0, Math.min(255, (val + 1)/2*255)));
+    };
+
+
+    var oCount = 0;
+    var inputs = [];
+
+    //we go by the rows
+    for(var y=allY-1; y >=0; y--){
+
+        //init and push new row
+        var newRow = [];
+        rows.push(newRow);
+        for(var x=0; x < allX; x++){
+
+            //just like in picbreeder!
+            var currentX = ((x << 1) - width + 1) / width;
+            var currentY = ((y << 1) - height + 1) / height;
+
+
+            var output0, output1, output2;
+            var rgb;
+
+            inputs = [currentX, currentY, Math.sqrt(currentX*currentX + currentY*currentY)*inSqrt2];
+
+            var newActivation = true;
+            var outputs;
+
+            outputs = activationFunction(inputs);
+
+            if(outputs.length ==1 || ng.phenotype == 'structure')
+            {
+                var singleOutput = ng.phenotype == 'structure' ? outputs[2] : outputs[0];
+                var byte = Math.floor(Math.min(Math.abs(singleOutput), 1.0)*255.0);
+                //var byte = Math.floor(Math.max(0.0, Math.min(1.0, output0))*255.0);
+
+                rgb= [byte,byte,byte];//generateBitmap.HSVtoRGB(zeroToOne(output0), zeroToOne(output0), zeroToOne(output0));
+
+            }
+            else
+            {
+                rgb = generateBitmap.FloatToByte(generateBitmap.PicHSBtoRGB(outputs[0], clampZeroOne(outputs[1]), Math.abs(outputs[2])));
+            }
+
+            newRow.push(rgb);
+
+        }
+
+    }
+
+
+    //let's get our bitmap from rbg results!
+    var imgSrc = generateBitmap.generateBitmapDataURL(rows);
+
+    console.log("Gen time: ", (Date.now() - dt));
+
+    return imgSrc;
+}
+});
+
+require.register("./libs/encoding/geno-to-picture/generateBitmap.js", function (exports, module) {
+
+var base64 = require('./libs/encoding/geno-to-picture/base64.js');
+
+var generateBitmap = {};
+module.exports = generateBitmap;
+
+/*
+* Code to generate Bitmap images (using data urls) from rows of RGB arrays.
+* Specifically for use with http://mrcoles.com/low-rest-paint/
+*
+* Research:
+*
+* RFC 2397 data URL
+* http://www.xs4all.nl/~wrb/Articles/Article_IMG_RFC2397_P1_01.htm
+*
+* BMP file Format
+* http://en.wikipedia.org/wiki/BMP_file_format#Example_of_a_2.C3.972_Pixel.2C_24-Bit_Bitmap_.28Windows_V3_DIB.29
+*
+* BMP Notes
+*
+* - Integer values are little-endian, including RGB pixels, e.g., (255, 0, 0) -> \x00\x00\xFF
+* - Bitmap data starts at lower left (and reads across rows)
+* - In the BMP data, padding bytes are inserted in order to keep the lines of data in multiples of four,
+*   e.g., a 24-bit bitmap with width 1 would have 3 bytes of data per row (R, G, B) + 1 byte of padding
+*/
+
+function _asLittleEndianHex(value, bytes) {
+    // Convert value into little endian hex bytes
+    // value - the number as a decimal integer (representing bytes)
+    // bytes - the number of bytes that this value takes up in a string
+
+    // Example:
+    // _asLittleEndianHex(2835, 4)
+    // > '\x13\x0b\x00\x00'
+
+    var result = [];
+
+    for (; bytes>0; bytes--) {
+        result.push(String.fromCharCode(value & 255));
+        value >>= 8;
+    }
+
+    return result.join('');
+}
+
+function _collapseData(rows, row_padding) {
+    // Convert rows of RGB arrays into BMP data
+    var i,
+        rows_len = rows.length,
+        j,
+        pixels_len = rows_len ? rows[0].length : 0,
+        pixel,
+        padding = '',
+        result = [];
+
+    for (; row_padding > 0; row_padding--) {
+        padding += '\x00';
+    }
+
+    for (i=0; i<rows_len; i++) {
+        for (j=0; j<pixels_len; j++) {
+            pixel = rows[i][j];
+            result.push(String.fromCharCode(pixel[2]) +
+                String.fromCharCode(pixel[1]) +
+                String.fromCharCode(pixel[0]));
+        }
+        result.push(padding);
+    }
+
+    return result.join('');
+}
+
+function _scaleRows(rows, scale) {
+    // Simplest scaling possible
+    var real_w = rows.length,
+        scaled_w = parseInt(real_w * scale),
+        real_h = real_w ? rows[0].length : 0,
+        scaled_h = parseInt(real_h * scale),
+        new_rows = [],
+        new_row, x, y;
+
+    for (y=0; y<scaled_h; y++) {
+        new_rows.push(new_row = []);
+        for (x=0; x<scaled_w; x++) {
+            new_row.push(rows[parseInt(y/scale)][parseInt(x/scale)]);
+        }
+    }
+    return new_rows;
+}
+
+//generate bitmaps from rows of rgb values
+//from: http://mrcoles.com/low-res-paint/
+//and: http://mrcoles.com/blog/making-images-byte-by-byte-javascript/
+generateBitmap.generateBitmapDataURL = function(rows, scale) {
+    // Expects rows starting in bottom left
+    // formatted like this: [[[255, 0, 0], [255, 255, 0], ...], ...]
+    // which represents: [[red, yellow, ...], ...]
+
+    if (!base64) {
+        alert('Oops, base64 encode fail!!');
+        return false;
+    }
+
+    scale = scale || 1;
+    if (scale != 1) {
+        rows = _scaleRows(rows, scale);
+    }
+
+    var height = rows.length,                                // the number of rows
+        width = height ? rows[0].length : 0,                 // the number of columns per row
+        row_padding = (4 - (width * 3) % 4) % 4,             // pad each row to a multiple of 4 bytes
+        num_data_bytes = (width * 3 + row_padding) * height, // size in bytes of BMP data
+        num_file_bytes = 54 + num_data_bytes,                // full header size (offset) + size of data
+        file;
+
+    height = _asLittleEndianHex(height, 4);
+    width = _asLittleEndianHex(width, 4);
+    num_data_bytes = _asLittleEndianHex(num_data_bytes, 4);
+    num_file_bytes = _asLittleEndianHex(num_file_bytes, 4);
+
+    // these are the actual bytes of the file...
+
+    file = ('BM' +               // "Magic Number"
+        num_file_bytes +     // size of the file (bytes)*
+        '\x00\x00' +         // reserved
+        '\x00\x00' +         // reserved
+        '\x36\x00\x00\x00' + // offset of where BMP data lives (54 bytes)
+        '\x28\x00\x00\x00' + // number of remaining bytes in header from here (40 bytes)
+        width +              // the width of the bitmap in pixels*
+        height +             // the height of the bitmap in pixels*
+        '\x01\x00' +         // the number of color planes (1)
+        '\x18\x00' +         // 24 bits / pixel
+        '\x00\x00\x00\x00' + // No compression (0)
+        num_data_bytes +     // size of the BMP data (bytes)*
+        '\x13\x0B\x00\x00' + // 2835 pixels/meter - horizontal resolution
+        '\x13\x0B\x00\x00' + // 2835 pixels/meter - the vertical resolution
+        '\x00\x00\x00\x00' + // Number of colors in the palette (keep 0 for 24-bit)
+        '\x00\x00\x00\x00' + // 0 important colors (means all colors are important)
+        _collapseData(rows, row_padding)
+        );
+
+    return 'data:image/bmp;base64,' + base64.encode(file);
+};
+
+
+generateBitmap.CMYKtoRGB = function (c,m,y,k)
+{
+    var r = 1 - Math.min( 1, c * ( 1 - k ) + k );
+    var g = 1 - Math.min( 1, m * ( 1 - k ) + k );
+    var b = 1 - Math.min( 1, y * ( 1 - k ) + k );
+
+    r = Math.round( r * 255 );
+    g = Math.round( g * 255 );
+    b = Math.round( b * 255 );
+
+    return [r,g,b];
+};
+
+generateBitmap.HSVtoRGB = function(h,s,v) {
+    //javascript from: http://jsres.blogspot.com/2008/01/convert-hsv-to-rgb-equivalent.html
+    // Adapted from http://www.easyrgb.com/math.html
+    // hsv values = 0 - 1, rgb values = 0 - 255
+    var r, g, b;
+    var RGB = [];
+    if(s==0){
+        var equalRGB = Math.round(v*255);
+        RGB.push(equalRGB); RGB.push(equalRGB); RGB.push(equalRGB);
+    }else{
+
+        var var_r, var_g, var_b;
+        // h must be < 1
+        var var_h = h * 6;
+        if (var_h==6) var_h = 0;
+        //Or ... var_i = floor( var_h )
+        var var_i = Math.floor( var_h );
+        var var_1 = v*(1-s);
+        var var_2 = v*(1-s*(var_h-var_i));
+        var var_3 = v*(1-s*(1-(var_h-var_i)));
+        if(var_i==0){
+            var_r = v;
+            var_g = var_3;
+            var_b = var_1;
+        }else if(var_i==1){
+            var_r = var_2;
+            var_g = v;
+            var_b = var_1;
+        }else if(var_i==2){
+            var_r = var_1;
+            var_g = v;
+            var_b = var_3
+        }else if(var_i==3){
+            var_r = var_1;
+            var_g = var_2;
+            var_b = v;
+        }else if (var_i==4){
+            var_r = var_3;
+            var_g = var_1;
+            var_b = v;
+        }else{
+            var_r = v;
+            var_g = var_1;
+            var_b = var_2
+        }
+        //rgb results = 0 ÷ 255
+        RGB.push(Math.round(var_r * 255));
+        RGB.push(Math.round(var_g * 255));
+        RGB.push(Math.round(var_b * 255));
+    }
+    return RGB;
+};
+
+var count = 0;
+
+generateBitmap.FloatToByte = function(arr)
+{
+    var conv = [];
+
+    arr.forEach(function(col)
+    {
+        conv.push(Math.floor(col*255.0));
+    });
+
+    return conv;
+};
+
+generateBitmap.PicHSBtoRGB = function(h,s,v)
+{
+
+    h = (h*6.0)%6.0;//Math.min(6.0, (h * 6.0));
+
+//        if(++count % 2000 === 0)
+//            console.log(h + ' and mod: ' + (h%6.0));
+
+    var r = 0.0, g = 0.0, b = 0.0;
+
+    if(h < 0.0) h += 6.0;
+    var hi = Math.floor(h);
+    var f = h - hi;
+
+    var vs = v * s;
+    var vsf = vs * f;
+
+    var p = v - vs;
+    var q = v - vsf;
+    var t = v - vs + vsf;
+
+    switch(hi) {
+        case 0: r = v; g = t; b = p; break;
+        case 1: r = q; g = v; b = p; break;
+        case 2: r = p; g = v; b = t; break;
+        case 3: r = p; g = q; b = v; break;
+        case 4: r = t; g = p; b = v; break;
+        case 5: r = v; g = p; b = q; break;
+    }
+
+
+
+    return [r,g,b];
+};
+});
+
+require.register("./libs/encoding/geno-to-picture/base64.js", function (exports, module) {
+
+var base64 = {};
+
+//send out our base64 object!
+module.exports = base64;
+
+//from:
+//https://code.google.com/p/stringencoders/source/browse/trunk/javascript/base64.js?r=230
+
+/*
+ * Copyright (c) 2010 Nick Galbreath
+ * http://code.google.com/p/stringencoders/source/browse/#svn/trunk/javascript
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+/* base64 encode/decode compatible with window.btoa/atob
+ *
+ * window.atob/btoa is a Firefox extension to convert binary data (the "b")
+ * to base64 (ascii, the "a").
+ *
+ * It is also found in Safari and Chrome.  It is not available in IE.
+ *
+ * if (!window.btoa) window.btoa = base64.encode
+ * if (!window.atob) window.atob = base64.decode
+ *
+ * The original spec's for atob/btoa are a bit lacking
+ * https://developer.mozilla.org/en/DOM/window.atob
+ * https://developer.mozilla.org/en/DOM/window.btoa
+ *
+ * window.btoa and base64.encode takes a string where charCodeAt is [0,255]
+ * If any character is not [0,255], then an DOMException(5) is thrown.
+ *
+ * window.atob and base64.decode take a base64-encoded string
+ * If the input length is not a multiple of 4, or contains invalid characters
+ *   then an DOMException(5) is thrown.
+ */
+
+base64.PADCHAR = '=';
+base64.ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+base64.makeDOMException = function() {
+    // sadly in FF,Safari,Chrome you can't make a DOMException
+    var e, tmp;
+
+    try {
+        return new DOMException(DOMException.INVALID_CHARACTER_ERR);
+    } catch (tmp) {
+        // not available, just passback a duck-typed equiv
+        // https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Global_Objects/Error
+        // https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Global_Objects/Error/prototype
+        var ex = new Error("DOM Exception 5");
+
+        // ex.number and ex.description is IE-specific.
+        ex.code = ex.number = 5;
+        ex.name = ex.description = "INVALID_CHARACTER_ERR";
+
+        // Safari/Chrome output format
+        ex.toString = function() { return 'Error: ' + ex.name + ': ' + ex.message; };
+        return ex;
+    }
+};
+
+base64.getbyte64 = function(s,i) {
+    // This is oddly fast, except on Chrome/V8.
+    //  Minimal or no improvement in performance by using a
+    //   object with properties mapping chars to value (eg. 'A': 0)
+    var idx = base64.ALPHA.indexOf(s.charAt(i));
+    if (idx === -1) {
+        throw base64.makeDOMException();
+    }
+    return idx;
+};
+
+base64.decode = function(s) {
+    // convert to string
+    s = '' + s;
+    var getbyte64 = base64.getbyte64;
+    var pads, i, b10;
+    var imax = s.length;
+    if (imax === 0) {
+        return s;
+    }
+
+    if (imax % 4 !== 0) {
+        throw base64.makeDOMException();
+    }
+
+    pads = 0
+    if (s.charAt(imax - 1) === base64.PADCHAR) {
+        pads = 1;
+        if (s.charAt(imax - 2) === base64.PADCHAR) {
+            pads = 2;
+        }
+        // either way, we want to ignore this last block
+        imax -= 4;
+    }
+
+    var x = [];
+    for (i = 0; i < imax; i += 4) {
+        b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12) |
+            (getbyte64(s,i+2) << 6) | getbyte64(s,i+3);
+        x.push(String.fromCharCode(b10 >> 16, (b10 >> 8) & 0xff, b10 & 0xff));
+    }
+
+    switch (pads) {
+        case 1:
+            b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12) | (getbyte64(s,i+2) << 6);
+            x.push(String.fromCharCode(b10 >> 16, (b10 >> 8) & 0xff));
+            break;
+        case 2:
+            b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12);
+            x.push(String.fromCharCode(b10 >> 16));
+            break;
+    }
+    return x.join('');
+};
+
+base64.getbyte = function(s,i) {
+    var x = s.charCodeAt(i);
+    if (x > 255) {
+        throw base64.makeDOMException();
+    }
+    return x;
+};
+
+base64.encode = function(s) {
+    if (arguments.length !== 1) {
+        throw new SyntaxError("Not enough arguments");
+    }
+    var padchar = base64.PADCHAR;
+    var alpha   = base64.ALPHA;
+    var getbyte = base64.getbyte;
+
+    var i, b10;
+    var x = [];
+
+    // convert to string
+    s = '' + s;
+
+    var imax = s.length - s.length % 3;
+
+    if (s.length === 0) {
+        return s;
+    }
+    for (i = 0; i < imax; i += 3) {
+        b10 = (getbyte(s,i) << 16) | (getbyte(s,i+1) << 8) | getbyte(s,i+2);
+        x.push(alpha.charAt(b10 >> 18));
+        x.push(alpha.charAt((b10 >> 12) & 0x3F));
+        x.push(alpha.charAt((b10 >> 6) & 0x3f));
+        x.push(alpha.charAt(b10 & 0x3f));
+    }
+    switch (s.length - imax) {
+        case 1:
+            b10 = getbyte(s,i) << 16;
+            x.push(alpha.charAt(b10 >> 18) + alpha.charAt((b10 >> 12) & 0x3F) +
+                padchar + padchar);
+            break;
+        case 2:
+            b10 = (getbyte(s,i) << 16) | (getbyte(s,i+1) << 8);
+            x.push(alpha.charAt(b10 >> 18) + alpha.charAt((b10 >> 12) & 0x3F) +
+                alpha.charAt((b10 >> 6) & 0x3f) + padchar);
+            break;
+    }
+    return x.join('');
+};
+
+
+});
+
+require.modules["geno-to-picture"] = require.modules["./libs/encoding/geno-to-picture"];
+
+
+require.register("./libs/encoding/cppn-additions", function (exports, module) {
+//here we test the insert functions
+//making sure the database is filled with objects of the schema type
+// var wMath = require('win-utils').math;
+
+module.exports = cppnAdditions;
+
+var cppnjs = require('optimuslime~cppnjs@master');
+
+function cppnAdditions()
+{ 
+   var self = this;
+
+
+   self.winFunction = "cppnAdditions";
+   
+   self.requiredEvents = function(){return [];};
+   self.eventCallbacks = function(){return {};};
+
+   self.initialize = function(done)
+   {
+        //we do our damage here!
+         self.addCPPNFunctionsToLibrary();
+         done();
+   };
+
+   //these are the names of our cppn objects
+   var pbActivationFunctions = {sigmoid: 'PBBipolarSigmoid', gaussian: 'PBGaussian', sine: 'Sine', cos: "PBCos", identity: 'pbLinear'};
+
+    //in order to use certain activation functions
+    self.addCPPNFunctionsToLibrary = function()
+    {
+        var actFunctions = cppnjs.cppnActivationFunctions;
+        var actFactory = cppnjs.cppnActivationFactory;
+
+         actFunctions[pbActivationFunctions.sigmoid] = function(){
+                return new actFunctions.ActivationFunction({
+                    functionID: pbActivationFunctions.sigmoid ,
+                    functionString: "2.0/(1.0+(exp(-inputSignal))) - 1.0",
+                    functionDescription: "Plain sigmoid [xrange -5.0,5.0][yrange, 0.0,1.0]",
+                    functionCalculate: function(inputSignal)
+                    {
+                        return 2.0/(1.0+(Math.exp(-inputSignal))) - 1.0;
+                    },
+                    functionEnclose: function(stringToEnclose)
+                    {
+                        return "(2.0/(1.0+(Math.exp(-1.0*" + stringToEnclose + "))) - 1.0)";
+                    }
+                });
+            };
+
+        actFunctions[pbActivationFunctions.gaussian] = function(){
+            return new actFunctions.ActivationFunction({
+                    functionID: pbActivationFunctions.gaussian,
+                    functionString: "2*e^(-(input)^2) - 1",
+                    functionDescription:"bimodal gaussian",
+                    functionCalculate :function(inputSignal)
+                    {
+                        return 2 * Math.exp(-Math.pow(inputSignal, 2)) - 1;
+                    },
+                    functionEnclose: function(stringToEnclose)
+                    {
+                        return "(2.0 * Math.exp(-Math.pow(" + stringToEnclose + ", 2.0)) - 1.0)";
+                    }
+                });
+            };
+
+        actFunctions[pbActivationFunctions.identity] = function(){
+            return new actFunctions.ActivationFunction({
+                functionID: pbActivationFunctions.identity,
+                functionString: "x",
+                functionDescription:"Linear",
+                functionCalculate: function(inputSignal)
+                {
+                    return inputSignal;
+                },
+                functionEnclose: function(stringToEnclose)
+                {
+                    return "(" + stringToEnclose + ")";
+                }
+            });
+        };
+
+        actFunctions[pbActivationFunctions.cos] = function(){
+           return new actFunctions.ActivationFunction({
+                functionID: pbActivationFunctions.cos,
+                functionString: "Cos(inputSignal)",
+                functionDescription: "Cos function with normal period",
+                functionCalculate: function(inputSignal)
+                {
+                    return Math.cos(inputSignal);
+                },
+                functionEnclose: function(stringToEnclose)
+                {
+                    return "(Math.cos(" + stringToEnclose + "))";
+                }
+            });
+        };
+
+        //makes these the only activation functions being generated by picbreeder genotypes
+        var probs = {};
+        probs[pbActivationFunctions.sigmoid] = .22;
+        probs[pbActivationFunctions.gaussian] = .22;
+        probs[pbActivationFunctions.sine] = .22;
+        probs[pbActivationFunctions.cos] = .22;
+        probs[pbActivationFunctions.identity] = .12;
+        actFactory.setProbabilities(probs);
+    };
+
+
+
+    return self;
+}
+});
+
+require.modules["cppn-additions"] = require.modules["./libs/encoding/cppn-additions"];
+
+
+require.register("./libs/encoding/pbEncoding", function (exports, module) {
+//here we test the insert functions
+//making sure the database is filled with objects of the schema type
+// var wMath = require('win-utils').math;
+
+var picbreederSchema = require("./libs/encoding/pbEncoding/picbreederSchema.js");
+
+module.exports = pbEncoding;
+
+function pbEncoding(backbone, globalConfig, localConfig)
+{
+	var self = this;
+
+	//boom, let's get right into the business of encoding
+	self.winFunction = "encoding";
+
+    //for convenience, this is our artifact type
+	self.encodingName = "picArtifact";
+
+	self.log = backbone.getLogger(self);
+	//only vital stuff goes out for normal logs
+	self.log.logLevel = localConfig.logLevel || self.log.normal;
+
+	self.eventCallbacks = function()
+	{ 
+		return {
+			// //easy to handle neat geno full offspring
+			// "encoding:iesor-createNonReferenceOffspring" : function(genProps, parentProps, sessionObject, done) { 
+				
+   //              //session might be undefined -- depending on win-gen behavior
+   //              //make sure session exists
+   //              sessionObject = sessionObject || {};
+
+			// 	//need to engage parent creation here -- could be complicated
+			// 	var parents = parentProps.parents;
+
+   //              //how many to make
+			// 	var count = genProps.count;
+
+   //              //these will be the final objects to return
+			// 	var allParents = [];
+			// 	var children = [];
+
+			// 	//pull potential forced parents
+			// 	var forced = sessionObject.forceParents;
+
+   //              //go through all the children -- using parents or force parents to create the new offspring
+   //              for(var c=0; c < count; c++)
+   //              {
+   //                  //we simply randomly pull environment from a parent
+   //                  var randomParentIx = wMath.next(parents.length);
+
+   //                  //if we have parents that are forced upon us
+   //                  if(forced){
+   //                      //pull random ix
+   //                      var rIx = wMath.next(forced[c].length);
+   //                      //use random index of forced parent as the actual ix
+   //                      randomParentIx = forced[c][rIx];
+   //                  }
+
+   //                  //our child together!
+   //                  var rOffspring = {};
+
+   //                  //all we need to do (for the current schema)
+   //                  //is to copy the environment
+   //                  rOffspring.meta = JSON.parse(JSON.stringify(parents[randomParentIx].meta));
+
+   //                  //just return our simple object with a randomly chosen environment
+   //                  children.push(rOffspring);
+
+   //                  //random parent was involved, make sure to mark who!
+   //                  allParents.push([randomParentIx]);
+   //              }
+
+			// 	//done, send er back
+			// 	done(undefined, children, allParents);
+
+			//  	return; 
+			//  }
+		};
+	};
+
+	//need to be able to add our schema
+	self.requiredEvents = function() {
+		return [
+			"schema:addSchema"
+		];
+	};
+
+	self.initialize = function(done)
+    {
+    	self.log("Init win-iesor encoding: ", picbreederSchema);
+
+		//how we talk to the backbone by emitting events
+    	var emitter = backbone.getEmitter(self);
+
+		//add our neat genotype schema -- loaded neatschema from another file -- 
+		//this is just the standard neat schema type -- others can make neatjs changes that require a different schema
+        emitter.emit("schema:addSchema", self.encodingName, picbreederSchema, function(err)
+        {
+        	if(err){
+        		done(new Error(err));
+        		return;
+        	}
+        	done();
+        });
+    }
+
+
+	return self;
+}
+});
+
+require.register("./libs/encoding/pbEncoding/picbreederSchema.js", function (exports, module) {
+//contains the neat schema setup -- default for neatjs stuff.
+
+//Need a way to override schema inside WIN -- for now, neat comes with its own schema. Will be able to add variations later
+//(for things looking to add extra neat features while still having all the custom code). 
+
+//Alternatively, they could just copy this module, and add their own stuff. Module is small. 
+ 
+module.exports = {
+    "genome": { 
+        "$ref" : "NEATGenotype"
+    }
+    //some meta info about this object being stored
+    ,"meta": {
+        "imageTitle": "string",
+        "imageTags": {type: "array", items: {type: "string"}}
+    }
+};
+
+
+
+});
+
+require.modules["pbEncoding"] = require.modules["./libs/encoding/pbEncoding"];
+
+
+require.register("./libs/initialization/win-setup", function (exports, module) {
+//here we test the insert functions
+//making sure the database is filled with objects of the schema type
+// var wMath = require('win-utils').math;
+
+module.exports = winsetup;
+
+function winsetup(requiredEvents, moduleJSON, moduleConfigs, finished)
+{ 
+    var winback = require('optimuslime~win-backbone@0.0.4-5');
+
+    var Q = require('techjacker~q@master');
+
+    var backbone, generator, backEmit, backLog;
+
+    var emptyModule = 
+    {
+        winFunction : "experiment",
+        eventCallbacks : function(){ return {}; },
+        requiredEvents : function() {
+            return requiredEvents;
+        }
+    };
+
+    //add our own empty module onto this object
+    moduleJSON["setupExperiment"] = emptyModule;
+    
+    var qBackboneResponse = function()
+    {
+        var defer = Q.defer();
+        // self.log('qBBRes: Original: ', arguments);
+
+        //first add our own function type
+        var augmentArgs = arguments;
+        // [].splice.call(augmentArgs, 0, 0, self.winFunction);
+        //make some assumptions about the returning call
+        var callback = function(err)
+        {
+            if(err)
+            {
+              backLog("QCall fail: ", err);
+                defer.reject(err);
+            }
+            else
+            {
+                //remove the error object, send the info onwards
+                [].shift.call(arguments);
+                if(arguments.length > 1)
+                    defer.resolve(arguments);
+                else
+                    defer.resolve.apply(defer, arguments);
+            }
+        };
+
+        //then we add our callback to the end of our function -- which will get resolved here with whatever arguments are passed back
+        [].push.call(augmentArgs, callback);
+
+        // self.log('qBBRes: Augmented: ', augmentArgs);
+        //make the call, we'll catch it inside the callback!
+        backEmit.apply(backEmit, augmentArgs);
+
+        return defer.promise;
+    }
+
+    //do this up front yo
+    backbone = new winback();
+
+    backbone.logLevel = backbone.testing;
+
+    backEmit = backbone.getEmitter(emptyModule);
+    backLog = backbone.getLogger({winFunction:"experiment"});
+    backLog.logLevel = backbone.testing;
+
+    //loading modules is synchronous
+    backbone.loadModules(moduleJSON, moduleConfigs);
+
+    var registeredEvents = backbone.registeredEvents();
+    var requiredEvents = backbone.moduleRequirements();
+      
+    backLog('Backbone Events registered: ', registeredEvents);
+    backLog('Required: ', requiredEvents);
+
+    backbone.initializeModules(function(err)
+    {
+      backLog("Finished Module Init");
+      finished(err, {logger: backLog, emitter: backEmit, backbone: backbone, qCall: qBackboneResponse});
+    });
+}
+});
+
+require.modules["win-setup"] = require.modules["./libs/initialization/win-setup"];
 
 
 require.register("win-picbreeder", function (exports, module) {
-var flexStatic = require("./libs/flexstatic");
+var flexStatic = require('./libs/ui/iec/flexstatic');
 
 
 
