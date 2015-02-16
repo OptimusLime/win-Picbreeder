@@ -3,12 +3,17 @@ var winjs = require('win-save');
 var path =require('path');
 var express = require('express');
 
-module.exports = launcher;
+//export two functions -- launch AND delete
+var exp = {launch: launcher, clean: cleanDatabase};
+
+module.exports = exp;
+
+var options =  {port: 3000, modifier: 'pic'};
+var requiredObjects = {artifactType: "picArtifact", directory: __dirname, seedDirectory: './seeds', schemaDirectory: './schemas'};
 
 function launcher()
 {
-	winjs.launchWIN({artifactType: "picArtifact", directory: __dirname, seedDirectory: './seeds', schemaDirectory: './schemas'},
-	    {port: 3000, modifier: 'pic'},
+	winjs.launchWIN(requiredObjects, options,
 	    function(err, app)
 	{
 	    if(err)
@@ -20,6 +25,12 @@ function launcher()
 	});
 }
 
+function cleanDatabase(cb)
+{
+	console.log(winjs);
+	winjs.clearWINDatabases(options.modifier, requiredObjects, cb);
+}
+
 //for being called by mongodb
-launcher();
+// launcher();
 

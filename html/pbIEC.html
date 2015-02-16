@@ -47,8 +47,6 @@
 			var winneat = require('win-neat');
 
 
-			var genoToPicture = require('geno-to-picture');
-
 			//for now, must match the win-save name 
 			var picArtName = "picArtifact";
 
@@ -75,6 +73,23 @@
 			var pbConfig = require('win-picbreeder/pbConfig.json');
 
 
+			var neatjs = require('neatjs');
+			//make a new neat param object
+			var np = new neatjs.neatParameters();
+
+		    //set up the defaults here
+		    np.pMutateAddConnection = .13;
+		    np.pMutateAddNode = .13;
+		    np.pMutateDeleteSimpleNeuron = .00;
+		    np.pMutateDeleteConnection = .00;
+		    np.pMutateConnectionWeights = .72;
+		    np.pMutateChangeActivations = .02;
+
+		    np.pNodeMutateActivationRate = 0.2;
+		    np.connectionWeightRange = 3.0;
+		    np.disallowRecurrence = true;
+
+
 			var configurations = 
 			{
 				"global" : {
@@ -86,7 +101,8 @@
 				"win-neat" : {
 					options : {
 						initialMutationCount : 5, 
-						postMutationCount : 5
+						postMutationCount : 5,
+						neatParameters : np
 					},
 					logLevel : testingLogLevel
 				},

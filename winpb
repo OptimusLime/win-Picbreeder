@@ -5,6 +5,7 @@
  */
 
 var program = require('commander');
+var promptly = require('promptly');
 var BuilderClass = require('component-builder');
 var cl = require('colors');
 
@@ -173,10 +174,52 @@ program
 
     //should only need to launch both of these to start the service in theory
     var liveServer = require("./server/server.js");
+    liveServer.launch();
+
     var wintestServer = require("./test/winTestServe.js")
+
+
 
   });
 
+  program
+  .command('clean')
+  .description('run clean command to remove all objects from the database -- no recovery')
+  .action(function(configFile, options){
+
+    //should only need to launch both of these to start the service in theory
+      
+    promptly.confirm('Are you sure you want to clear all databases and seeds? [yes/no]', function (err, shouldClear) {
+        if(err)
+        {
+          console.log("Err: ", err);
+          return;
+        }
+
+        if(shouldClear)
+        {
+          promptly.confirm('Very sure you want to clear it?', function (err, shouldClear) {
+
+            console.log("You DEFINITELY want to clear the databse? " + (shouldClear ? "YES" : "NO"));
+            console.log("Clearing...");
+
+            var liveServer = require("./server/server.js");
+            liveServer.clean(function(err)
+              {
+                  if(err)
+                      throw new Error('Cleaning error. Make sure mongodb is running to clean databases.');
+
+                  //now we're launched
+                  console.log('Finished cleaning databases');
+              });
+
+          });
+        }
+
+      // 
+    });
+
+  });
 
 // program
 //   .command('exec <cmd>')

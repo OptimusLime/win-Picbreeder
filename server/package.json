@@ -4,6 +4,6 @@
     "version": "0.0.1",
     "private": true,
     "dependencies": {
-    	"win-save" : "0.0.x"
+    	"win-save" : "0.0.1-8"
     }
 }

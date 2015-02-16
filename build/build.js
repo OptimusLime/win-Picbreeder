@@ -20,89 +20,6 @@ function require(name) {
 }
 
 /**
- * Meta info, accessible in the global scope unless you use AMD option.
- */
-
-require.loader = 'component';
-
-/**
- * Internal helper object, contains a sorting function for semantiv versioning
- */
-require.helper = {};
-require.helper.semVerSort = function(a, b) {
-  var aArray = a.version.split('.');
-  var bArray = b.version.split('.');
-  for (var i=0; i<aArray.length; ++i) {
-    var aInt = parseInt(aArray[i], 10);
-    var bInt = parseInt(bArray[i], 10);
-    if (aInt === bInt) {
-      var aLex = aArray[i].substr((""+aInt).length);
-      var bLex = bArray[i].substr((""+bInt).length);
-      if (aLex === '' && bLex !== '') return 1;
-      if (aLex !== '' && bLex === '') return -1;
-      if (aLex !== '' && bLex !== '') return aLex > bLex ? 1 : -1;
-      continue;
-    } else if (aInt > bInt) {
-      return 1;
-    } else {
-      return -1;
-    }
-  }
-  return 0;
-}
-
-/**
- * Find and require a module which name starts with the provided name.
- * If multiple modules exists, the highest semver is used. 
- * This function can only be used for remote dependencies.
-
- * @param {String} name - module name: `user~repo`
- * @param {Boolean} returnPath - returns the canonical require path if true, 
- *                               otherwise it returns the epxorted module
- */
-require.latest = function (name, returnPath) {
-  function showError(name) {
-    throw new Error('failed to find latest module of "' + name + '"');
-  }
-  // only remotes with semvers, ignore local files conataining a '/'
-  var versionRegexp = /(.*)~(.*)@v?(\d+\.\d+\.\d+[^\/]*)$/;
-  var remoteRegexp = /(.*)~(.*)/;
-  if (!remoteRegexp.test(name)) showError(name);
-  var moduleNames = Object.keys(require.modules);
-  var semVerCandidates = [];
-  var otherCandidates = []; // for instance: name of the git branch
-  for (var i=0; i<moduleNames.length; i++) {
-    var moduleName = moduleNames[i];
-    if (new RegExp(name + '@').test(moduleName)) {
-        var version = moduleName.substr(name.length+1);
-        var semVerMatch = versionRegexp.exec(moduleName);
-        if (semVerMatch != null) {
-          semVerCandidates.push({version: version, name: moduleName});
-        } else {
-          otherCandidates.push({version: version, name: moduleName});
-        } 
-    }
-  }
-  if (semVerCandidates.concat(otherCandidates).length === 0) {
-    showError(name);
-  }
-  if (semVerCandidates.length > 0) {
-    var module = semVerCandidates.sort(require.helper.semVerSort).pop().name;
-    if (returnPath === true) {
-      return module;
-    }
-    return require(module);
-  }
-  // if the build contains more than one branch of the same module
-  // you should not use this funciton
-  var module = otherCandidates.sort(function(a, b) {return a.name > b.name})[0].name;
-  if (returnPath === true) {
-    return module;
-  }
-  return require(module);
-}
-
-/**
  * Registered modules.
  */
 
@@ -314,7 +231,7 @@ require.register("component~worker@master", function (exports, module) {
  * Module dependencies.
  */
 
-var Emitter = require('component~emitter@master');
+var Emitter = require("component~emitter@master");
 var WebWorker = window.Worker;
 
 /**
@@ -1124,24 +1041,6 @@ function el(tagName, attrs, child) {
     }
   }
 
-  //A little helper: if your attrs includes style object
-  //we turn the style object into a style string for direct application
-  if(typeof attrs["style"] != "string" && typeof attrs["style"] == "object")
-  {
-    var styleObj = attrs["style"];
-    //we build the string
-    var concat = "";
-
-    //for each style object
-    for(var key in styleObj) 
-      //concat the key + value with : inbetween (e.g. width: 100px;)
-      concat += (key + ": " + styleObj[key] + "; ");
-
-    //grab the concatenated style string
-    attrs["style"] = concat; 
-  }
-
-
   // create the element
   var element = document.createElement(tagName);
   for(var i = 0; i < child.length; i += 1) {
@@ -1249,8 +1148,8 @@ require.register("visionmedia~superagent@master", function (exports, module) {
  * Module dependencies.
  */
 
-var Emitter = require('component~emitter@master');
-var reduce = require('component~reduce@1.0.1');
+var Emitter = require("component~emitter@master");
+var reduce = require("component~reduce@1.0.1");
 
 /**
  * Root reference for iframes.
@@ -1294,16 +1193,33 @@ function isHost(obj) {
  * Determine XHR.
  */
 
-function getXHR() {
-  if (root.XMLHttpRequest
-    && ('file:' != root.location.protocol || !root.ActiveXObject)) {
-    return new XMLHttpRequest;
+function getXHR(isXDomainRequest) {
+  if (isXDomainRequest === true) {
+    if (typeof new XMLHttpRequest().withCredentials !== 'undefined') {
+      // Check if the XMLHttpRequest object has a "withCredentials" property.
+      // "withCredentials" only exists on XMLHTTPRequest2 objects.
+      
+      return new XMLHttpRequest();
+    } else if (typeof XDomainRequest !== "undefined") {
+      // Otherwise, check if XDomainRequest.
+      // XDomainRequest only exists in IE, and is IE's way of making CORS requests.
+      
+      return new XDomainRequest();
+    } else {
+      return false;
+    }
   } else {
-    try { return new ActiveXObject('Microsoft.XMLHTTP'); } catch(e) {}
-    try { return new ActiveXObject('Msxml2.XMLHTTP.6.0'); } catch(e) {}
-    try { return new ActiveXObject('Msxml2.XMLHTTP.3.0'); } catch(e) {}
-    try { return new ActiveXObject('Msxml2.XMLHTTP'); } catch(e) {}
+    if (root.XMLHttpRequest
+      && ('file:' !== root.location.protocol || !root.ActiveXObject)) {
+      return new XMLHttpRequest();
+    } else {
+      try { return new ActiveXObject('Microsoft.XMLHTTP'); } catch(e) {}
+      try { return new ActiveXObject('Msxml2.XMLHTTP.6.0'); } catch(e) {}
+      try { return new ActiveXObject('Msxml2.XMLHTTP.3.0'); } catch(e) {}
+      try { return new ActiveXObject('Msxml2.XMLHTTP'); } catch(e) {}
+    }
   }
+
   return false;
 }
 
@@ -1541,16 +1457,21 @@ function Response(req, options) {
   options = options || {};
   this.req = req;
   this.xhr = this.req.xhr;
-  this.text = this.req.method !='HEAD' 
-     ? this.xhr.responseText 
-     : null;
-  this.setStatusProperties(this.xhr.status);
+  this.text = this.xhr.responseText;
+  this.setStatusProperties(typeof this.xhr.status !== 'undefined' ? this.xhr.status : 0);
+  if (typeof this.xhr.getAllResponseHeaders !== 'undefined' &&
+      typeof this.xhr.getResponseHeader !== 'undefined') {
   this.header = this.headers = parseHeader(this.xhr.getAllResponseHeaders());
   // getAllResponseHeaders sometimes falsely returns "" for CORS requests, but
   // getResponseHeader still works. so we get content-type even if getting
   // other headers fails.
   this.header['content-type'] = this.xhr.getResponseHeader('content-type');
   this.setHeaderProperties(this.header);
+  } else if (typeof this.xhr.contentType !== 'undefined') {
+    this.header = this.headers = {};
+    this.header['content-type'] = this.xhr.contentType;
+    this.setHeaderProperties(this.header);
+  }
   this.body = this.req.method != 'HEAD'
     ? this.parseBody(this.text)
     : null;
@@ -1699,18 +1620,9 @@ function Request(method, url) {
   this.header = {};
   this._header = {};
   this.on('end', function(){
-    var err = null;
-    var res = null;
-
-    try {
-      res = new Response(self); 
-    } catch(e) {
-      err = new Error('Parser is unable to parse the response');
-      err.parse = true;
-      err.original = e;
-    }
-
-    self.callback(err, res);
+    var res = new Response(self);
+    if ('HEAD' == method) res.text = null;
+    self.callback(null, res);
   });
 }
 
@@ -1800,26 +1712,6 @@ Request.prototype.set = function(field, val){
   }
   this._header[field.toLowerCase()] = val;
   this.header[field] = val;
-  return this;
-};
-
-/**
- * Remove header `field`.
- *
- * Example:
- *
- *      req.get('/')
- *        .unset('User-Agent')
- *        .end(callback);
- *
- * @param {String} field
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.unset = function(field){
-  delete this._header[field.toLowerCase()];
-  delete this.header[field];
   return this;
 };
 
@@ -2057,7 +1949,6 @@ Request.prototype.send = function(data){
 
 Request.prototype.callback = function(err, res){
   var fn = this._callback;
-  this.clearTimeout();
   if (2 == fn.length) return fn(err, res);
   if (err) return this.emit('error', err);
   fn(res);
@@ -2115,7 +2006,18 @@ Request.prototype.withCredentials = function(){
 
 Request.prototype.end = function(fn){
   var self = this;
-  var xhr = this.xhr = getXHR();
+  
+  var isXDomainRequest = false;
+
+  if (typeof root.location !== 'undefined') {
+    var hostnameMatch = this.url.match(/http[s]?:\/\/([^\/]*)/);
+
+    if (hostnameMatch && hostnameMatch[1] !== root.location.hostname) {
+      isXDomainRequest = true;
+    }
+  }
+
+  var xhr = this.xhr = getXHR(isXDomainRequest);
   var query = this._query.join('&');
   var timeout = this._timeout;
   var data = this._formData || this._data;
@@ -2124,6 +2026,7 @@ Request.prototype.end = function(fn){
   this._callback = fn || noop;
 
   // state change
+  if (typeof xhr.onreadystatechange !== 'undefined') {
   xhr.onreadystatechange = function(){
     if (4 != xhr.readyState) return;
     if (0 == xhr.status) {
@@ -2132,6 +2035,20 @@ Request.prototype.end = function(fn){
     }
     self.emit('end');
   };
+  } else {
+    xhr.onload = function () {
+      if (self.aborted) return self.timeoutError();
+      self.emit('end');
+    }
+
+    xhr.onerror = function () {
+      self.emit('end');
+    }
+
+    xhr.ontimeout = function () {
+      return self.timeoutError();
+    }
+  }
 
   // progress
   if (xhr.upload) {
@@ -2172,7 +2089,9 @@ Request.prototype.end = function(fn){
   // set header fields
   for (var field in this.header) {
     if (null == this.header[field]) continue;
+    if (typeof xhr.setRequestHeader !== 'undefined') {
     xhr.setRequestHeader(field, this.header[field]);
+  }
   }
 
   // send stuff
@@ -2335,7 +2254,7 @@ require.modules["superagent"] = require.modules["visionmedia~superagent@master"]
 
 
 require.register("optimuslime~win-query@0.0.1-4", function (exports, module) {
-var request = require('visionmedia~superagent@master');
+var request = require("visionmedia~superagent@master");
 
 module.exports = winquery;
 
@@ -2534,7 +2453,7 @@ require.modules["win-query"] = require.modules["optimuslime~win-query@0.0.1-4"];
 require.register("optimuslime~win-publish@0.0.1-4", function (exports, module) {
 //superagent handles browser or node.js requests
 //thank you tjholowaychuk
-var request = require('visionmedia~superagent@master');
+var request = require("visionmedia~superagent@master");
 
 //now we're ready to get into this module
 module.exports = winpublish;
@@ -2664,4537 +2583,6 @@ function winpublish(backbone, globalConfig, localConfig)
 require.modules["optimuslime-win-publish"] = require.modules["optimuslime~win-publish@0.0.1-4"];
 require.modules["optimuslime~win-publish"] = require.modules["optimuslime~win-publish@0.0.1-4"];
 require.modules["win-publish"] = require.modules["optimuslime~win-publish@0.0.1-4"];
-
-
-require.register("optimuslime~win-data@0.0.1-3", function (exports, module) {
-var request = require('visionmedia~superagent@master');
-
-module.exports = windata;
-
-
-function windata(backbone, globalConfig, localConfig)
-{
-	var self= this;
-
-	//need to make requests, much like win-publish
-	//pull in backbone info, we gotta set our logger/emitter up
-	var self = this;
-
-	self.winFunction = "data";
-
-	//this is how we talk to win-backbone
-	self.backEmit = backbone.getEmitter(self);
-
-	//grab our logger
-	self.log = backbone.getLogger(self);
-
-	//only vital stuff goes out for normal logs
-	self.log.logLevel = localConfig.logLevel || self.log.normal;
-
-	//we have logger and emitter, set up some of our functions
-
-	if(!globalConfig.server)
-		throw new Error("Global configuration requires server location and port")
-
-	self.hostname = globalConfig.server;
-	self.port = globalConfig.port;
-
-	//what events do we need?
-	//none for now, though in the future, we might have a way to communicate with foreign win-backbones as if it was just sending
-	//a message within our own backbone -- thereby obfuscating what is done remotely and what is done locally 
-	self.requiredEvents = function()
-	{
-		return [
-		];
-	}
-
-	//what events do we respond to?
-	self.eventCallbacks = function()
-	{ 
-		return {
-			"data:winPOST" : self.postWIN,
-			"data:winGET" : self.getWIN
-		};
-	}
-
-	 var baseWIN = function()
-	{
-		return self.hostname + (self.port ? ":" + self.port : "") + "/api";
-	}
-
-	self.getWIN = function(apiPath, queryObjects, resFunction)
-	{
-		var base = baseWIN();
-
-		if(typeof queryObjects == "function")
-		{
-		  resFunction = queryObjects;
-		  queryObjects = {};
-		}
-		else //make sure to always have at least an empty object
-		  queryObjects = queryObjects || {};
-
-		var qNotEmpty = false;
-		var queryAdditions = "?";
-		for(var key in queryObjects){
-		  if(queryAdditions.length > 1)
-		    queryAdditions += "&";
-
-		  qNotEmpty = true;
-		  queryAdditions += key + "=" + queryObjects[key];
-		} 
-		var fullPath = base + apiPath + (qNotEmpty ? queryAdditions : "");
-
-		self.log("Requesting get from: ",fullPath )
-		request
-		  .get(fullPath)
-		  // .send(data)
-		  .set('Accept', 'application/json')
-		  .end(resFunction);
-	}
-
-	self.postWIN = function(apiPath, data, resFunction)
-	{
-		var base = baseWIN();
-
-		var fullPath= base + apiPath;
-		self.log("Requesting post to: ",fullPath )
-
-		request
-		  .post(fullPath)
-		  .send(data)
-		  .set('Accept', 'application/json')
-		  .end(resFunction);
-	}
-
-
-	return self;
-}
-
-
-
-});
-
-require.modules["optimuslime-win-data"] = require.modules["optimuslime~win-data@0.0.1-3"];
-require.modules["optimuslime~win-data"] = require.modules["optimuslime~win-data@0.0.1-3"];
-require.modules["win-data"] = require.modules["optimuslime~win-data@0.0.1-3"];
-
-
-require.register("geraintluff~tv4@master", function (exports, module) {
-/*
-Author: Geraint Luff and others
-Year: 2013
-
-This code is released into the "public domain" by its author(s).  Anybody may use, alter and distribute the code without restriction.  The author makes no guarantees, and takes no liability of any kind for use of this code.
-
-If you find a bug or make an improvement, it would be courteous to let the author know, but it is not compulsory.
-*/
-(function (global, factory) {
-  if (typeof define === 'function' && define.amd) {
-    // AMD. Register as an anonymous module.
-    define([], factory);
-  } else if (typeof module !== 'undefined' && module.exports){
-    // CommonJS. Define export.
-    module.exports = factory();
-  } else {
-    // Browser globals
-    global.tv4 = factory();
-  }
-}(this, function () {
-
-// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys?redirectlocale=en-US&redirectslug=JavaScript%2FReference%2FGlobal_Objects%2FObject%2Fkeys
-if (!Object.keys) {
-	Object.keys = (function () {
-		var hasOwnProperty = Object.prototype.hasOwnProperty,
-			hasDontEnumBug = !({toString: null}).propertyIsEnumerable('toString'),
-			dontEnums = [
-				'toString',
-				'toLocaleString',
-				'valueOf',
-				'hasOwnProperty',
-				'isPrototypeOf',
-				'propertyIsEnumerable',
-				'constructor'
-			],
-			dontEnumsLength = dontEnums.length;
-
-		return function (obj) {
-			if (typeof obj !== 'object' && typeof obj !== 'function' || obj === null) {
-				throw new TypeError('Object.keys called on non-object');
-			}
-
-			var result = [];
-
-			for (var prop in obj) {
-				if (hasOwnProperty.call(obj, prop)) {
-					result.push(prop);
-				}
-			}
-
-			if (hasDontEnumBug) {
-				for (var i=0; i < dontEnumsLength; i++) {
-					if (hasOwnProperty.call(obj, dontEnums[i])) {
-						result.push(dontEnums[i]);
-					}
-				}
-			}
-			return result;
-		};
-	})();
-}
-// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/create
-if (!Object.create) {
-	Object.create = (function(){
-		function F(){}
-
-		return function(o){
-			if (arguments.length !== 1) {
-				throw new Error('Object.create implementation only accepts one parameter.');
-			}
-			F.prototype = o;
-			return new F();
-		};
-	})();
-}
-// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/isArray?redirectlocale=en-US&redirectslug=JavaScript%2FReference%2FGlobal_Objects%2FArray%2FisArray
-if(!Array.isArray) {
-	Array.isArray = function (vArg) {
-		return Object.prototype.toString.call(vArg) === "[object Array]";
-	};
-}
-// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/indexOf?redirectlocale=en-US&redirectslug=JavaScript%2FReference%2FGlobal_Objects%2FArray%2FindexOf
-if (!Array.prototype.indexOf) {
-	Array.prototype.indexOf = function (searchElement /*, fromIndex */ ) {
-		if (this === null) {
-			throw new TypeError();
-		}
-		var t = Object(this);
-		var len = t.length >>> 0;
-
-		if (len === 0) {
-			return -1;
-		}
-		var n = 0;
-		if (arguments.length > 1) {
-			n = Number(arguments[1]);
-			if (n !== n) { // shortcut for verifying if it's NaN
-				n = 0;
-			} else if (n !== 0 && n !== Infinity && n !== -Infinity) {
-				n = (n > 0 || -1) * Math.floor(Math.abs(n));
-			}
-		}
-		if (n >= len) {
-			return -1;
-		}
-		var k = n >= 0 ? n : Math.max(len - Math.abs(n), 0);
-		for (; k < len; k++) {
-			if (k in t && t[k] === searchElement) {
-				return k;
-			}
-		}
-		return -1;
-	};
-}
-
-// Grungey Object.isFrozen hack
-if (!Object.isFrozen) {
-	Object.isFrozen = function (obj) {
-		var key = "tv4_test_frozen_key";
-		while (obj.hasOwnProperty(key)) {
-			key += Math.random();
-		}
-		try {
-			obj[key] = true;
-			delete obj[key];
-			return false;
-		} catch (e) {
-			return true;
-		}
-	};
-}
-// Based on: https://github.com/geraintluff/uri-templates, but with all the de-substitution stuff removed
-
-var uriTemplateGlobalModifiers = {
-	"+": true,
-	"#": true,
-	".": true,
-	"/": true,
-	";": true,
-	"?": true,
-	"&": true
-};
-var uriTemplateSuffices = {
-	"*": true
-};
-
-function notReallyPercentEncode(string) {
-	return encodeURI(string).replace(/%25[0-9][0-9]/g, function (doubleEncoded) {
-		return "%" + doubleEncoded.substring(3);
-	});
-}
-
-function uriTemplateSubstitution(spec) {
-	var modifier = "";
-	if (uriTemplateGlobalModifiers[spec.charAt(0)]) {
-		modifier = spec.charAt(0);
-		spec = spec.substring(1);
-	}
-	var separator = "";
-	var prefix = "";
-	var shouldEscape = true;
-	var showVariables = false;
-	var trimEmptyString = false;
-	if (modifier === '+') {
-		shouldEscape = false;
-	} else if (modifier === ".") {
-		prefix = ".";
-		separator = ".";
-	} else if (modifier === "/") {
-		prefix = "/";
-		separator = "/";
-	} else if (modifier === '#') {
-		prefix = "#";
-		shouldEscape = false;
-	} else if (modifier === ';') {
-		prefix = ";";
-		separator = ";";
-		showVariables = true;
-		trimEmptyString = true;
-	} else if (modifier === '?') {
-		prefix = "?";
-		separator = "&";
-		showVariables = true;
-	} else if (modifier === '&') {
-		prefix = "&";
-		separator = "&";
-		showVariables = true;
-	}
-
-	var varNames = [];
-	var varList = spec.split(",");
-	var varSpecs = [];
-	var varSpecMap = {};
-	for (var i = 0; i < varList.length; i++) {
-		var varName = varList[i];
-		var truncate = null;
-		if (varName.indexOf(":") !== -1) {
-			var parts = varName.split(":");
-			varName = parts[0];
-			truncate = parseInt(parts[1], 10);
-		}
-		var suffices = {};
-		while (uriTemplateSuffices[varName.charAt(varName.length - 1)]) {
-			suffices[varName.charAt(varName.length - 1)] = true;
-			varName = varName.substring(0, varName.length - 1);
-		}
-		var varSpec = {
-			truncate: truncate,
-			name: varName,
-			suffices: suffices
-		};
-		varSpecs.push(varSpec);
-		varSpecMap[varName] = varSpec;
-		varNames.push(varName);
-	}
-	var subFunction = function (valueFunction) {
-		var result = "";
-		var startIndex = 0;
-		for (var i = 0; i < varSpecs.length; i++) {
-			var varSpec = varSpecs[i];
-			var value = valueFunction(varSpec.name);
-			if (value === null || value === undefined || (Array.isArray(value) && value.length === 0) || (typeof value === 'object' && Object.keys(value).length === 0)) {
-				startIndex++;
-				continue;
-			}
-			if (i === startIndex) {
-				result += prefix;
-			} else {
-				result += (separator || ",");
-			}
-			if (Array.isArray(value)) {
-				if (showVariables) {
-					result += varSpec.name + "=";
-				}
-				for (var j = 0; j < value.length; j++) {
-					if (j > 0) {
-						result += varSpec.suffices['*'] ? (separator || ",") : ",";
-						if (varSpec.suffices['*'] && showVariables) {
-							result += varSpec.name + "=";
-						}
-					}
-					result += shouldEscape ? encodeURIComponent(value[j]).replace(/!/g, "%21") : notReallyPercentEncode(value[j]);
-				}
-			} else if (typeof value === "object") {
-				if (showVariables && !varSpec.suffices['*']) {
-					result += varSpec.name + "=";
-				}
-				var first = true;
-				for (var key in value) {
-					if (!first) {
-						result += varSpec.suffices['*'] ? (separator || ",") : ",";
-					}
-					first = false;
-					result += shouldEscape ? encodeURIComponent(key).replace(/!/g, "%21") : notReallyPercentEncode(key);
-					result += varSpec.suffices['*'] ? '=' : ",";
-					result += shouldEscape ? encodeURIComponent(value[key]).replace(/!/g, "%21") : notReallyPercentEncode(value[key]);
-				}
-			} else {
-				if (showVariables) {
-					result += varSpec.name;
-					if (!trimEmptyString || value !== "") {
-						result += "=";
-					}
-				}
-				if (varSpec.truncate != null) {
-					value = value.substring(0, varSpec.truncate);
-				}
-				result += shouldEscape ? encodeURIComponent(value).replace(/!/g, "%21"): notReallyPercentEncode(value);
-			}
-		}
-		return result;
-	};
-	subFunction.varNames = varNames;
-	return {
-		prefix: prefix,
-		substitution: subFunction
-	};
-}
-
-function UriTemplate(template) {
-	if (!(this instanceof UriTemplate)) {
-		return new UriTemplate(template);
-	}
-	var parts = template.split("{");
-	var textParts = [parts.shift()];
-	var prefixes = [];
-	var substitutions = [];
-	var varNames = [];
-	while (parts.length > 0) {
-		var part = parts.shift();
-		var spec = part.split("}")[0];
-		var remainder = part.substring(spec.length + 1);
-		var funcs = uriTemplateSubstitution(spec);
-		substitutions.push(funcs.substitution);
-		prefixes.push(funcs.prefix);
-		textParts.push(remainder);
-		varNames = varNames.concat(funcs.substitution.varNames);
-	}
-	this.fill = function (valueFunction) {
-		var result = textParts[0];
-		for (var i = 0; i < substitutions.length; i++) {
-			var substitution = substitutions[i];
-			result += substitution(valueFunction);
-			result += textParts[i + 1];
-		}
-		return result;
-	};
-	this.varNames = varNames;
-	this.template = template;
-}
-UriTemplate.prototype = {
-	toString: function () {
-		return this.template;
-	},
-	fillFromObject: function (obj) {
-		return this.fill(function (varName) {
-			return obj[varName];
-		});
-	}
-};
-var ValidatorContext = function ValidatorContext(parent, collectMultiple, errorMessages, checkRecursive, trackUnknownProperties) {
-	this.missing = [];
-	this.missingMap = {};
-	this.formatValidators = parent ? Object.create(parent.formatValidators) : {};
-	this.schemas = parent ? Object.create(parent.schemas) : {};
-	this.collectMultiple = collectMultiple;
-	this.errors = [];
-	this.handleError = collectMultiple ? this.collectError : this.returnError;
-	if (checkRecursive) {
-		this.checkRecursive = true;
-		this.scanned = [];
-		this.scannedFrozen = [];
-		this.scannedFrozenSchemas = [];
-		this.scannedFrozenValidationErrors = [];
-		this.validatedSchemasKey = 'tv4_validation_id';
-		this.validationErrorsKey = 'tv4_validation_errors_id';
-	}
-	if (trackUnknownProperties) {
-		this.trackUnknownProperties = true;
-		this.knownPropertyPaths = {};
-		this.unknownPropertyPaths = {};
-	}
-	this.errorMessages = errorMessages;
-	this.definedKeywords = {};
-	if (parent) {
-		for (var key in parent.definedKeywords) {
-			this.definedKeywords[key] = parent.definedKeywords[key].slice(0);
-		}
-	}
-};
-ValidatorContext.prototype.defineKeyword = function (keyword, keywordFunction) {
-	this.definedKeywords[keyword] = this.definedKeywords[keyword] || [];
-	this.definedKeywords[keyword].push(keywordFunction);
-};
-ValidatorContext.prototype.createError = function (code, messageParams, dataPath, schemaPath, subErrors) {
-	var messageTemplate = this.errorMessages[code] || ErrorMessagesDefault[code];
-	if (typeof messageTemplate !== 'string') {
-		return new ValidationError(code, "Unknown error code " + code + ": " + JSON.stringify(messageParams), messageParams, dataPath, schemaPath, subErrors);
-	}
-	// Adapted from Crockford's supplant()
-	var message = messageTemplate.replace(/\{([^{}]*)\}/g, function (whole, varName) {
-		var subValue = messageParams[varName];
-		return typeof subValue === 'string' || typeof subValue === 'number' ? subValue : whole;
-	});
-	return new ValidationError(code, message, messageParams, dataPath, schemaPath, subErrors);
-};
-ValidatorContext.prototype.returnError = function (error) {
-	return error;
-};
-ValidatorContext.prototype.collectError = function (error) {
-	if (error) {
-		this.errors.push(error);
-	}
-	return null;
-};
-ValidatorContext.prototype.prefixErrors = function (startIndex, dataPath, schemaPath) {
-	for (var i = startIndex; i < this.errors.length; i++) {
-		this.errors[i] = this.errors[i].prefixWith(dataPath, schemaPath);
-	}
-	return this;
-};
-ValidatorContext.prototype.banUnknownProperties = function () {
-	for (var unknownPath in this.unknownPropertyPaths) {
-		var error = this.createError(ErrorCodes.UNKNOWN_PROPERTY, {path: unknownPath}, unknownPath, "");
-		var result = this.handleError(error);
-		if (result) {
-			return result;
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.addFormat = function (format, validator) {
-	if (typeof format === 'object') {
-		for (var key in format) {
-			this.addFormat(key, format[key]);
-		}
-		return this;
-	}
-	this.formatValidators[format] = validator;
-};
-ValidatorContext.prototype.resolveRefs = function (schema, urlHistory) {
-	if (schema['$ref'] !== undefined) {
-		urlHistory = urlHistory || {};
-		if (urlHistory[schema['$ref']]) {
-			return this.createError(ErrorCodes.CIRCULAR_REFERENCE, {urls: Object.keys(urlHistory).join(', ')}, '', '');
-		}
-		urlHistory[schema['$ref']] = true;
-		schema = this.getSchema(schema['$ref'], urlHistory);
-	}
-	return schema;
-};
-ValidatorContext.prototype.getSchema = function (url, urlHistory) {
-	var schema;
-	if (this.schemas[url] !== undefined) {
-		schema = this.schemas[url];
-		return this.resolveRefs(schema, urlHistory);
-	}
-	var baseUrl = url;
-	var fragment = "";
-	if (url.indexOf('#') !== -1) {
-		fragment = url.substring(url.indexOf("#") + 1);
-		baseUrl = url.substring(0, url.indexOf("#"));
-	}
-	if (typeof this.schemas[baseUrl] === 'object') {
-		schema = this.schemas[baseUrl];
-		var pointerPath = decodeURIComponent(fragment);
-		if (pointerPath === "") {
-			return this.resolveRefs(schema, urlHistory);
-		} else if (pointerPath.charAt(0) !== "/") {
-			return undefined;
-		}
-		var parts = pointerPath.split("/").slice(1);
-		for (var i = 0; i < parts.length; i++) {
-			var component = parts[i].replace(/~1/g, "/").replace(/~0/g, "~");
-			if (schema[component] === undefined) {
-				schema = undefined;
-				break;
-			}
-			schema = schema[component];
-		}
-		if (schema !== undefined) {
-			return this.resolveRefs(schema, urlHistory);
-		}
-	}
-	if (this.missing[baseUrl] === undefined) {
-		this.missing.push(baseUrl);
-		this.missing[baseUrl] = baseUrl;
-		this.missingMap[baseUrl] = baseUrl;
-	}
-};
-ValidatorContext.prototype.searchSchemas = function (schema, url) {
-	if (Array.isArray(schema)) {
-		for (var i = 0; i < schema.length; i++) {
-			this.searchSchemas(schema[i], url);
-		}
-	} else if (schema && typeof schema === "object") {
-		if (typeof schema.id === "string") {
-			if (isTrustedUrl(url, schema.id)) {
-				if (this.schemas[schema.id] === undefined) {
-					this.schemas[schema.id] = schema;
-				}
-			}
-		}
-		for (var key in schema) {
-			if (key !== "enum") {
-				if (typeof schema[key] === "object") {
-					this.searchSchemas(schema[key], url);
-				} else if (key === "$ref") {
-					var uri = getDocumentUri(schema[key]);
-					if (uri && this.schemas[uri] === undefined && this.missingMap[uri] === undefined) {
-						this.missingMap[uri] = uri;
-					}
-				}
-			}
-		}
-	}
-};
-ValidatorContext.prototype.addSchema = function (url, schema) {
-	//overload
-	if (typeof url !== 'string' || typeof schema === 'undefined') {
-		if (typeof url === 'object' && typeof url.id === 'string') {
-			schema = url;
-			url = schema.id;
-		}
-		else {
-			return;
-		}
-	}
-	if (url === getDocumentUri(url) + "#") {
-		// Remove empty fragment
-		url = getDocumentUri(url);
-	}
-	this.schemas[url] = schema;
-	delete this.missingMap[url];
-	normSchema(schema, url);
-	this.searchSchemas(schema, url);
-};
-
-ValidatorContext.prototype.getSchemaMap = function () {
-	var map = {};
-	for (var key in this.schemas) {
-		map[key] = this.schemas[key];
-	}
-	return map;
-};
-
-ValidatorContext.prototype.getSchemaUris = function (filterRegExp) {
-	var list = [];
-	for (var key in this.schemas) {
-		if (!filterRegExp || filterRegExp.test(key)) {
-			list.push(key);
-		}
-	}
-	return list;
-};
-
-ValidatorContext.prototype.getMissingUris = function (filterRegExp) {
-	var list = [];
-	for (var key in this.missingMap) {
-		if (!filterRegExp || filterRegExp.test(key)) {
-			list.push(key);
-		}
-	}
-	return list;
-};
-
-ValidatorContext.prototype.dropSchemas = function () {
-	this.schemas = {};
-	this.reset();
-};
-ValidatorContext.prototype.reset = function () {
-	this.missing = [];
-	this.missingMap = {};
-	this.errors = [];
-};
-
-ValidatorContext.prototype.validateAll = function (data, schema, dataPathParts, schemaPathParts, dataPointerPath) {
-	var topLevel;
-	schema = this.resolveRefs(schema);
-	if (!schema) {
-		return null;
-	} else if (schema instanceof ValidationError) {
-		this.errors.push(schema);
-		return schema;
-	}
-
-	var startErrorCount = this.errors.length;
-	var frozenIndex, scannedFrozenSchemaIndex = null, scannedSchemasIndex = null;
-	if (this.checkRecursive && data && typeof data === 'object') {
-		topLevel = !this.scanned.length;
-		if (data[this.validatedSchemasKey]) {
-			var schemaIndex = data[this.validatedSchemasKey].indexOf(schema);
-			if (schemaIndex !== -1) {
-				this.errors = this.errors.concat(data[this.validationErrorsKey][schemaIndex]);
-				return null;
-			}
-		}
-		if (Object.isFrozen(data)) {
-			frozenIndex = this.scannedFrozen.indexOf(data);
-			if (frozenIndex !== -1) {
-				var frozenSchemaIndex = this.scannedFrozenSchemas[frozenIndex].indexOf(schema);
-				if (frozenSchemaIndex !== -1) {
-					this.errors = this.errors.concat(this.scannedFrozenValidationErrors[frozenIndex][frozenSchemaIndex]);
-					return null;
-				}
-			}
-		}
-		this.scanned.push(data);
-		if (Object.isFrozen(data)) {
-			if (frozenIndex === -1) {
-				frozenIndex = this.scannedFrozen.length;
-				this.scannedFrozen.push(data);
-				this.scannedFrozenSchemas.push([]);
-			}
-			scannedFrozenSchemaIndex = this.scannedFrozenSchemas[frozenIndex].length;
-			this.scannedFrozenSchemas[frozenIndex][scannedFrozenSchemaIndex] = schema;
-			this.scannedFrozenValidationErrors[frozenIndex][scannedFrozenSchemaIndex] = [];
-		} else {
-			if (!data[this.validatedSchemasKey]) {
-				try {
-					Object.defineProperty(data, this.validatedSchemasKey, {
-						value: [],
-						configurable: true
-					});
-					Object.defineProperty(data, this.validationErrorsKey, {
-						value: [],
-						configurable: true
-					});
-				} catch (e) {
-					//IE 7/8 workaround
-					data[this.validatedSchemasKey] = [];
-					data[this.validationErrorsKey] = [];
-				}
-			}
-			scannedSchemasIndex = data[this.validatedSchemasKey].length;
-			data[this.validatedSchemasKey][scannedSchemasIndex] = schema;
-			data[this.validationErrorsKey][scannedSchemasIndex] = [];
-		}
-	}
-
-	var errorCount = this.errors.length;
-	var error = this.validateBasic(data, schema, dataPointerPath)
-		|| this.validateNumeric(data, schema, dataPointerPath)
-		|| this.validateString(data, schema, dataPointerPath)
-		|| this.validateArray(data, schema, dataPointerPath)
-		|| this.validateObject(data, schema, dataPointerPath)
-		|| this.validateCombinations(data, schema, dataPointerPath)
-		|| this.validateHypermedia(data, schema, dataPointerPath)
-		|| this.validateFormat(data, schema, dataPointerPath)
-		|| this.validateDefinedKeywords(data, schema, dataPointerPath)
-		|| null;
-
-	if (topLevel) {
-		while (this.scanned.length) {
-			var item = this.scanned.pop();
-			delete item[this.validatedSchemasKey];
-		}
-		this.scannedFrozen = [];
-		this.scannedFrozenSchemas = [];
-	}
-
-	if (error || errorCount !== this.errors.length) {
-		while ((dataPathParts && dataPathParts.length) || (schemaPathParts && schemaPathParts.length)) {
-			var dataPart = (dataPathParts && dataPathParts.length) ? "" + dataPathParts.pop() : null;
-			var schemaPart = (schemaPathParts && schemaPathParts.length) ? "" + schemaPathParts.pop() : null;
-			if (error) {
-				error = error.prefixWith(dataPart, schemaPart);
-			}
-			this.prefixErrors(errorCount, dataPart, schemaPart);
-		}
-	}
-
-	if (scannedFrozenSchemaIndex !== null) {
-		this.scannedFrozenValidationErrors[frozenIndex][scannedFrozenSchemaIndex] = this.errors.slice(startErrorCount);
-	} else if (scannedSchemasIndex !== null) {
-		data[this.validationErrorsKey][scannedSchemasIndex] = this.errors.slice(startErrorCount);
-	}
-
-	return this.handleError(error);
-};
-ValidatorContext.prototype.validateFormat = function (data, schema) {
-	if (typeof schema.format !== 'string' || !this.formatValidators[schema.format]) {
-		return null;
-	}
-	var errorMessage = this.formatValidators[schema.format].call(null, data, schema);
-	if (typeof errorMessage === 'string' || typeof errorMessage === 'number') {
-		return this.createError(ErrorCodes.FORMAT_CUSTOM, {message: errorMessage}).prefixWith(null, "format");
-	} else if (errorMessage && typeof errorMessage === 'object') {
-		return this.createError(ErrorCodes.FORMAT_CUSTOM, {message: errorMessage.message || "?"}, errorMessage.dataPath || null, errorMessage.schemaPath || "/format");
-	}
-	return null;
-};
-ValidatorContext.prototype.validateDefinedKeywords = function (data, schema) {
-	for (var key in this.definedKeywords) {
-		if (typeof schema[key] === 'undefined') {
-			continue;
-		}
-		var validationFunctions = this.definedKeywords[key];
-		for (var i = 0; i < validationFunctions.length; i++) {
-			var func = validationFunctions[i];
-			var result = func(data, schema[key], schema);
-			if (typeof result === 'string' || typeof result === 'number') {
-				return this.createError(ErrorCodes.KEYWORD_CUSTOM, {key: key, message: result}).prefixWith(null, "format");
-			} else if (result && typeof result === 'object') {
-				var code = result.code || ErrorCodes.KEYWORD_CUSTOM;
-				if (typeof code === 'string') {
-					if (!ErrorCodes[code]) {
-						throw new Error('Undefined error code (use defineError): ' + code);
-					}
-					code = ErrorCodes[code];
-				}
-				var messageParams = (typeof result.message === 'object') ? result.message : {key: key, message: result.message || "?"};
-				var schemaPath = result.schemaPath ||( "/" + key.replace(/~/g, '~0').replace(/\//g, '~1'));
-				return this.createError(code, messageParams, result.dataPath || null, schemaPath);
-			}
-		}
-	}
-	return null;
-};
-
-function recursiveCompare(A, B) {
-	if (A === B) {
-		return true;
-	}
-	if (typeof A === "object" && typeof B === "object") {
-		if (Array.isArray(A) !== Array.isArray(B)) {
-			return false;
-		} else if (Array.isArray(A)) {
-			if (A.length !== B.length) {
-				return false;
-			}
-			for (var i = 0; i < A.length; i++) {
-				if (!recursiveCompare(A[i], B[i])) {
-					return false;
-				}
-			}
-		} else {
-			var key;
-			for (key in A) {
-				if (B[key] === undefined && A[key] !== undefined) {
-					return false;
-				}
-			}
-			for (key in B) {
-				if (A[key] === undefined && B[key] !== undefined) {
-					return false;
-				}
-			}
-			for (key in A) {
-				if (!recursiveCompare(A[key], B[key])) {
-					return false;
-				}
-			}
-		}
-		return true;
-	}
-	return false;
-}
-
-ValidatorContext.prototype.validateBasic = function validateBasic(data, schema, dataPointerPath) {
-	var error;
-	if (error = this.validateType(data, schema, dataPointerPath)) {
-		return error.prefixWith(null, "type");
-	}
-	if (error = this.validateEnum(data, schema, dataPointerPath)) {
-		return error.prefixWith(null, "type");
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateType = function validateType(data, schema) {
-	if (schema.type === undefined) {
-		return null;
-	}
-	var dataType = typeof data;
-	if (data === null) {
-		dataType = "null";
-	} else if (Array.isArray(data)) {
-		dataType = "array";
-	}
-	var allowedTypes = schema.type;
-	if (typeof allowedTypes !== "object") {
-		allowedTypes = [allowedTypes];
-	}
-
-	for (var i = 0; i < allowedTypes.length; i++) {
-		var type = allowedTypes[i];
-		if (type === dataType || (type === "integer" && dataType === "number" && (data % 1 === 0))) {
-			return null;
-		}
-	}
-	return this.createError(ErrorCodes.INVALID_TYPE, {type: dataType, expected: allowedTypes.join("/")});
-};
-
-ValidatorContext.prototype.validateEnum = function validateEnum(data, schema) {
-	if (schema["enum"] === undefined) {
-		return null;
-	}
-	for (var i = 0; i < schema["enum"].length; i++) {
-		var enumVal = schema["enum"][i];
-		if (recursiveCompare(data, enumVal)) {
-			return null;
-		}
-	}
-	return this.createError(ErrorCodes.ENUM_MISMATCH, {value: (typeof JSON !== 'undefined') ? JSON.stringify(data) : data});
-};
-
-ValidatorContext.prototype.validateNumeric = function validateNumeric(data, schema, dataPointerPath) {
-	return this.validateMultipleOf(data, schema, dataPointerPath)
-		|| this.validateMinMax(data, schema, dataPointerPath)
-		|| this.validateNaN(data, schema, dataPointerPath)
-		|| null;
-};
-
-var CLOSE_ENOUGH_LOW = Math.pow(2, -51);
-var CLOSE_ENOUGH_HIGH = 1 - CLOSE_ENOUGH_LOW;
-ValidatorContext.prototype.validateMultipleOf = function validateMultipleOf(data, schema) {
-	var multipleOf = schema.multipleOf || schema.divisibleBy;
-	if (multipleOf === undefined) {
-		return null;
-	}
-	if (typeof data === "number") {
-		var remainder = (data/multipleOf)%1;
-		if (remainder >= CLOSE_ENOUGH_LOW && remainder < CLOSE_ENOUGH_HIGH) {
-			return this.createError(ErrorCodes.NUMBER_MULTIPLE_OF, {value: data, multipleOf: multipleOf});
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateMinMax = function validateMinMax(data, schema) {
-	if (typeof data !== "number") {
-		return null;
-	}
-	if (schema.minimum !== undefined) {
-		if (data < schema.minimum) {
-			return this.createError(ErrorCodes.NUMBER_MINIMUM, {value: data, minimum: schema.minimum}).prefixWith(null, "minimum");
-		}
-		if (schema.exclusiveMinimum && data === schema.minimum) {
-			return this.createError(ErrorCodes.NUMBER_MINIMUM_EXCLUSIVE, {value: data, minimum: schema.minimum}).prefixWith(null, "exclusiveMinimum");
-		}
-	}
-	if (schema.maximum !== undefined) {
-		if (data > schema.maximum) {
-			return this.createError(ErrorCodes.NUMBER_MAXIMUM, {value: data, maximum: schema.maximum}).prefixWith(null, "maximum");
-		}
-		if (schema.exclusiveMaximum && data === schema.maximum) {
-			return this.createError(ErrorCodes.NUMBER_MAXIMUM_EXCLUSIVE, {value: data, maximum: schema.maximum}).prefixWith(null, "exclusiveMaximum");
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateNaN = function validateNaN(data) {
-	if (typeof data !== "number") {
-		return null;
-	}
-	if (isNaN(data) === true || data === Infinity || data === -Infinity) {
-		return this.createError(ErrorCodes.NUMBER_NOT_A_NUMBER, {value: data}).prefixWith(null, "type");
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateString = function validateString(data, schema, dataPointerPath) {
-	return this.validateStringLength(data, schema, dataPointerPath)
-		|| this.validateStringPattern(data, schema, dataPointerPath)
-		|| null;
-};
-
-ValidatorContext.prototype.validateStringLength = function validateStringLength(data, schema) {
-	if (typeof data !== "string") {
-		return null;
-	}
-	if (schema.minLength !== undefined) {
-		if (data.length < schema.minLength) {
-			return this.createError(ErrorCodes.STRING_LENGTH_SHORT, {length: data.length, minimum: schema.minLength}).prefixWith(null, "minLength");
-		}
-	}
-	if (schema.maxLength !== undefined) {
-		if (data.length > schema.maxLength) {
-			return this.createError(ErrorCodes.STRING_LENGTH_LONG, {length: data.length, maximum: schema.maxLength}).prefixWith(null, "maxLength");
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateStringPattern = function validateStringPattern(data, schema) {
-	if (typeof data !== "string" || schema.pattern === undefined) {
-		return null;
-	}
-	var regexp = new RegExp(schema.pattern);
-	if (!regexp.test(data)) {
-		return this.createError(ErrorCodes.STRING_PATTERN, {pattern: schema.pattern}).prefixWith(null, "pattern");
-	}
-	return null;
-};
-ValidatorContext.prototype.validateArray = function validateArray(data, schema, dataPointerPath) {
-	if (!Array.isArray(data)) {
-		return null;
-	}
-	return this.validateArrayLength(data, schema, dataPointerPath)
-		|| this.validateArrayUniqueItems(data, schema, dataPointerPath)
-		|| this.validateArrayItems(data, schema, dataPointerPath)
-		|| null;
-};
-
-ValidatorContext.prototype.validateArrayLength = function validateArrayLength(data, schema) {
-	var error;
-	if (schema.minItems !== undefined) {
-		if (data.length < schema.minItems) {
-			error = (this.createError(ErrorCodes.ARRAY_LENGTH_SHORT, {length: data.length, minimum: schema.minItems})).prefixWith(null, "minItems");
-			if (this.handleError(error)) {
-				return error;
-			}
-		}
-	}
-	if (schema.maxItems !== undefined) {
-		if (data.length > schema.maxItems) {
-			error = (this.createError(ErrorCodes.ARRAY_LENGTH_LONG, {length: data.length, maximum: schema.maxItems})).prefixWith(null, "maxItems");
-			if (this.handleError(error)) {
-				return error;
-			}
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateArrayUniqueItems = function validateArrayUniqueItems(data, schema) {
-	if (schema.uniqueItems) {
-		for (var i = 0; i < data.length; i++) {
-			for (var j = i + 1; j < data.length; j++) {
-				if (recursiveCompare(data[i], data[j])) {
-					var error = (this.createError(ErrorCodes.ARRAY_UNIQUE, {match1: i, match2: j})).prefixWith(null, "uniqueItems");
-					if (this.handleError(error)) {
-						return error;
-					}
-				}
-			}
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateArrayItems = function validateArrayItems(data, schema, dataPointerPath) {
-	if (schema.items === undefined) {
-		return null;
-	}
-	var error, i;
-	if (Array.isArray(schema.items)) {
-		for (i = 0; i < data.length; i++) {
-			if (i < schema.items.length) {
-				if (error = this.validateAll(data[i], schema.items[i], [i], ["items", i], dataPointerPath + "/" + i)) {
-					return error;
-				}
-			} else if (schema.additionalItems !== undefined) {
-				if (typeof schema.additionalItems === "boolean") {
-					if (!schema.additionalItems) {
-						error = (this.createError(ErrorCodes.ARRAY_ADDITIONAL_ITEMS, {})).prefixWith("" + i, "additionalItems");
-						if (this.handleError(error)) {
-							return error;
-						}
-					}
-				} else if (error = this.validateAll(data[i], schema.additionalItems, [i], ["additionalItems"], dataPointerPath + "/" + i)) {
-					return error;
-				}
-			}
-		}
-	} else {
-		for (i = 0; i < data.length; i++) {
-			if (error = this.validateAll(data[i], schema.items, [i], ["items"], dataPointerPath + "/" + i)) {
-				return error;
-			}
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateObject = function validateObject(data, schema, dataPointerPath) {
-	if (typeof data !== "object" || data === null || Array.isArray(data)) {
-		return null;
-	}
-	return this.validateObjectMinMaxProperties(data, schema, dataPointerPath)
-		|| this.validateObjectRequiredProperties(data, schema, dataPointerPath)
-		|| this.validateObjectProperties(data, schema, dataPointerPath)
-		|| this.validateObjectDependencies(data, schema, dataPointerPath)
-		|| null;
-};
-
-ValidatorContext.prototype.validateObjectMinMaxProperties = function validateObjectMinMaxProperties(data, schema) {
-	var keys = Object.keys(data);
-	var error;
-	if (schema.minProperties !== undefined) {
-		if (keys.length < schema.minProperties) {
-			error = this.createError(ErrorCodes.OBJECT_PROPERTIES_MINIMUM, {propertyCount: keys.length, minimum: schema.minProperties}).prefixWith(null, "minProperties");
-			if (this.handleError(error)) {
-				return error;
-			}
-		}
-	}
-	if (schema.maxProperties !== undefined) {
-		if (keys.length > schema.maxProperties) {
-			error = this.createError(ErrorCodes.OBJECT_PROPERTIES_MAXIMUM, {propertyCount: keys.length, maximum: schema.maxProperties}).prefixWith(null, "maxProperties");
-			if (this.handleError(error)) {
-				return error;
-			}
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateObjectRequiredProperties = function validateObjectRequiredProperties(data, schema) {
-	if (schema.required !== undefined) {
-		for (var i = 0; i < schema.required.length; i++) {
-			var key = schema.required[i];
-			if (data[key] === undefined) {
-				var error = this.createError(ErrorCodes.OBJECT_REQUIRED, {key: key}).prefixWith(null, "" + i).prefixWith(null, "required");
-				if (this.handleError(error)) {
-					return error;
-				}
-			}
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateObjectProperties = function validateObjectProperties(data, schema, dataPointerPath) {
-	var error;
-	for (var key in data) {
-		var keyPointerPath = dataPointerPath + "/" + key.replace(/~/g, '~0').replace(/\//g, '~1');
-		var foundMatch = false;
-		if (schema.properties !== undefined && schema.properties[key] !== undefined) {
-			foundMatch = true;
-			if (error = this.validateAll(data[key], schema.properties[key], [key], ["properties", key], keyPointerPath)) {
-				return error;
-			}
-		}
-		if (schema.patternProperties !== undefined) {
-			for (var patternKey in schema.patternProperties) {
-				var regexp = new RegExp(patternKey);
-				if (regexp.test(key)) {
-					foundMatch = true;
-					if (error = this.validateAll(data[key], schema.patternProperties[patternKey], [key], ["patternProperties", patternKey], keyPointerPath)) {
-						return error;
-					}
-				}
-			}
-		}
-		if (!foundMatch) {
-			if (schema.additionalProperties !== undefined) {
-				if (this.trackUnknownProperties) {
-					this.knownPropertyPaths[keyPointerPath] = true;
-					delete this.unknownPropertyPaths[keyPointerPath];
-				}
-				if (typeof schema.additionalProperties === "boolean") {
-					if (!schema.additionalProperties) {
-						error = this.createError(ErrorCodes.OBJECT_ADDITIONAL_PROPERTIES, {}).prefixWith(key, "additionalProperties");
-						if (this.handleError(error)) {
-							return error;
-						}
-					}
-				} else {
-					if (error = this.validateAll(data[key], schema.additionalProperties, [key], ["additionalProperties"], keyPointerPath)) {
-						return error;
-					}
-				}
-			} else if (this.trackUnknownProperties && !this.knownPropertyPaths[keyPointerPath]) {
-				this.unknownPropertyPaths[keyPointerPath] = true;
-			}
-		} else if (this.trackUnknownProperties) {
-			this.knownPropertyPaths[keyPointerPath] = true;
-			delete this.unknownPropertyPaths[keyPointerPath];
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateObjectDependencies = function validateObjectDependencies(data, schema, dataPointerPath) {
-	var error;
-	if (schema.dependencies !== undefined) {
-		for (var depKey in schema.dependencies) {
-			if (data[depKey] !== undefined) {
-				var dep = schema.dependencies[depKey];
-				if (typeof dep === "string") {
-					if (data[dep] === undefined) {
-						error = this.createError(ErrorCodes.OBJECT_DEPENDENCY_KEY, {key: depKey, missing: dep}).prefixWith(null, depKey).prefixWith(null, "dependencies");
-						if (this.handleError(error)) {
-							return error;
-						}
-					}
-				} else if (Array.isArray(dep)) {
-					for (var i = 0; i < dep.length; i++) {
-						var requiredKey = dep[i];
-						if (data[requiredKey] === undefined) {
-							error = this.createError(ErrorCodes.OBJECT_DEPENDENCY_KEY, {key: depKey, missing: requiredKey}).prefixWith(null, "" + i).prefixWith(null, depKey).prefixWith(null, "dependencies");
-							if (this.handleError(error)) {
-								return error;
-							}
-						}
-					}
-				} else {
-					if (error = this.validateAll(data, dep, [], ["dependencies", depKey], dataPointerPath)) {
-						return error;
-					}
-				}
-			}
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateCombinations = function validateCombinations(data, schema, dataPointerPath) {
-	return this.validateAllOf(data, schema, dataPointerPath)
-		|| this.validateAnyOf(data, schema, dataPointerPath)
-		|| this.validateOneOf(data, schema, dataPointerPath)
-		|| this.validateNot(data, schema, dataPointerPath)
-		|| null;
-};
-
-ValidatorContext.prototype.validateAllOf = function validateAllOf(data, schema, dataPointerPath) {
-	if (schema.allOf === undefined) {
-		return null;
-	}
-	var error;
-	for (var i = 0; i < schema.allOf.length; i++) {
-		var subSchema = schema.allOf[i];
-		if (error = this.validateAll(data, subSchema, [], ["allOf", i], dataPointerPath)) {
-			return error;
-		}
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateAnyOf = function validateAnyOf(data, schema, dataPointerPath) {
-	if (schema.anyOf === undefined) {
-		return null;
-	}
-	var errors = [];
-	var startErrorCount = this.errors.length;
-	var oldUnknownPropertyPaths, oldKnownPropertyPaths;
-	if (this.trackUnknownProperties) {
-		oldUnknownPropertyPaths = this.unknownPropertyPaths;
-		oldKnownPropertyPaths = this.knownPropertyPaths;
-	}
-	var errorAtEnd = true;
-	for (var i = 0; i < schema.anyOf.length; i++) {
-		if (this.trackUnknownProperties) {
-			this.unknownPropertyPaths = {};
-			this.knownPropertyPaths = {};
-		}
-		var subSchema = schema.anyOf[i];
-
-		var errorCount = this.errors.length;
-		var error = this.validateAll(data, subSchema, [], ["anyOf", i], dataPointerPath);
-
-		if (error === null && errorCount === this.errors.length) {
-			this.errors = this.errors.slice(0, startErrorCount);
-
-			if (this.trackUnknownProperties) {
-				for (var knownKey in this.knownPropertyPaths) {
-					oldKnownPropertyPaths[knownKey] = true;
-					delete oldUnknownPropertyPaths[knownKey];
-				}
-				for (var unknownKey in this.unknownPropertyPaths) {
-					if (!oldKnownPropertyPaths[unknownKey]) {
-						oldUnknownPropertyPaths[unknownKey] = true;
-					}
-				}
-				// We need to continue looping so we catch all the property definitions, but we don't want to return an error
-				errorAtEnd = false;
-				continue;
-			}
-
-			return null;
-		}
-		if (error) {
-			errors.push(error.prefixWith(null, "" + i).prefixWith(null, "anyOf"));
-		}
-	}
-	if (this.trackUnknownProperties) {
-		this.unknownPropertyPaths = oldUnknownPropertyPaths;
-		this.knownPropertyPaths = oldKnownPropertyPaths;
-	}
-	if (errorAtEnd) {
-		errors = errors.concat(this.errors.slice(startErrorCount));
-		this.errors = this.errors.slice(0, startErrorCount);
-		return this.createError(ErrorCodes.ANY_OF_MISSING, {}, "", "/anyOf", errors);
-	}
-};
-
-ValidatorContext.prototype.validateOneOf = function validateOneOf(data, schema, dataPointerPath) {
-	if (schema.oneOf === undefined) {
-		return null;
-	}
-	var validIndex = null;
-	var errors = [];
-	var startErrorCount = this.errors.length;
-	var oldUnknownPropertyPaths, oldKnownPropertyPaths;
-	if (this.trackUnknownProperties) {
-		oldUnknownPropertyPaths = this.unknownPropertyPaths;
-		oldKnownPropertyPaths = this.knownPropertyPaths;
-	}
-	for (var i = 0; i < schema.oneOf.length; i++) {
-		if (this.trackUnknownProperties) {
-			this.unknownPropertyPaths = {};
-			this.knownPropertyPaths = {};
-		}
-		var subSchema = schema.oneOf[i];
-
-		var errorCount = this.errors.length;
-		var error = this.validateAll(data, subSchema, [], ["oneOf", i], dataPointerPath);
-
-		if (error === null && errorCount === this.errors.length) {
-			if (validIndex === null) {
-				validIndex = i;
-			} else {
-				this.errors = this.errors.slice(0, startErrorCount);
-				return this.createError(ErrorCodes.ONE_OF_MULTIPLE, {index1: validIndex, index2: i}, "", "/oneOf");
-			}
-			if (this.trackUnknownProperties) {
-				for (var knownKey in this.knownPropertyPaths) {
-					oldKnownPropertyPaths[knownKey] = true;
-					delete oldUnknownPropertyPaths[knownKey];
-				}
-				for (var unknownKey in this.unknownPropertyPaths) {
-					if (!oldKnownPropertyPaths[unknownKey]) {
-						oldUnknownPropertyPaths[unknownKey] = true;
-					}
-				}
-			}
-		} else if (error) {
-			errors.push(error);
-		}
-	}
-	if (this.trackUnknownProperties) {
-		this.unknownPropertyPaths = oldUnknownPropertyPaths;
-		this.knownPropertyPaths = oldKnownPropertyPaths;
-	}
-	if (validIndex === null) {
-		errors = errors.concat(this.errors.slice(startErrorCount));
-		this.errors = this.errors.slice(0, startErrorCount);
-		return this.createError(ErrorCodes.ONE_OF_MISSING, {}, "", "/oneOf", errors);
-	} else {
-		this.errors = this.errors.slice(0, startErrorCount);
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateNot = function validateNot(data, schema, dataPointerPath) {
-	if (schema.not === undefined) {
-		return null;
-	}
-	var oldErrorCount = this.errors.length;
-	var oldUnknownPropertyPaths, oldKnownPropertyPaths;
-	if (this.trackUnknownProperties) {
-		oldUnknownPropertyPaths = this.unknownPropertyPaths;
-		oldKnownPropertyPaths = this.knownPropertyPaths;
-		this.unknownPropertyPaths = {};
-		this.knownPropertyPaths = {};
-	}
-	var error = this.validateAll(data, schema.not, null, null, dataPointerPath);
-	var notErrors = this.errors.slice(oldErrorCount);
-	this.errors = this.errors.slice(0, oldErrorCount);
-	if (this.trackUnknownProperties) {
-		this.unknownPropertyPaths = oldUnknownPropertyPaths;
-		this.knownPropertyPaths = oldKnownPropertyPaths;
-	}
-	if (error === null && notErrors.length === 0) {
-		return this.createError(ErrorCodes.NOT_PASSED, {}, "", "/not");
-	}
-	return null;
-};
-
-ValidatorContext.prototype.validateHypermedia = function validateCombinations(data, schema, dataPointerPath) {
-	if (!schema.links) {
-		return null;
-	}
-	var error;
-	for (var i = 0; i < schema.links.length; i++) {
-		var ldo = schema.links[i];
-		if (ldo.rel === "describedby") {
-			var template = new UriTemplate(ldo.href);
-			var allPresent = true;
-			for (var j = 0; j < template.varNames.length; j++) {
-				if (!(template.varNames[j] in data)) {
-					allPresent = false;
-					break;
-				}
-			}
-			if (allPresent) {
-				var schemaUrl = template.fillFromObject(data);
-				var subSchema = {"$ref": schemaUrl};
-				if (error = this.validateAll(data, subSchema, [], ["links", i], dataPointerPath)) {
-					return error;
-				}
-			}
-		}
-	}
-};
-
-// parseURI() and resolveUrl() are from https://gist.github.com/1088850
-//   -  released as public domain by author ("Yaffle") - see comments on gist
-
-function parseURI(url) {
-	var m = String(url).replace(/^\s+|\s+$/g, '').match(/^([^:\/?#]+:)?(\/\/(?:[^:@]*(?::[^:@]*)?@)?(([^:\/?#]*)(?::(\d*))?))?([^?#]*)(\?[^#]*)?(#[\s\S]*)?/);
-	// authority = '//' + user + ':' + pass '@' + hostname + ':' port
-	return (m ? {
-		href     : m[0] || '',
-		protocol : m[1] || '',
-		authority: m[2] || '',
-		host     : m[3] || '',
-		hostname : m[4] || '',
-		port     : m[5] || '',
-		pathname : m[6] || '',
-		search   : m[7] || '',
-		hash     : m[8] || ''
-	} : null);
-}
-
-function resolveUrl(base, href) {// RFC 3986
-
-	function removeDotSegments(input) {
-		var output = [];
-		input.replace(/^(\.\.?(\/|$))+/, '')
-			.replace(/\/(\.(\/|$))+/g, '/')
-			.replace(/\/\.\.$/, '/../')
-			.replace(/\/?[^\/]*/g, function (p) {
-				if (p === '/..') {
-					output.pop();
-				} else {
-					output.push(p);
-				}
-		});
-		return output.join('').replace(/^\//, input.charAt(0) === '/' ? '/' : '');
-	}
-
-	href = parseURI(href || '');
-	base = parseURI(base || '');
-
-	return !href || !base ? null : (href.protocol || base.protocol) +
-		(href.protocol || href.authority ? href.authority : base.authority) +
-		removeDotSegments(href.protocol || href.authority || href.pathname.charAt(0) === '/' ? href.pathname : (href.pathname ? ((base.authority && !base.pathname ? '/' : '') + base.pathname.slice(0, base.pathname.lastIndexOf('/') + 1) + href.pathname) : base.pathname)) +
-		(href.protocol || href.authority || href.pathname ? href.search : (href.search || base.search)) +
-		href.hash;
-}
-
-function getDocumentUri(uri) {
-	return uri.split('#')[0];
-}
-function normSchema(schema, baseUri) {
-	if (schema && typeof schema === "object") {
-		if (baseUri === undefined) {
-			baseUri = schema.id;
-		} else if (typeof schema.id === "string") {
-			baseUri = resolveUrl(baseUri, schema.id);
-			schema.id = baseUri;
-		}
-		if (Array.isArray(schema)) {
-			for (var i = 0; i < schema.length; i++) {
-				normSchema(schema[i], baseUri);
-			}
-		} else {
-			if (typeof schema['$ref'] === "string") {
-				schema['$ref'] = resolveUrl(baseUri, schema['$ref']);
-			}
-			for (var key in schema) {
-				if (key !== "enum") {
-					normSchema(schema[key], baseUri);
-				}
-			}
-		}
-	}
-}
-
-var ErrorCodes = {
-	INVALID_TYPE: 0,
-	ENUM_MISMATCH: 1,
-	ANY_OF_MISSING: 10,
-	ONE_OF_MISSING: 11,
-	ONE_OF_MULTIPLE: 12,
-	NOT_PASSED: 13,
-	// Numeric errors
-	NUMBER_MULTIPLE_OF: 100,
-	NUMBER_MINIMUM: 101,
-	NUMBER_MINIMUM_EXCLUSIVE: 102,
-	NUMBER_MAXIMUM: 103,
-	NUMBER_MAXIMUM_EXCLUSIVE: 104,
-	NUMBER_NOT_A_NUMBER: 105,
-	// String errors
-	STRING_LENGTH_SHORT: 200,
-	STRING_LENGTH_LONG: 201,
-	STRING_PATTERN: 202,
-	// Object errors
-	OBJECT_PROPERTIES_MINIMUM: 300,
-	OBJECT_PROPERTIES_MAXIMUM: 301,
-	OBJECT_REQUIRED: 302,
-	OBJECT_ADDITIONAL_PROPERTIES: 303,
-	OBJECT_DEPENDENCY_KEY: 304,
-	// Array errors
-	ARRAY_LENGTH_SHORT: 400,
-	ARRAY_LENGTH_LONG: 401,
-	ARRAY_UNIQUE: 402,
-	ARRAY_ADDITIONAL_ITEMS: 403,
-	// Custom/user-defined errors
-	FORMAT_CUSTOM: 500,
-	KEYWORD_CUSTOM: 501,
-	// Schema structure
-	CIRCULAR_REFERENCE: 600,
-	// Non-standard validation options
-	UNKNOWN_PROPERTY: 1000
-};
-var ErrorCodeLookup = {};
-for (var key in ErrorCodes) {
-	ErrorCodeLookup[ErrorCodes[key]] = key;
-}
-var ErrorMessagesDefault = {
-	INVALID_TYPE: "Invalid type: {type} (expected {expected})",
-	ENUM_MISMATCH: "No enum match for: {value}",
-	ANY_OF_MISSING: "Data does not match any schemas from \"anyOf\"",
-	ONE_OF_MISSING: "Data does not match any schemas from \"oneOf\"",
-	ONE_OF_MULTIPLE: "Data is valid against more than one schema from \"oneOf\": indices {index1} and {index2}",
-	NOT_PASSED: "Data matches schema from \"not\"",
-	// Numeric errors
-	NUMBER_MULTIPLE_OF: "Value {value} is not a multiple of {multipleOf}",
-	NUMBER_MINIMUM: "Value {value} is less than minimum {minimum}",
-	NUMBER_MINIMUM_EXCLUSIVE: "Value {value} is equal to exclusive minimum {minimum}",
-	NUMBER_MAXIMUM: "Value {value} is greater than maximum {maximum}",
-	NUMBER_MAXIMUM_EXCLUSIVE: "Value {value} is equal to exclusive maximum {maximum}",
-	NUMBER_NOT_A_NUMBER: "Value {value} is not a valid number",
-	// String errors
-	STRING_LENGTH_SHORT: "String is too short ({length} chars), minimum {minimum}",
-	STRING_LENGTH_LONG: "String is too long ({length} chars), maximum {maximum}",
-	STRING_PATTERN: "String does not match pattern: {pattern}",
-	// Object errors
-	OBJECT_PROPERTIES_MINIMUM: "Too few properties defined ({propertyCount}), minimum {minimum}",
-	OBJECT_PROPERTIES_MAXIMUM: "Too many properties defined ({propertyCount}), maximum {maximum}",
-	OBJECT_REQUIRED: "Missing required property: {key}",
-	OBJECT_ADDITIONAL_PROPERTIES: "Additional properties not allowed",
-	OBJECT_DEPENDENCY_KEY: "Dependency failed - key must exist: {missing} (due to key: {key})",
-	// Array errors
-	ARRAY_LENGTH_SHORT: "Array is too short ({length}), minimum {minimum}",
-	ARRAY_LENGTH_LONG: "Array is too long ({length}), maximum {maximum}",
-	ARRAY_UNIQUE: "Array items are not unique (indices {match1} and {match2})",
-	ARRAY_ADDITIONAL_ITEMS: "Additional items not allowed",
-	// Format errors
-	FORMAT_CUSTOM: "Format validation failed ({message})",
-	KEYWORD_CUSTOM: "Keyword failed: {key} ({message})",
-	// Schema structure
-	CIRCULAR_REFERENCE: "Circular $refs: {urls}",
-	// Non-standard validation options
-	UNKNOWN_PROPERTY: "Unknown property (not in schema)"
-};
-
-function ValidationError(code, message, params, dataPath, schemaPath, subErrors) {
-	Error.call(this);
-	if (code === undefined) {
-		throw new Error ("No code supplied for error: "+ message);
-	}
-	this.message = message;
-	this.params = params;
-	this.code = code;
-	this.dataPath = dataPath || "";
-	this.schemaPath = schemaPath || "";
-	this.subErrors = subErrors || null;
-
-	var err = new Error(this.message);
-	this.stack = err.stack || err.stacktrace;
-	if (!this.stack) {
-		try {
-			throw err;
-		}
-		catch(err) {
-			this.stack = err.stack || err.stacktrace;
-		}
-	}
-}
-ValidationError.prototype = Object.create(Error.prototype);
-ValidationError.prototype.constructor = ValidationError;
-ValidationError.prototype.name = 'ValidationError';
-
-ValidationError.prototype.prefixWith = function (dataPrefix, schemaPrefix) {
-	if (dataPrefix !== null) {
-		dataPrefix = dataPrefix.replace(/~/g, "~0").replace(/\//g, "~1");
-		this.dataPath = "/" + dataPrefix + this.dataPath;
-	}
-	if (schemaPrefix !== null) {
-		schemaPrefix = schemaPrefix.replace(/~/g, "~0").replace(/\//g, "~1");
-		this.schemaPath = "/" + schemaPrefix + this.schemaPath;
-	}
-	if (this.subErrors !== null) {
-		for (var i = 0; i < this.subErrors.length; i++) {
-			this.subErrors[i].prefixWith(dataPrefix, schemaPrefix);
-		}
-	}
-	return this;
-};
-
-function isTrustedUrl(baseUrl, testUrl) {
-	if(testUrl.substring(0, baseUrl.length) === baseUrl){
-		var remainder = testUrl.substring(baseUrl.length);
-		if ((testUrl.length > 0 && testUrl.charAt(baseUrl.length - 1) === "/")
-			|| remainder.charAt(0) === "#"
-			|| remainder.charAt(0) === "?") {
-			return true;
-		}
-	}
-	return false;
-}
-
-var languages = {};
-function createApi(language) {
-	var globalContext = new ValidatorContext();
-	var currentLanguage = language || 'en';
-	var api = {
-		addFormat: function () {
-			globalContext.addFormat.apply(globalContext, arguments);
-		},
-		language: function (code) {
-			if (!code) {
-				return currentLanguage;
-			}
-			if (!languages[code]) {
-				code = code.split('-')[0]; // fall back to base language
-			}
-			if (languages[code]) {
-				currentLanguage = code;
-				return code; // so you can tell if fall-back has happened
-			}
-			return false;
-		},
-		addLanguage: function (code, messageMap) {
-			var key;
-			for (key in ErrorCodes) {
-				if (messageMap[key] && !messageMap[ErrorCodes[key]]) {
-					messageMap[ErrorCodes[key]] = messageMap[key];
-				}
-			}
-			var rootCode = code.split('-')[0];
-			if (!languages[rootCode]) { // use for base language if not yet defined
-				languages[code] = messageMap;
-				languages[rootCode] = messageMap;
-			} else {
-				languages[code] = Object.create(languages[rootCode]);
-				for (key in messageMap) {
-					if (typeof languages[rootCode][key] === 'undefined') {
-						languages[rootCode][key] = messageMap[key];
-					}
-					languages[code][key] = messageMap[key];
-				}
-			}
-			return this;
-		},
-		freshApi: function (language) {
-			var result = createApi();
-			if (language) {
-				result.language(language);
-			}
-			return result;
-		},
-		validate: function (data, schema, checkRecursive, banUnknownProperties) {
-			var context = new ValidatorContext(globalContext, false, languages[currentLanguage], checkRecursive, banUnknownProperties);
-			if (typeof schema === "string") {
-				schema = {"$ref": schema};
-			}
-			context.addSchema("", schema);
-			var error = context.validateAll(data, schema, null, null, "");
-			if (!error && banUnknownProperties) {
-				error = context.banUnknownProperties();
-			}
-			this.error = error;
-			this.missing = context.missing;
-			this.valid = (error === null);
-			return this.valid;
-		},
-		validateResult: function () {
-			var result = {};
-			this.validate.apply(result, arguments);
-			return result;
-		},
-		validateMultiple: function (data, schema, checkRecursive, banUnknownProperties) {
-			var context = new ValidatorContext(globalContext, true, languages[currentLanguage], checkRecursive, banUnknownProperties);
-			if (typeof schema === "string") {
-				schema = {"$ref": schema};
-			}
-			context.addSchema("", schema);
-			context.validateAll(data, schema, null, null, "");
-			if (banUnknownProperties) {
-				context.banUnknownProperties();
-			}
-			var result = {};
-			result.errors = context.errors;
-			result.missing = context.missing;
-			result.valid = (result.errors.length === 0);
-			return result;
-		},
-		addSchema: function () {
-			return globalContext.addSchema.apply(globalContext, arguments);
-		},
-		getSchema: function () {
-			return globalContext.getSchema.apply(globalContext, arguments);
-		},
-		getSchemaMap: function () {
-			return globalContext.getSchemaMap.apply(globalContext, arguments);
-		},
-		getSchemaUris: function () {
-			return globalContext.getSchemaUris.apply(globalContext, arguments);
-		},
-		getMissingUris: function () {
-			return globalContext.getMissingUris.apply(globalContext, arguments);
-		},
-		dropSchemas: function () {
-			globalContext.dropSchemas.apply(globalContext, arguments);
-		},
-		defineKeyword: function () {
-			globalContext.defineKeyword.apply(globalContext, arguments);
-		},
-		defineError: function (codeName, codeNumber, defaultMessage) {
-			if (typeof codeName !== 'string' || !/^[A-Z]+(_[A-Z]+)*$/.test(codeName)) {
-				throw new Error('Code name must be a string in UPPER_CASE_WITH_UNDERSCORES');
-			}
-			if (typeof codeNumber !== 'number' || codeNumber%1 !== 0 || codeNumber < 10000) {
-				throw new Error('Code number must be an integer > 10000');
-			}
-			if (typeof ErrorCodes[codeName] !== 'undefined') {
-				throw new Error('Error already defined: ' + codeName + ' as ' + ErrorCodes[codeName]);
-			}
-			if (typeof ErrorCodeLookup[codeNumber] !== 'undefined') {
-				throw new Error('Error code already used: ' + ErrorCodeLookup[codeNumber] + ' as ' + codeNumber);
-			}
-			ErrorCodes[codeName] = codeNumber;
-			ErrorCodeLookup[codeNumber] = codeName;
-			ErrorMessagesDefault[codeName] = ErrorMessagesDefault[codeNumber] = defaultMessage;
-			for (var langCode in languages) {
-				var language = languages[langCode];
-				if (language[codeName]) {
-					language[codeNumber] = language[codeNumber] || language[codeName];
-				}
-			}
-		},
-		reset: function () {
-			globalContext.reset();
-			this.error = null;
-			this.missing = [];
-			this.valid = true;
-		},
-		missing: [],
-		error: null,
-		valid: true,
-		normSchema: normSchema,
-		resolveUrl: resolveUrl,
-		getDocumentUri: getDocumentUri,
-		errorCodes: ErrorCodes
-	};
-	return api;
-}
-
-var tv4 = createApi();
-tv4.addLanguage('en-gb', ErrorMessagesDefault);
-
-//legacy property
-tv4.tv4 = tv4;
-
-return tv4; // used by _header.js to globalise.
-
-}));
-});
-
-require.register("geraintluff~tv4@master/lang/de.js", function (exports, module) {
-(function (global) {
-	var lang = {
-		INVALID_TYPE: "Ungültiger Typ: {type} (erwartet wurde: {expected})",
-		ENUM_MISMATCH: "Keine Übereinstimmung mit der Aufzählung (enum) für: {value}",
-		ANY_OF_MISSING: "Daten stimmen nicht überein mit einem der Schemas von \"anyOf\"",
-		ONE_OF_MISSING: "Daten stimmen nicht überein mit einem der Schemas von \"oneOf\"",
-		ONE_OF_MULTIPLE: "Daten sind valid in Bezug auf mehreren Schemas von \"oneOf\": index {index1} und {index2}",
-		NOT_PASSED: "Daten stimmen mit dem \"not\" Schema überein",
-		// Numeric errors
-		NUMBER_MULTIPLE_OF: "Wert {value} ist kein Vielfaches von {multipleOf}",
-		NUMBER_MINIMUM: "Wert {value} ist kleiner als das Minimum {minimum}",
-		NUMBER_MINIMUM_EXCLUSIVE: "Wert {value} ist gleich dem Exklusiven Minimum {minimum}",
-		NUMBER_MAXIMUM: "Wert {value} ist größer als das Maximum {maximum}",
-		NUMBER_MAXIMUM_EXCLUSIVE: "Wert {value} ist gleich dem Exklusiven Maximum {maximum}",
-		// String errors
-		STRING_LENGTH_SHORT: "Zeichenkette zu kurz ({length} chars), minimum {minimum}",
-		STRING_LENGTH_LONG: "Zeichenkette zu lang ({length} chars), maximum {maximum}",
-		STRING_PATTERN: "Zeichenkette entspricht nicht dem Muster: {pattern}",
-		// Object errors
-		OBJECT_PROPERTIES_MINIMUM: "Zu wenige Attribute definiert ({propertyCount}), minimum {minimum}",
-		OBJECT_PROPERTIES_MAXIMUM: "Zu viele Attribute definiert ({propertyCount}), maximum {maximum}",
-		OBJECT_REQUIRED: "Notwendiges Attribut fehlt: {key}",
-		OBJECT_ADDITIONAL_PROPERTIES: "Zusätzliche Attribute nicht erlaubt",
-		OBJECT_DEPENDENCY_KEY: "Abhängigkeit fehlt - Schlüssel nicht vorhanden: {missing} (wegen Schlüssel: {key})",
-		// Array errors
-		ARRAY_LENGTH_SHORT: "Array zu kurz ({length}), minimum {minimum}",
-		ARRAY_LENGTH_LONG: "Array zu lang ({length}), maximum {maximum}",
-		ARRAY_UNIQUE: "Array Einträge nicht eindeutig (Index {match1} und {match2})",
-		ARRAY_ADDITIONAL_ITEMS: "Zusätzliche Einträge nicht erlaubt"
-	};
-
-	if (typeof define === 'function' && define.amd) {
-		// AMD. Register as an anonymous module.
-		define(['../tv4'], function(tv4) {
-			tv4.addLanguage('de', lang);
-			return tv4;
-		});
-	} else if (typeof module !== 'undefined' && module.exports){
-		// CommonJS. Define export.
-		var tv4 = require('geraintluff~tv4@master');
-		tv4.addLanguage('de', lang);
-		module.exports = tv4;
-	} else {
-		// Browser globals
-		global.tv4.addLanguage('de', lang);
-	}
-})(this);
-
-});
-
-require.register("geraintluff~tv4@master/lang/no-nb.js", function (exports, module) {
-(function (global) {
-	var lang = {
-		INVALID_TYPE: "Ugyldig type: {type} (forventet {expected})",
-		ENUM_MISMATCH: "Ingen samsvarende enum verdi for: {value}",
-		ANY_OF_MISSING: "Data samsvarer ikke med noe skjema fra \"anyOf\"",
-		ONE_OF_MISSING: "Data samsvarer ikke med noe skjema fra \"oneOf\"",
-		ONE_OF_MULTIPLE: "Data samsvarer med mer enn ett skjema fra \"oneOf\": indeks {index1} og {index2}",
-		NOT_PASSED: "Data samsvarer med skjema fra \"not\"",
-		// Numeric errors
-		NUMBER_MULTIPLE_OF: "Verdien {value} er ikke et multiplum av {multipleOf}",
-		NUMBER_MINIMUM: "Verdien {value} er mindre enn minsteverdi {minimum}",
-		NUMBER_MINIMUM_EXCLUSIVE: "Verdien {value} er lik eksklusiv minsteverdi {minimum}",
-		NUMBER_MAXIMUM: "Verdien {value} er større enn maksimalverdi {maximum}",
-		NUMBER_MAXIMUM_EXCLUSIVE: "Verdien {value} er lik eksklusiv maksimalverdi {maximum}",
-		NUMBER_NOT_A_NUMBER: "Verdien {value} er ikke et gyldig tall",
-		// String errors
-		STRING_LENGTH_SHORT: "Strengen er for kort ({length} tegn), minst {minimum}",
-		STRING_LENGTH_LONG: "Strengen er for lang ({length} tegn), maksimalt {maximum}",
-		STRING_PATTERN: "Strengen samsvarer ikke med regulært uttrykk: {pattern}",
-		// Object errors
-		OBJECT_PROPERTIES_MINIMUM: "For få variabler definert ({propertyCount}), minst {minimum} er forventet",
-		OBJECT_PROPERTIES_MAXIMUM: "For mange variabler definert ({propertyCount}), makismalt {maximum} er tillatt",
-		OBJECT_REQUIRED: "Mangler obligatorisk variabel: {key}",
-		OBJECT_ADDITIONAL_PROPERTIES: "Tilleggsvariabler er ikke tillatt",
-		OBJECT_DEPENDENCY_KEY: "Variabelen {missing} må være definert (på grunn av følgende variabel: {key})",
-		// Array errors
-		ARRAY_LENGTH_SHORT: "Listen er for kort ({length} elementer), minst {minimum}",
-		ARRAY_LENGTH_LONG: "Listen er for lang ({length} elementer), maksimalt {maximum}",
-		ARRAY_UNIQUE: "Elementene er ikke unike (indeks {match1} og {match2} er like)",
-		ARRAY_ADDITIONAL_ITEMS: "Tillegselementer er ikke tillatt",
-		// Format errors
-		FORMAT_CUSTOM: "Formatteringen stemmer ikke ({message})",
-		KEYWORD_CUSTOM: "Nøkkelen stemmer ikke: {key} ({message})",
-		// Schema structure
-		CIRCULAR_REFERENCE: "Sirkulære referanser ($refs): {urls}",
-		// Non-standard validation options
-		UNKNOWN_PROPERTY: "Ukjent variabel (eksisterer ikke i skjemaet)"
-	};
-	
-	if (typeof define === 'function' && define.amd) {
-		// AMD. Register as an anonymous module.
-		define(['../tv4'], function(tv4) {
-			tv4.addLanguage('no-nb', lang);
-			return tv4;
-		});
-	} else if (typeof module !== 'undefined' && module.exports) {
-		// CommonJS. Define export.
-		var tv4 = require('geraintluff~tv4@master');
-		tv4.addLanguage('no-nb', lang);
-		module.exports = tv4;
-	} else {
-		// Browser globals
-		global.tv4.addLanguage('no-nb', lang);
-	}
-})(this);
-
-});
-
-require.modules["geraintluff-tv4"] = require.modules["geraintluff~tv4@master"];
-require.modules["geraintluff~tv4"] = require.modules["geraintluff~tv4@master"];
-require.modules["tv4"] = require.modules["geraintluff~tv4@master"];
-
-
-require.register("optimuslime~win-schema@master/lib/addSchema.js", function (exports, module) {
-//pull in traverse object for this guy
-var traverse = require('optimuslime~traverse@master');
-var schemaSpec = require('optimuslime~win-schema@master/lib/schemaSpec.js');
-
-
-module.exports = extendAddSchema;
-
-function extendAddSchema(self)
-{
-
-  var pathDelim = self.pathDelimiter;
-
-  var defaultWINAdd = {
-    wid : "string",
-    dbType : "string",
-    parents : {
-      type: "array",
-      items : {
-        type : "string"
-      }
-    }
-  }
-
-  var winTypeRegExp = [];
-  for(var key in defaultWINAdd)
-  {
-    winTypeRegExp.push(key);
-  }
-  self.log("--All WIN keywords: ", winTypeRegExp);
-
-  winTypeRegExp = new RegExp("\\b" + winTypeRegExp.join("\\b|\\b") + "\\b");
-
-  //everything we need to do to add a schema inside
-  //this requires checking if it's properly formatted, pulling references, and moving
-  //around things if it's not formatted but we would like to make it less wordy to make schema
-    self.internalAddSchema = function(type, schemaJSON, options, finished)
-    {
-      if(typeof options == "function")
-      {
-        finished = options;
-        options = {};
-      }
-      else
-        options = options || {};
-
-      if((schemaJSON.type == "array" || schemaJSON.items) && !options.skipWINAdditions)
-      {
-        finished("Array-types for schema cannot have WIN additions. It doesn't make any sense. The object must be an array, but also have a wid property? Failed: " + type);
-        return;
-      }
-
-      //make a clone of the object 
-      schemaJSON = JSON.parse(JSON.stringify(schemaJSON)); 
-
-      //force all types to lower case -- always -- deal with weird validation errors otherwise
-      traverse(schemaJSON).forEach(function(node)
-      {
-          if(this.key == "type" && typeof this.node == "string")
-            this.update(this.node.toLowerCase());
-      })
-
-      //we add or move objects inside the schema to make it conform to expected v4 JSON schema validation
-      appendSchemaInformation(schemaJSON, options);      
-
-      //check our schema for wacky errors!
-      var schemaCheck = checkSchemaErrors(schemaJSON);
-      if(schemaCheck && schemaCheck.errors)
-      {
-        finished("Improper schema format for " + type + " - " + JSON.stringify(schemaCheck));
-        return;
-      }
-
-      if(schemaCheck && schemaCheck.warnings)
-      {
-        self.log("Warnings: ".yellow, schemaCheck.warnings);
-      }
-
-      //save it in our map
-      self.allSchema[type] = schemaJSON;
-
-      if(!schemaJSON.id || schemaJSON.id != type)
-        schemaJSON.id = type;
-
-      if(!schemaJSON['$schema'])
-        schemaJSON['$schema'] = "http://json-schema.org/draft-04/schema#";
-      
-      if(!schemaJSON.type)
-        schemaJSON.type = "object";
-
-      //add the schema to our validator -- this does most heavy lifting for us
-      self.validator.addSchema(schemaJSON);
-
-      //failed to add schema for some reason?
-      if(self.validator.error){
-        finished(self.validator.error);
-      }
-      else
-      {
-        //no error from validator, store the references inside
-        storeSchemaReferences(type, schemaJSON);
-
-        //when we create it 
-        setSchemaProperties(type, schemaJSON, options);
-        //take what you want, and give nothing back! The pirates way for us!
-        finished();
-      }
-    }
-    function setSchemaProperties(type, schemaJSON, options)
-    {
-      var props = {};
-      if(options.skipWINAdditions)
-        props.isWIN = false;
-      else
-        props.isWIN = true;
-      
-      var primePaths = {};
-
-      var tJSON = traverse(schemaJSON);
-
-      var references = self.requiredReferences[type];
-      var refMap = {};
-
-      for(var refType in references)
-      {
-          var locations = references[refType];
-          for(var l =0; l < locations.length; l++)
-          {
-              var refInfo = locations[l];
-              refMap[refInfo.typePath] = refInfo;
-          }
-      }
-      // self.log("Refmap: ", refMap);
-      function isRef(path){ return refMap[path.join(pathDelim)]}
-
-      tJSON.forEach(function(node)
-      {
-        if(this.isRoot || this.isLeaf)
-          return;
-
-        //kill the future investigation of references
-        if(isRef(this.path))
-            this.keys = [];
-
-          //if we are a known keyword -- that's not properties or items, we skip you!
-        if(this.key != "properties" && this.key != "items" && self.keywordRegExp.test(this.key))
-          this.keys = [];
-
-        //we also ignore this as well
-        if(winTypeRegExp.test(this.key))
-          this.keys = [];
-
-        // self.log("Isref?".green, isRef(this.path));
-
-        // if(this.keys.length)
-          // self.log("Potential PrimePath: ".green, this.key, " node: ", this.node);
-
-        if(this.keys.length){
-
-          var objPath = self.stripObjectPath(this.path);
-
-          //we're an array, or we're inisde an array!
-          if(this.node.type == "array" || this.node.items || this.key =="items")
-          {
-              //we are an array, we'll pull the array info -- and then we close off this array -- forever!
-              //remember, primary paths are all about the objects, and the FIRST layer of array
-              primePaths[objPath] = {type: "array"};
-              this.keys = [];
-          }
-          else
-          {
-            //you must be a properties object
-            //either you have a type, or you're an object
-            primePaths[objPath] = {type: this.node.type || "object"};
-          }
-        }
-        
-
-      })
-
-      // self.log("\n\tprimaryPaths: ".cyan, primePaths);
-
-      self.primaryPaths[type] = primePaths;
-      self.typeProperties[type] = props;
-
-    }
-    function hasNonKeywords(obj)
-    {
-      var hasNonKeywords = false;
-        
-      if(Array.isArray(obj))
-      {
-        //loop through object to grab keys
-        for(var i=0; i < obj.length; i++)
-        {
-          var iKey = obj[i];
-          //check if you're not a keyword
-          if(!self.keywordRegExp.test(iKey))
-          {
-            //just one is enough
-            hasNonKeywords = true;
-            break;
-          }
-        }
-      }
-      else
-      {
-        for(var iKey in obj)
-        {
-          if(!self.keywordRegExp.test(iKey))
-          {
-            //just one is enough
-            hasNonKeywords = true;
-            break;
-          }
-        }
-      }
-
-      return hasNonKeywords;           
-    }
-
-  //handle everything associated with adding a schema
-    function checkSchemaErrors(schemaJSON)
-    {
-
-      //check against the proper schema definition
-      // var vck = self.validator.validateMultiple(schemaJSON, schemaSpec, true);
-       var valCheck = self.validateFunction.apply(self.validator, [schemaJSON, schemaSpec, true]);
-       
-       //grab all possible errors
-       var checkErrors = {length: 0};
-       var checkWarnings = {length: 0};
-
-       //if we're valid -- which we almost certainly are -- just keep going
-       if(!valCheck.valid)
-       {
-          //let it be known -- this is a weird error
-          self.log("Invalid from v4 JSON schema perspective: ", valCheck[errorKey]);
-
-          checkErrors["root"] = valCheck[errorKey];
-          checkErrors.length++;
-
-          //not valid, throw it back
-          return checkErrors;
-       }
-
-
-       //make sure we have some properties -- otherwise there is literally no validation/
-       //during the move process, this is overridden, but it's a good check nonetheless
-       if(!schemaJSON.properties && !schemaJSON.items)
-       {
-          checkErrors["root"] = "No properties/items defined at root. Schema has no validation without properties!";
-          checkErrors.length++;
-       }
-
-       //going to need to traverse our schema object
-       var tJSON = traverse(schemaJSON);
-
-       tJSON.forEach(function(node)
-       {
-        //skip the root please
-        if(this.isRoot || this.path.join(pathDelim).indexOf('required') != -1)
-          return;
-
-        //this should be a warning
-        if(!self.requireByDefault && !this.isLeaf && !this.node.required)
-        {
-            //if you don't have a required object, then you're gonna have a bad time
-            //this is a warning
-            checkWarnings[this.path.join(pathDelim)] = "warning: if you disable requireByDefault and don't put require arrays, validation will ignore those properties.";
-            checkWarnings.length++;
-
-        }
-        if(this.key == "properties" && this.node.properties)
-        {
-           checkErrors[this.path.join(pathDelim)] = "Properties inside properties is meaningless.";
-           checkErrors.length++;
-        }
-        if(this.key == "type" && typeof this.node != "string")
-        {
-            //for whatever reason, there is a type defined, but not a string in it's place? Waa?
-            checkErrors[this.path.join(pathDelim)] = "Types must be string";
-            checkErrors.length++;
-        }
-        if(this.key == "type" && !self.typeRegExp.test(this.node.toLowerCase()))
-        {
-           checkErrors[this.path.join(pathDelim)] = "Types must be one of " + self.validTypes + " not " + this.node;
-           checkErrors.length++;
-        }
-        if(this.isLeaf)
-        {
-          //if you don't have a type, and there is no ref object
-          if(!this.parent.node.properties && (this.key != "type" && this.key != "$ref") && !this.parent.node.type && !this.parent.node["$ref"])
-          {
-              checkErrors[this.path.join(pathDelim)] = "Object doesn't have any properties, a valid type, or a reference, therefore it is invalid in the WIN spec.";
-              checkErrors.length++;
-          }
-        }
-        //not a leaf, you don't have a reference
-        if(!self.allowAnyObjects && !this.isLeaf && !this.node["$ref"] )
-        {
-          //special case for items -- doesn't apply
-          if(this.node.type == "object" && this.key != "items")
-          {
-            //we're going to check if the list of keys to follow have any non keywords
-            //for instance if {type: "object", otherThing: "string"} keys = type, otherThing
-            //if instead it's just {type : "object", required : []}, keys = type, required 
-            //notice that the top has non-keyword keys, and the bottom example does not 
-            //we're looking for the bottom example and rejecting it
-            var bHasNonKeywords = hasNonKeywords(this.keys);
-            
-            //if you ONLY have keywords -- you don't have any other object types
-            //you are a violation of win spec and you allow any object or array to be passed in
-            if(!bHasNonKeywords){
-              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
-              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'object' type with no inner properties";
-              checkErrors.length++;
-            }
-          }
-          else if(this.node.type == "array")
-          {
-            //if you are an array and you have no items -- not allowed!
-            if(!this.node.items){
-              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
-              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no inner items";
-              checkErrors.length++;
-            }
-            else
-            {
-              //if you have a ref -- you're okay for us!
-              var bIemsHaveNonKey = this.node.items["$ref"] || this.node.items["type"] || hasNonKeywords(this.node.items.properties || {});
-               if(!bIemsHaveNonKey){
-                // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
-                checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no non-keyword inner items";
-                checkErrors.length++;
-              }
-            }
-          }
-        
-        }
-        //if you're an array
-        if(this.node.type == "array")
-        {
-          //grab your items
-          var items = this.node.items;
-          if(!items && !self.allowAnyObjects)
-          {
-             checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off for arrays, therefore you cannot simple have an 'array' type with no inner items";
-              checkErrors.length++;
-          }
-          else
-          {
-            items = items || {};
-            //we have items -- we shouldn't have a reference type && other items
-            if(items.properties && items["$ref"])
-            {
-              checkErrors[this.path.join(pathDelim)] = "Array items in WIN cannot have properties AND a reference type. One or the other.";
-              checkErrors.length++;
-            }
-          }
-        }
-
-
-       });
-
-       if(checkErrors.length || checkWarnings.length)
-        return {errors: checkErrors, warnings: checkWarnings};
-      else
-        return null;
-
-    }
-
-    self.stripObjectPath = function(path)
-    {
-      //obj path will be returned
-      var objectPath = [];
-
-      //travere this path, yo
-      traverse(path).forEach(function()
-      {
-        //no routes including properties or items -- made up schema info!
-        if(!this.isRoot && (this.node != "properties" && this.node != "items"))
-          objectPath.push(this.node);
-      });
-
-      return objectPath.join(pathDelim);
-    }
-
-    //storing the references inside of a schema object (if we don't already know them)
-    function parseSchemaReferences(schemaJSON)
-    {
-    	//first we wrap our object with traverse methods
-    	var tJSON = traverse(schemaJSON);
-
-    	var references = {};
-
-    	self.log('--  Parsing refs -- ');
-      // self.log(schemaJSON);
-    	//now we step through pulling the path whenever we hit a reference
-    	tJSON.forEach(function(node)
-    	{
-    		//we are at a reference point
-        //we make an exception for arrays -- since the items object can hold references!
-        if(this.node["$ref"] && (this.key == "items" || !self.keywordRegExp.test(this.key)))
-    		// if(this.isLeaf && this.key == "$ref")
-    		{
-    			//todo logic for when it's "oneOf" or other valid JSON schema things
-    			var fullPath = this.path.join(pathDelim);//this.path.slice(0, this.path.length-1).join(pathDelim);
-    			var referenceType = this.node["$ref"];
-
-          
-          var objectPath = self.stripObjectPath(this.path);
-
-          //pull the "items" piece out of the path -- otherwise, if you're just a normal object -- it's the same as fullPath
-          var typePath = this.key == "items" ? this.path.slice(0, this.path.length-1).join(pathDelim) : fullPath;
-
-
-
-    			if(references[fullPath])
-    			{
-    				throw new Error("Not yet supported reference behavior, arrays of references: ", fullPath);
-    			}
-
-          //assuming type is defined here!
-    			references[fullPath] = {schemaType: referenceType, schemaPath: fullPath, objectPath: objectPath, typePath: typePath};
-          self.log(self.log.testing, 'Reference detected @ '+fullPath+': ', references[fullPath]);
-    		}
-    	});
-
-    	self.log("-- Full refs -- ", references);
-
-    	return references;
-    } 
-
-    function storeSchemaReferences(type, schemaJSON)
-    {
-    	self.schemaReferences[type] = parseSchemaReferences(schemaJSON);
-
-      self.requiredReferences[type] = {};
-
-      for(var path in self.schemaReferences[type])
-      {
-        var schemaInfo = self.schemaReferences[type][path];
-        var refType = schemaInfo.schemaType;
-        var aReqRefs = self.requiredReferences[type][refType];
-
-        if(!aReqRefs)
-        {
-          aReqRefs = [];
-          self.requiredReferences[type][refType] = aReqRefs;
-        }
-        //value is the reference type 
-        aReqRefs.push(schemaInfo);
-      }
-
-
-      //now we know all the references, their paths, and what type needs what references
-    }
-    function moveAllToProperties(tJSON)
-    {
-       tJSON.forEach(function(node)
-       {          
-
-          // self.log("Investigating: ", this.key, " @ ", this.path.join(pathDelim), " all keys: ", this.keys);
-          //for all non-arrays and non-leafs and non-properties object -- move to a properties object if not a keyword!
-          if(!this.isLeaf && this.key != "properties" && !Array.isArray(this.node))
-          {
-
-            //movement dpeends on what type you are -- arrays move to items, while objects move to properties
-            var moveLocation = "properties";
-            if(this.node.type == "array")
-              moveLocation = "items";
-
-            // self.log('Movement: ', this.key, " @ ", this.path.join(pathDelim) + " : ", this.node);
-            // self.log("Move to : ".green + moveLocation);
-
-
-            // self.log("Move innitiated: ".magenta, this.node);
-            // self.log('Original node: '.green, node);
-            var empty = true;
-            var move = {};
-            //any key that isn't one of our keywords is getting moved inside!
-            for(var key in this.node){
-                if(!self.keywordRegExp.test(key)){
-                  // self.log('Moving key @ ', this.path.join(pathDelim) || "Is root? ", " : ", this.key || this.isRoot); 
-                  move[key] = this.node[key];
-                  empty = false;
-                }
-            }
-
-            //don't move nothing derrr
-            if(!empty)
-            {
-               // self.log('Moving: '.red, move);
-
-              //create proeprties if it doesn't exist
-              node[moveLocation] = node[moveLocation] || {};
-
-              for(var key in move)
-              {
-                //move to its new home
-                node[moveLocation][key] = move[key];
-                //remove from previous location 
-                delete node[key];
-              }
-
-              //make sure to update, thank you
-              this.update(node);
-
-              //we need to investigate the newly created properties/items object -- to continue down the rabbit hole
-              this.keys.push(moveLocation);
-            }
-           
-
-          }
-       });
-    }
-    function addWINTypes(schemaJSON, options)
-    {
-      for(var key in defaultWINAdd)
-      {
-        var winAdd = defaultWINAdd[key];
-        
-        //if it's just a shallow string -- add it directly
-        if(typeof winAdd == "string")
-          schemaJSON[key] = winAdd;
-        else //otehrwise, we should clone the larger object
-          schemaJSON[key] = traverse(defaultWINAdd[key]).clone();
-      }
-    }
-    function appendSchemaInformation(schemaJSON, options)
-    {
-      //add in default win types
-      if(!options.skipWINAdditions)
-        addWINTypes(schemaJSON, options);
-
-      //build a traverse object for navigating and updating the object
-      var tJSON = traverse(schemaJSON);
-
-      //step one convert string to types
-      tJSON.forEach(function(node)
-      {
-        var needsUpdate = false;
-          //if you are a leaf -- and you only dictate the type e.g. string/number/array etc -- we'll convert you to proper type
-        if(this.isLeaf && typeof this.node == "string")
-        {
-          //if the key is not a known keyword, and the node string is a proper type
-          if(!self.keywordRegExp.test(this.key) && self.typeRegExp.test(node.toLowerCase()))
-          {
-            //node is a type! make sure it's a lower case type being stored.
-            node = {type: node.toLowerCase()};
-            needsUpdate = true;
-          }
-        }
-
-        if(this.node)
-        {
-
-         if(this.node.items && !this.node.type)
-          {
-            this.node.type = "array";
-            needsUpdate = true;
-          }
-
-          //rewrite {type : "array", "$ref" : "something"} => {type : "array", items : {"$ref" : "something"}}
-          if(this.node.type == "array" && this.node["$ref"])
-          {
-            this.node.items = this.node.items || {};
-            this.node.items["$ref"] = this.node["$ref"];
-            delete this.node["$ref"];
-            needsUpdate = true;
-          }
-
-        }
-
-
-        if(needsUpdate)
-          this.update(node);
-
-      })
-
-      //update location of objects to match validation issues
-      //json schema won't validate outside of properties object -- which some people may forget
-      //this is basically a correct method
-      moveAllToProperties(tJSON);
-
-      // var util = require('util');
-      // self.log("Post move schema: ".cyan, util.inspect(schemaJSON, false, 10));
-
-      tJSON.forEach(function(node)
-      {
-        var needsUpdate = false;
-
-
-       
-          //if we aren't a leaf object, we are a full object
-          //therefore, we must have required (since we're in default mode)
-          //since we cover the properties object inside, we don't need to go indepth for that key too!
-        if(self.requireByDefault && !this.isLeaf && !this.node.required && !Array.isArray(this.node))
-        {
-          //the require needs to be filled iwth all the properties of this thing, except
-          //for anything defined by v4 json schema -- so we run a regex to reject those keys
-          var reqProps = [];
-
-          // self.log("Not leaf: ".magenta, this.node, " Key : ", this.key);
-
-          //do not do this if you're in the properties object
-          //since the prop keys belong to the PARENT not the node
-          if(this.key != "properties")
-          {
-            for(var key in this.node){
-              if(!self.keywordRegExp.test(key)){
-              // self.log('Key added: '.red, key);
-
-                reqProps.push(key);
-              }
-            }
-            // self.log('Post not props: '.blue, reqProps);
-          }
-          
-          //for every object, you can also have a properties object too
-          //required applies to the subling property object as well
-          //so we loop through the properties object as well
-         for(var key in this.node.properties){
-            if(!self.keywordRegExp.test(key)){
-              reqProps.push(key);
-            }
-          }
-
-          if(reqProps.length)
-          {
-            node.required = reqProps;
-            needsUpdate = true;
-          }        
-        }
-
-     
-       if(needsUpdate){
-          // self.log('New required - : ', this.node, ' : ', reqProps);
-          this.update(node);
-        }
-      });
-
-
-
-        // self.log("--post traverse -- ", schemaJSON);
-
-    }
-
-	return self;
-}
-
-
-
-
-});
-
-require.register("optimuslime~win-schema@master/lib/schemaSpec.js", function (exports, module) {
-module.exports = 
-{
-    "id": "http://json-schema.org/draft-04/schema#",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "description": "Core schema meta-schema",
-    "definitions": {
-        "schemaArray": {
-            "type": "array",
-            "minItems": 1,
-            "items": { "$ref": "#" }
-        },
-        "positiveInteger": {
-            "type": "integer",
-            "minimum": 0
-        },
-        "positiveIntegerDefault0": {
-            "allOf": [ { "$ref": "#/definitions/positiveInteger" }, { "default": 0 } ]
-        },
-        "simpleTypes": {
-            "enum": [ "array", "boolean", "integer", "null", "number", "object", "string" ]
-        },
-        "stringArray": {
-            "type": "array",
-            "items": { "type": "string" },
-            "minItems": 1,
-            "uniqueItems": true
-        }
-    },
-    "type": "object",
-    "properties": {
-        "id": {
-            "type": "string",
-            "format": "uri"
-        },
-        "$schema": {
-            "type": "string",
-            "format": "uri"
-        },
-        "title": {
-            "type": "string"
-        },
-        "description": {
-            "type": "string"
-        },
-        "default": {},
-        "multipleOf": {
-            "type": "number",
-            "minimum": 0,
-            "exclusiveMinimum": true
-        },
-        "maximum": {
-            "type": "number"
-        },
-        "exclusiveMaximum": {
-            "type": "boolean",
-            "default": false
-        },
-        "minimum": {
-            "type": "number"
-        },
-        "exclusiveMinimum": {
-            "type": "boolean",
-            "default": false
-        },
-        "maxLength": { "$ref": "#/definitions/positiveInteger" },
-        "minLength": { "$ref": "#/definitions/positiveIntegerDefault0" },
-        "pattern": {
-            "type": "string",
-            "format": "regex"
-        },
-        "additionalItems": {
-            "anyOf": [
-                { "type": "boolean" },
-                { "$ref": "#" }
-            ],
-            "default": {}
-        },
-        "items": {
-            "anyOf": [
-                { "$ref": "#" },
-                { "$ref": "#/definitions/schemaArray" }
-            ],
-            "default": {}
-        },
-        "maxItems": { "$ref": "#/definitions/positiveInteger" },
-        "minItems": { "$ref": "#/definitions/positiveIntegerDefault0" },
-        "uniqueItems": {
-            "type": "boolean",
-            "default": false
-        },
-        "maxProperties": { "$ref": "#/definitions/positiveInteger" },
-        "minProperties": { "$ref": "#/definitions/positiveIntegerDefault0" },
-        "required": { "$ref": "#/definitions/stringArray" },
-        "additionalProperties": {
-            "anyOf": [
-                { "type": "boolean" },
-                { "$ref": "#" }
-            ],
-            "default": {}
-        },
-        "definitions": {
-            "type": "object",
-            "additionalProperties": { "$ref": "#" },
-            "default": {}
-        },
-        "properties": {
-            "type": "object",
-            "additionalProperties": { "$ref": "#" },
-            "default": {}
-        },
-        "patternProperties": {
-            "type": "object",
-            "additionalProperties": { "$ref": "#" },
-            "default": {}
-        },
-        "dependencies": {
-            "type": "object",
-            "additionalProperties": {
-                "anyOf": [
-                    { "$ref": "#" },
-                    { "$ref": "#/definitions/stringArray" }
-                ]
-            }
-        },
-        "enum": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true
-        },
-        "type": {
-            "anyOf": [
-                { "$ref": "#/definitions/simpleTypes" },
-                {
-                    "type": "array",
-                    "items": { "$ref": "#/definitions/simpleTypes" },
-                    "minItems": 1,
-                    "uniqueItems": true
-                }
-            ]
-        },
-        "allOf": { "$ref": "#/definitions/schemaArray" },
-        "anyOf": { "$ref": "#/definitions/schemaArray" },
-        "oneOf": { "$ref": "#/definitions/schemaArray" },
-        "not": { "$ref": "#" }
-    },
-    "dependencies": {
-        "exclusiveMaximum": [ "maximum" ],
-        "exclusiveMinimum": [ "minimum" ]
-    },
-    "default": {}
-}
-});
-
-require.register("optimuslime~win-schema@master", function (exports, module) {
-//pull in the validating workhorse -- checks schema and stuff
-var tv4 = require('geraintluff~tv4@master');
-//pull in traverse object from the repo please!
-var traverse = require('optimuslime~traverse@master');
-
-//pull in the object that knows what all schema look like!
-var schemaSpec = require('optimuslime~win-schema@master/lib/schemaSpec.js');
-
-var addSchemaSupport = require('optimuslime~win-schema@master/lib/addSchema.js');
-
-module.exports = winSchema;
-
-function winSchema(winback, globalConfiguration, localConfiguration)
-{
-	//load up basic win-module stufffff
-	var self = this;
-  self.winFunction = "schema";
-  self.log = winback.getLogger(self);
-
-  //limited only by global -- or we could limit our own verboseness
-  self.log.logLevel = localConfiguration.logLevel || self.log.normal;
-
-  self.pathDelimiter = "///";
-
-  //this creates "internalAddSchema" to handle the weighty add logic
-  //need to thoroughly test and modify incoming schema to align with 
-  //logical schema setup for WIN
-  addSchemaSupport(self, globalConfiguration, localConfiguration);
-
-	self.validator = tv4.freshApi();
-
- //set the backbone and our logging function
-  self.bbEmit = winback.getEmitter(self);
-
-  //config setups
-
-  self.multipleErrors = (localConfiguration.multipleErrors == true || localConfiguration.multipleErrors == "true");
-  //by default you can have unknown keys -- the server environment may desire to change this
-  //if you don't want to be storing extra info
-  //by default, on lockdown -- better that way -- no sneaky stuff
-  self.allowUnknownKeys = localConfiguration.allowUnknownKeys || false;
-
-  //all keys are required by default -- this adds in required objects for everything
-  self.requireByDefault = localConfiguration.requireByDefault || true;
-
-  //do we allow properties with just the type "object" or "array"
-  //this would allow ANY data to be fit in there with no validation checks (other than it is an object or array)
-  //shouldn't allow this because people could slip in all sorts of terrible things without validation
-  self.allowAnyObjects = localConfiguration.allowAnyObjects || false;
-
-  self.eventCallbacks = function()
-  {
-        var callbacks = {};
-
-        //add callbacks to the object-- these are the functions called when the full event is emitted
-        callbacks["schema:validate"] = self.validateData;
-        callbacks["schema:validateMany"] = self.validateDataArray;
-        callbacks["schema:addSchema"] = self.addSchema;
-        callbacks["schema:getSchema"] = self.getSchema;
-        callbacks["schema:getSchemaReferences"] = self.getSchemaReferences;
-        callbacks["schema:getFullSchema"] = self.getFullSchema;
-        callbacks["schema:getSchemaProperties"] = self.getSchemaProperties;
-
-        //these are for deealing with pulling references from a specific object -- it's easier done in this module
-        callbacks["schema:getReferencesAndParents"] = self.getReferencesAndParents;
-        callbacks["schema:replaceParentReferences"] = self.replaceParentReferences;
-
-        //send back our callbacks
-        return callbacks;
-  }
-  self.requiredEvents = function()
-  {
-  	//don't need no one for nuffin'
-  	return [];
-  }
-
-  self.initialize = function(done)
-  {
-  	setTimeout(function()
-  	{
-  		done();
-  	}, 0);
-  }
-
-    //cache all our schema by type
-    self.allSchema = {};
-    self.schemaReferences = {};
-    self.requiredReferences = {};
-    self.fullSchema = {};
-    self.primaryPaths = {};
-    self.typeProperties = {};
-
-    self.validTypes = "\\b" + schemaSpec.definitions.simpleTypes.enum.join('\\b|\\b') + "\\b"; //['object', 'array', 'number', 'string', 'boolean', 'null'].join('|');
-    self.typeRegExp = new RegExp(self.validTypes);
-
-    self.specKeywords = ["\\$ref|\\babcdefg"];
-    for(var key in schemaSpec.properties)
-      self.specKeywords.push(key.replace('$', '\\$'));
-
-    //join using exact phrasing checks
-    self.specKeywords = self.specKeywords.join('\\b|\\b') + "\\b";
-    self.keywordRegExp = new RegExp(self.specKeywords);
-
-    self.log(self.log.testing, "--Specced types: ".green, self.validTypes);
-    self.log(self.log.testing, "--Specced keywords: ".green, self.specKeywords);
-
-    self.validateFunction = (self.multipleErrors ? self.validator.validateMultiple : self.validator.validateResult);
-    self.errorKey = self.multipleErrors ? "errors" : "error";
-
-    function listTypeIssues(type)
-    {
-      if(!self.allSchema[type]){
-        return "Schema type not loaded: " + type;
-      }
-
-      //we have to manually detect missing references -- since the validator is not concerned with such things
-      //FOR WHATEVER REASON
-      var missing = self.validator.getMissingUris();
-      for(var i=0; i < missing.length; i++)
-      {
-        //if we have this type inside our refernces for this object, it means we're missing a ref schema for this type!
-        if(self.requiredReferences[type][missing[i]])
-        {
-          return "Missing at least 1 schema definition: " + missing[i];
-        }
-      }
-    }
-
-    function internalValidate(schema, object)
-    {
-      //validate against what type?
-      var result = self.validateFunction.apply(self.validator, [object, schema, true, !self.allowUnknownKeys]);
-
-       //if it's not an array, make it an array
-      //if it's empty, make it a damn array
-      var errors = result[self.errorKey];
-
-      //if you are multiple errors, then you are a non-undefined array, just return as usual
-      //otherwise, you are an error but not in an array
-      //if errors is undefined then this will deefault to []
-      errors = (errors && !Array.isArray(errors)) ? [errors] : errors || [];
-
-      return {valid : result.valid, errors : errors};
-    }
-    self.validateDataArray = function(type, objects, finished)
-    {
-      var typeIssues = listTypeIssues(type);
-
-      //stop if we have type issues
-      if(typeIssues)
-      {
-        finished(typeIssues);
-        return;
-      }
-      else if(typeof type != "string" || !Array.isArray(objects))
-      {
-        finished("ValidateMany requires type [string], objects [array]");
-        return;
-      }
-
-      var schema = self.validator.getSchema(type);
-      // self.log('validate many against: ', schema);
-
-      var allValid = true;
-      var allErrors = [];
-      for(var i=0; i < objects.length; i++)
-      {
-        var result = internalValidate(schema, objects[i]);
-
-        if(!result.valid){
-          allValid = false;
-          allErrors.push(result.errors);
-        }
-        else //no error? just push empty array!
-          allErrors.push([]);
-      }
-
-      //if we have errors during validation, they'll be passed on thank you!
-      //if you're valid, and there are no errors, then don't send nuffin
-      finished(undefined, allValid, (!allValid ? allErrors : undefined));
-    }
-    self.validateData = function(type, object, finished)
-    {
-      var typeIssues = listTypeIssues(type);
-
-      //stop if we have type issues
-      if(typeIssues)
-      {
-        finished(typeIssues);
-        return;
-      }
-
-      //log object being checked
-      self.log("Validate: ", object);
-
-      //now we need to validate, we definitely have all the refs we need
-      var schema = self.validator.getSchema(type);
-
-      //log what's being validated
-      self.log('validate against: ', schema);
-    	 
-      var result = internalValidate(schema, object);
-
-      //if we have errors during validation, they'll be passed on thank you!
-      //if you're valid, and there are no errors, then don't send nuffin
-      finished(undefined, result.valid, (result.errors.length ? result.errors : undefined));
-    }
-
-    //todo: pull reference objects from schema -- make sure those exist as well?
-   	self.addSchema = function(type, schemaJSON, options, finished)
-   	{
-      //pass args into internal adds
-      return self.internalAddSchema.apply(self, arguments);
-   	}
-
-   	    //todo: pull reference objects from schema -- make sure those exist as well?
-   	self.getSchema = function(typeOrArray, finished)
-   	{   	
-      //did we request one or many?
-      var typeArray = typeOrArray;
-      if(typeof typeOrArray == "string")
-      {
-        //make single type to return
-        typeArray = [typeOrArray];
-      }
-
-      var refArray = [];
-      for(var i=0; i < typeArray.length; i++)
-      {
-        var sType = typeArray[i];
-
-      //failed to get schema for some very odd reason?
-        if(!self.allSchema[sType]){
-          finished("Schema type not loaded: ", sType);
-          return;
-        }
-        //push our reference information as a clone
-        refArray.push(traverse(self.validator.getSchema(sType)).clone());
-        //if you hit an error -send back
-        if(self.validator.error){
-          finished(self.validator.error);
-          return;
-        }
-      }
-
-      //send the schema objects back
-      //send an array regardless of how many requested -- standard behavior
-      finished(undefined, refArray);    
-
-   	}
-
-   	self.getSchemaReferences = function(typeOrArray, finished)
-   	{
-      var typeArray = typeOrArray;
-      if(typeof typeOrArray == "string")
-      {
-        //make single type to return
-        typeArray = [typeOrArray];
-      }
-
-      var refArray = [];
-      for(var i=0; i < typeArray.length; i++)
-      {
-        var sType = typeArray[i];
-
-        if(!self.allSchema[sType]){
-          finished("Schema type not loaded: ", sType);
-          return;
-        }
-        //push our reference information as a clone
-        refArray.push(traverse(self.requiredReferences[sType]).clone());
-      }
-
-  		//send the refernece objects back
-      //if you are a single object, just send the one -- otherwise send an array
-      finished(undefined, refArray); 		
-   	}
-
-    var buildFullSchema = function(type)
-    {
-      var schema = self.validator.getSchema(type);
-      var tSchema = traverse(schema);
-
-      var clone = tSchema.clone();
-      var tClone = traverse(clone);
-      var references = self.schemaReferences[type];
-
-      for(var path in references)
-      {
-        //we get the type of reference
-        var schemaInfo = references[path];
-        var refType = schemaInfo.schemaType;
-
-        //this is recursive behavior -- itwill call buidl full schema if not finished yet
-        var fullRefSchema = internalGetFullSchema(refType);
-
-        if(!fullRefSchema)
-          throw new Error("No schema could be created for: " + refType + ". Please check it's defined.");
-
-        //now we ahve teh full object to replace
-        var tPath = path.split(self.pathDelimiter);
-
-        // self.log(self.log.testing, 'Path to ref: ', tPath, " replacement: ", fullRefSchema);
-
-        //use traverse to set the path object as our full ref object
-        tClone.set(tPath, fullRefSchema);
-      }
-
-      // self.log(self.log.testing, "Returning schema: ", type, " full: ", clone);
-
-      return clone;
-    }
-    var inprogressSchema = {};
-
-    function internalGetFullSchema(type)
-    {
-      if(inprogressSchema[type])
-      {
-          throw new Error("Infinite schema reference loop: " + JSON.stringify(Object.keys(inprogressSchema)));    
-      }
-
-      inprogressSchema[type] = true;
-
-       //if we don't have a full type yet, we build it
-      if(!self.fullSchema[type])
-      {
-        //need to build a full schema object
-        var fSchema = buildFullSchema(type);
-
-        self.fullSchema[type] = fSchema;
-      }
-
-      //mark the in progress as false!
-      delete inprogressSchema[type];
-
-      return self.fullSchema[type];
-    }
-
-    self.getFullSchema = function(typeOrArray, finished)
-    { 
-      var typeArray = typeOrArray;
-      if(typeof typeOrArray == "string")
-      {
-        //make single type to return
-        typeArray = [typeOrArray];
-      }
-
-      var fullArray = [];
-      for(var i=0; i < typeArray.length; i++)
-      {
-        var sType = typeArray[i];
-
-         if(!self.allSchema[sType]){
-          finished("Schema type not loaded: ", sType);
-          return;
-        }
-
-        try
-        {
-          //get the full schema from internal function
-          //throws error if something is wrong
-          var fullSchema = internalGetFullSchema(sType);
-         
-          //pull the full object -- guaranteed to exist -- send a clone
-           fullArray.push(traverse(fullSchema).clone());
-        }
-        catch(e)
-        {
-          //send the error if we have one
-          finished(e);
-          return;
-        }
-      }
-
-      //send the refernece objects back
-      //if you are a single object, just send the one -- otherwise send an array
-      finished(undefined, fullArray);
-    }
-
-    self.getSchemaProperties = function(typeOrArray, finished)
-    {
-       var typeArray = typeOrArray;
-      if(typeof typeOrArray == "string")
-      {
-        //make single type to return
-        typeArray = [typeOrArray];
-      }
-
-      var propArray = [];
-      for(var i=0; i < typeArray.length; i++)
-      {
-        var sType = typeArray[i];
-
-         if(!self.allSchema[sType]){
-          finished("Schema type not loaded: ", sType);
-          return;
-        }
-
-        //get our schema properties
-        propArray.push({type: sType, primaryPaths: traverse(self.primaryPaths[sType]).clone(), properties: traverse(self.typeProperties[sType]).clone()});
-
-      }
-
-
-      //send the refernece objects back
-      //if you are a single object, just send the one -- otherwise send an array
-      finished(undefined, propArray);
-    }
-
-    //we're going to clone the object, then replace all of the reference wids with new an improved parents
-    self.replaceParentReferences = function(type, object, parentMapping, finished)
-    {
-      var tClone = traverse(object).clone();
-
-      traverse(tClone).forEach(function(node)
-      {
-         //if we have a wid object and parents object -- likely we are a tracked reference
-        if(this.node.wid && this.node.parents)
-        {
-          var replaceParents = parentMapping[this.node.wid];
-
-          if(replaceParents)
-          {
-            //straight up replacement therapy yo
-            this.node.parents = replaceParents;
-
-            //then make sure to update and continue onwards!
-            this.update(this.node);
-          }
-        }
-      })
-
-      //we've replaced the innards of the object with a better future!
-      finished(undefined, tClone);
-    }
-
-    self.getReferencesAndParents = function(type, widObjects, finished)
-    {
-
-        //listed by some identifier, then the object, we need to look through the type, and pull references
-        var fSchema = internalGetFullSchema(type);
-        // self.log("Full schema: ", fSchema);
-        if(!fSchema)
-        {
-          finished("Full schema undefined, might be missing a reference type within " + type);
-          return;
-        } 
-        var widToParents = {};
-        var traverseObjects = {};
-
-        for(var wid in widObjects){
-          widToParents[wid] = {};
-          traverseObjects[wid] = traverse(widObjects[wid]);
-        }
-
-        
-        //for every wid object we see, we loop through and pull that 
-        traverse(fSchema).forEach(function(node)
-        {
-          // self.log("Node: ", this.node, "", " key: ", this.key);
-          //if we have a wid object and parents object -- likely we are a tracked reference
-          if(this.node.wid && this.node.parents)
-          {
-            //let's pull these bad boys our of our other objects
-            var pathToObject = self.stripObjectPath(this.path);
-            
-            //if you aren't root, split it up!
-            if(pathToObject != "")
-              pathToObject = pathToObject.split(self.pathDelimiter);
-
-            // self.log("\nKey before :", this.key, " node-p: ", this.parent.node, " path: ", this.path);
-            
-            var isArray = (this.key == "properties" && this.path[this.path.length - 2] == "items");
-            // self.log("Is array? : ", isArray);
-            for(var wid in traverseObjects)
-            {
-
-              var wtp = widToParents[wid];
-              var tob = traverseObjects[wid];
-
-
-              //fetch object from our traverse thing using this path
-              var arrayOrObject = tob.get(pathToObject);
-
-              // self.log("Path to obj: ", pathToObject, " get: ", arrayOrObject);
-
-              //grab wid to parent mappings, always cloning parent arrays
-              if(isArray)
-              {
-                for(var i=0; i < arrayOrObject.length; i++)
-                {
-                  var aobj = arrayOrObject[i];
-                  //map wid objects to parent wids always thank you
-                  wtp[aobj.wid] = aobj.parents.slice(0);
-                }
-              }
-              else
-                wtp[arrayOrObject.wid] = arrayOrObject.parents.slice(0);
-
-              //now we've aded a mapping from the objects wid to the parents for that wid
-
-            }
-          }
-        });
-
-        //we send back the wids of the original widObjects mapped to the wid internal reference && the corresponding parents
-        //so many damn layers -- it gets confusing
-        finished(undefined, widToParents);
-
-    }
-
-
-	return self;
-}
-
-
-
-
-});
-
-require.modules["optimuslime-win-schema"] = require.modules["optimuslime~win-schema@master"];
-require.modules["optimuslime~win-schema"] = require.modules["optimuslime~win-schema@master"];
-require.modules["win-schema"] = require.modules["optimuslime~win-schema@master"];
-
-
-require.register("optimuslime~win-schema@0.0.5-4/lib/addSchema.js", function (exports, module) {
-//pull in traverse object for this guy
-var traverse = require('optimuslime~traverse@master');
-var schemaSpec = require('optimuslime~win-schema@0.0.5-4/lib/schemaSpec.js');
-
-
-module.exports = extendAddSchema;
-
-function extendAddSchema(self)
-{
-
-  var pathDelim = self.pathDelimiter;
-
-  var defaultWINAdd = {
-    wid : "string",
-    dbType : "string",
-    parents : {
-      type: "array",
-      items : {
-        type : "string"
-      }
-    }
-  }
-
-  var winTypeRegExp = [];
-  for(var key in defaultWINAdd)
-  {
-    winTypeRegExp.push(key);
-  }
-  self.log("--All WIN keywords: ", winTypeRegExp);
-
-  winTypeRegExp = new RegExp("\\b" + winTypeRegExp.join("\\b|\\b") + "\\b");
-
-  //everything we need to do to add a schema inside
-  //this requires checking if it's properly formatted, pulling references, and moving
-  //around things if it's not formatted but we would like to make it less wordy to make schema
-    self.internalAddSchema = function(type, schemaJSON, options, finished)
-    {
-      if(typeof options == "function")
-      {
-        finished = options;
-        options = {};
-      }
-      else
-        options = options || {};
-
-      if((schemaJSON.type == "array" || schemaJSON.items) && !options.skipWINAdditions)
-      {
-        finished("Array-types for schema cannot have WIN additions. It doesn't make any sense. The object must be an array, but also have a wid property? Failed: " + type);
-        return;
-      }
-
-      //make a clone of the object 
-      schemaJSON = JSON.parse(JSON.stringify(schemaJSON)); 
-
-      //force all types to lower case -- always -- deal with weird validation errors otherwise
-      traverse(schemaJSON).forEach(function(node)
-      {
-          if(this.key == "type" && typeof this.node == "string")
-            this.update(this.node.toLowerCase());
-      })
-
-      //we add or move objects inside the schema to make it conform to expected v4 JSON schema validation
-      appendSchemaInformation(schemaJSON, options);      
-
-      //check our schema for wacky errors!
-      var schemaCheck = checkSchemaErrors(schemaJSON);
-      if(schemaCheck && schemaCheck.errors)
-      {
-        finished("Improper schema format for " + type + " - " + JSON.stringify(schemaCheck));
-        return;
-      }
-
-      if(schemaCheck && schemaCheck.warnings)
-      {
-        self.log("Warnings: ".yellow, schemaCheck.warnings);
-      }
-
-      //save it in our map
-      self.allSchema[type] = schemaJSON;
-
-      if(!schemaJSON.id || schemaJSON.id != type)
-        schemaJSON.id = type;
-
-      if(!schemaJSON['$schema'])
-        schemaJSON['$schema'] = "http://json-schema.org/draft-04/schema#";
-      
-      if(!schemaJSON.type)
-        schemaJSON.type = "object";
-
-      //add the schema to our validator -- this does most heavy lifting for us
-      self.validator.addSchema(schemaJSON);
-
-      //failed to add schema for some reason?
-      if(self.validator.error){
-        finished(self.validator.error);
-      }
-      else
-      {
-        //no error from validator, store the references inside
-        storeSchemaReferences(type, schemaJSON);
-
-        //when we create it 
-        setSchemaProperties(type, schemaJSON, options);
-        //take what you want, and give nothing back! The pirates way for us!
-        finished();
-      }
-    }
-    function setSchemaProperties(type, schemaJSON, options)
-    {
-      var props = {};
-      if(options.skipWINAdditions)
-        props.isWIN = false;
-      else
-        props.isWIN = true;
-      
-      var primePaths = {};
-
-      var tJSON = traverse(schemaJSON);
-
-      var references = self.requiredReferences[type];
-      var refMap = {};
-
-      for(var refType in references)
-      {
-          var locations = references[refType];
-          for(var l =0; l < locations.length; l++)
-          {
-              var refInfo = locations[l];
-              refMap[refInfo.typePath] = refInfo;
-          }
-      }
-      // self.log("Refmap: ", refMap);
-      function isRef(path){ return refMap[path.join(pathDelim)]}
-
-      tJSON.forEach(function(node)
-      {
-        if(this.isRoot || this.isLeaf)
-          return;
-
-        //kill the future investigation of references
-        if(isRef(this.path))
-            this.keys = [];
-
-          //if we are a known keyword -- that's not properties or items, we skip you!
-        if(this.key != "properties" && this.key != "items" && self.keywordRegExp.test(this.key))
-          this.keys = [];
-
-        //we also ignore this as well
-        if(winTypeRegExp.test(this.key))
-          this.keys = [];
-
-        // self.log("Isref?".green, isRef(this.path));
-
-        // if(this.keys.length)
-          // self.log("Potential PrimePath: ".green, this.key, " node: ", this.node);
-
-        if(this.keys.length){
-
-          var objPath = self.stripObjectPath(this.path);
-
-          //we're an array, or we're inisde an array!
-          if(this.node.type == "array" || this.node.items || this.key =="items")
-          {
-              //we are an array, we'll pull the array info -- and then we close off this array -- forever!
-              //remember, primary paths are all about the objects, and the FIRST layer of array
-              primePaths[objPath] = {type: "array"};
-              this.keys = [];
-          }
-          else
-          {
-            //you must be a properties object
-            //either you have a type, or you're an object
-            primePaths[objPath] = {type: this.node.type || "object"};
-          }
-        }
-        
-
-      })
-
-      // self.log("\n\tprimaryPaths: ".cyan, primePaths);
-
-      self.primaryPaths[type] = primePaths;
-      self.typeProperties[type] = props;
-
-    }
-    function hasNonKeywords(obj)
-    {
-      var hasNonKeywords = false;
-        
-      if(Array.isArray(obj))
-      {
-        //loop through object to grab keys
-        for(var i=0; i < obj.length; i++)
-        {
-          var iKey = obj[i];
-          //check if you're not a keyword
-          if(!self.keywordRegExp.test(iKey))
-          {
-            //just one is enough
-            hasNonKeywords = true;
-            break;
-          }
-        }
-      }
-      else
-      {
-        for(var iKey in obj)
-        {
-          if(!self.keywordRegExp.test(iKey))
-          {
-            //just one is enough
-            hasNonKeywords = true;
-            break;
-          }
-        }
-      }
-
-      return hasNonKeywords;           
-    }
-
-  //handle everything associated with adding a schema
-    function checkSchemaErrors(schemaJSON)
-    {
-
-      //check against the proper schema definition
-      // var vck = self.validator.validateMultiple(schemaJSON, schemaSpec, true);
-       var valCheck = self.validateFunction.apply(self.validator, [schemaJSON, schemaSpec, true]);
-       
-       //grab all possible errors
-       var checkErrors = {length: 0};
-       var checkWarnings = {length: 0};
-
-       //if we're valid -- which we almost certainly are -- just keep going
-       if(!valCheck.valid)
-       {
-          //let it be known -- this is a weird error
-          self.log("Invalid from v4 JSON schema perspective: ", valCheck[errorKey]);
-
-          checkErrors["root"] = valCheck[errorKey];
-          checkErrors.length++;
-
-          //not valid, throw it back
-          return checkErrors;
-       }
-
-
-       //make sure we have some properties -- otherwise there is literally no validation/
-       //during the move process, this is overridden, but it's a good check nonetheless
-       if(!schemaJSON.properties && !schemaJSON.items)
-       {
-          checkErrors["root"] = "No properties/items defined at root. Schema has no validation without properties!";
-          checkErrors.length++;
-       }
-
-       //going to need to traverse our schema object
-       var tJSON = traverse(schemaJSON);
-
-       tJSON.forEach(function(node)
-       {
-        //skip the root please
-        if(this.isRoot || this.path.join(pathDelim).indexOf('required') != -1)
-          return;
-
-        //this should be a warning
-        if(!self.requireByDefault && !this.isLeaf && !this.node.required)
-        {
-            //if you don't have a required object, then you're gonna have a bad time
-            //this is a warning
-            checkWarnings[this.path.join(pathDelim)] = "warning: if you disable requireByDefault and don't put require arrays, validation will ignore those properties.";
-            checkWarnings.length++;
-
-        }
-        if(this.key == "properties" && this.node.properties)
-        {
-           checkErrors[this.path.join(pathDelim)] = "Properties inside properties is meaningless.";
-           checkErrors.length++;
-        }
-        if(this.key == "type" && typeof this.node != "string")
-        {
-            //for whatever reason, there is a type defined, but not a string in it's place? Waa?
-            checkErrors[this.path.join(pathDelim)] = "Types must be string";
-            checkErrors.length++;
-        }
-        if(this.key == "type" && !self.typeRegExp.test(this.node.toLowerCase()))
-        {
-           checkErrors[this.path.join(pathDelim)] = "Types must be one of " + self.validTypes + " not " + this.node;
-           checkErrors.length++;
-        }
-        if(this.isLeaf)
-        {
-          //if you don't have a type, and there is no ref object
-          if(!this.parent.node.properties && (this.key != "type" && this.key != "$ref") && !this.parent.node.type && !this.parent.node["$ref"])
-          {
-              checkErrors[this.path.join(pathDelim)] = "Object doesn't have any properties, a valid type, or a reference, therefore it is invalid in the WIN spec.";
-              checkErrors.length++;
-          }
-        }
-        //not a leaf, you don't have a reference
-        if(!self.allowAnyObjects && !this.isLeaf && !this.node["$ref"] )
-        {
-          //special case for items -- doesn't apply
-          if(this.node.type == "object" && this.key != "items")
-          {
-            //we're going to check if the list of keys to follow have any non keywords
-            //for instance if {type: "object", otherThing: "string"} keys = type, otherThing
-            //if instead it's just {type : "object", required : []}, keys = type, required 
-            //notice that the top has non-keyword keys, and the bottom example does not 
-            //we're looking for the bottom example and rejecting it
-            var bHasNonKeywords = hasNonKeywords(this.keys);
-            
-            //if you ONLY have keywords -- you don't have any other object types
-            //you are a violation of win spec and you allow any object or array to be passed in
-            if(!bHasNonKeywords){
-              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
-              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'object' type with no inner properties";
-              checkErrors.length++;
-            }
-          }
-          else if(this.node.type == "array")
-          {
-            //if you are an array and you have no items -- not allowed!
-            if(!this.node.items){
-              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
-              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no inner items";
-              checkErrors.length++;
-            }
-            else
-            {
-              //if you have a ref -- you're okay for us!
-              var bIemsHaveNonKey = this.node.items["$ref"] || this.node.items["type"] || hasNonKeywords(this.node.items.properties || {});
-               if(!bIemsHaveNonKey){
-                // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
-                checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no non-keyword inner items";
-                checkErrors.length++;
-              }
-            }
-          }
-        
-        }
-        //if you're an array
-        if(this.node.type == "array")
-        {
-          //grab your items
-          var items = this.node.items;
-          if(!items && !self.allowAnyObjects)
-          {
-             checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off for arrays, therefore you cannot simple have an 'array' type with no inner items";
-              checkErrors.length++;
-          }
-          else
-          {
-            items = items || {};
-            //we have items -- we shouldn't have a reference type && other items
-            if(items.properties && items["$ref"])
-            {
-              checkErrors[this.path.join(pathDelim)] = "Array items in WIN cannot have properties AND a reference type. One or the other.";
-              checkErrors.length++;
-            }
-          }
-        }
-
-
-       });
-
-       if(checkErrors.length || checkWarnings.length)
-        return {errors: checkErrors, warnings: checkWarnings};
-      else
-        return null;
-
-    }
-
-    self.stripObjectPath = function(path)
-    {
-      //obj path will be returned
-      var objectPath = [];
-
-      //travere this path, yo
-      traverse(path).forEach(function()
-      {
-        //no routes including properties or items -- made up schema info!
-        if(!this.isRoot && (this.node != "properties" && this.node != "items"))
-          objectPath.push(this.node);
-      });
-
-      return objectPath.join(pathDelim);
-    }
-
-    //storing the references inside of a schema object (if we don't already know them)
-    function parseSchemaReferences(schemaJSON)
-    {
-    	//first we wrap our object with traverse methods
-    	var tJSON = traverse(schemaJSON);
-
-    	var references = {};
-
-    	self.log('--  Parsing refs -- ');
-      // self.log(schemaJSON);
-    	//now we step through pulling the path whenever we hit a reference
-    	tJSON.forEach(function(node)
-    	{
-    		//we are at a reference point
-        //we make an exception for arrays -- since the items object can hold references!
-        if(this.node["$ref"] && (this.key == "items" || !self.keywordRegExp.test(this.key)))
-    		// if(this.isLeaf && this.key == "$ref")
-    		{
-    			//todo logic for when it's "oneOf" or other valid JSON schema things
-    			var fullPath = this.path.join(pathDelim);//this.path.slice(0, this.path.length-1).join(pathDelim);
-    			var referenceType = this.node["$ref"];
-
-          
-          var objectPath = self.stripObjectPath(this.path);
-
-          //pull the "items" piece out of the path -- otherwise, if you're just a normal object -- it's the same as fullPath
-          var typePath = this.key == "items" ? this.path.slice(0, this.path.length-1).join(pathDelim) : fullPath;
-
-
-
-    			if(references[fullPath])
-    			{
-    				throw new Error("Not yet supported reference behavior, arrays of references: ", fullPath);
-    			}
-
-          //assuming type is defined here!
-    			references[fullPath] = {schemaType: referenceType, schemaPath: fullPath, objectPath: objectPath, typePath: typePath};
-          self.log(self.log.testing, 'Reference detected @ '+fullPath+': ', references[fullPath]);
-    		}
-    	});
-
-    	self.log("-- Full refs -- ", references);
-
-    	return references;
-    } 
-
-    function storeSchemaReferences(type, schemaJSON)
-    {
-    	self.schemaReferences[type] = parseSchemaReferences(schemaJSON);
-
-      self.requiredReferences[type] = {};
-
-      for(var path in self.schemaReferences[type])
-      {
-        var schemaInfo = self.schemaReferences[type][path];
-        var refType = schemaInfo.schemaType;
-        var aReqRefs = self.requiredReferences[type][refType];
-
-        if(!aReqRefs)
-        {
-          aReqRefs = [];
-          self.requiredReferences[type][refType] = aReqRefs;
-        }
-        //value is the reference type 
-        aReqRefs.push(schemaInfo);
-      }
-
-
-      //now we know all the references, their paths, and what type needs what references
-    }
-    function moveAllToProperties(tJSON)
-    {
-       tJSON.forEach(function(node)
-       {          
-
-          // self.log("Investigating: ", this.key, " @ ", this.path.join(pathDelim), " all keys: ", this.keys);
-          //for all non-arrays and non-leafs and non-properties object -- move to a properties object if not a keyword!
-          if(!this.isLeaf && this.key != "properties" && !Array.isArray(this.node))
-          {
-
-            //movement dpeends on what type you are -- arrays move to items, while objects move to properties
-            var moveLocation = "properties";
-            if(this.node.type == "array")
-              moveLocation = "items";
-
-            // self.log('Movement: ', this.key, " @ ", this.path.join(pathDelim) + " : ", this.node);
-            // self.log("Move to : ".green + moveLocation);
-
-
-            // self.log("Move innitiated: ".magenta, this.node);
-            // self.log('Original node: '.green, node);
-            var empty = true;
-            var move = {};
-            //any key that isn't one of our keywords is getting moved inside!
-            for(var key in this.node){
-                if(!self.keywordRegExp.test(key)){
-                  // self.log('Moving key @ ', this.path.join(pathDelim) || "Is root? ", " : ", this.key || this.isRoot); 
-                  move[key] = this.node[key];
-                  empty = false;
-                }
-            }
-
-            //don't move nothing derrr
-            if(!empty)
-            {
-               // self.log('Moving: '.red, move);
-
-              //create proeprties if it doesn't exist
-              node[moveLocation] = node[moveLocation] || {};
-
-              for(var key in move)
-              {
-                //move to its new home
-                node[moveLocation][key] = move[key];
-                //remove from previous location 
-                delete node[key];
-              }
-
-              //make sure to update, thank you
-              this.update(node);
-
-              //we need to investigate the newly created properties/items object -- to continue down the rabbit hole
-              this.keys.push(moveLocation);
-            }
-           
-
-          }
-       });
-    }
-    function addWINTypes(schemaJSON, options)
-    {
-      for(var key in defaultWINAdd)
-      {
-        var winAdd = defaultWINAdd[key];
-        
-        //if it's just a shallow string -- add it directly
-        if(typeof winAdd == "string")
-          schemaJSON[key] = winAdd;
-        else //otehrwise, we should clone the larger object
-          schemaJSON[key] = traverse(defaultWINAdd[key]).clone();
-      }
-    }
-    function appendSchemaInformation(schemaJSON, options)
-    {
-      //add in default win types
-      if(!options.skipWINAdditions)
-        addWINTypes(schemaJSON, options);
-
-      //build a traverse object for navigating and updating the object
-      var tJSON = traverse(schemaJSON);
-
-      //step one convert string to types
-      tJSON.forEach(function(node)
-      {
-        var needsUpdate = false;
-          //if you are a leaf -- and you only dictate the type e.g. string/number/array etc -- we'll convert you to proper type
-        if(this.isLeaf && typeof this.node == "string")
-        {
-          //if the key is not a known keyword, and the node string is a proper type
-          if(!self.keywordRegExp.test(this.key) && self.typeRegExp.test(node.toLowerCase()))
-          {
-            //node is a type! make sure it's a lower case type being stored.
-            node = {type: node.toLowerCase()};
-            needsUpdate = true;
-          }
-        }
-
-        if(this.node)
-        {
-
-         if(this.node.items && !this.node.type)
-          {
-            this.node.type = "array";
-            needsUpdate = true;
-          }
-
-          //rewrite {type : "array", "$ref" : "something"} => {type : "array", items : {"$ref" : "something"}}
-          if(this.node.type == "array" && this.node["$ref"])
-          {
-            this.node.items = this.node.items || {};
-            this.node.items["$ref"] = this.node["$ref"];
-            delete this.node["$ref"];
-            needsUpdate = true;
-          }
-
-        }
-
-
-        if(needsUpdate)
-          this.update(node);
-
-      })
-
-      //update location of objects to match validation issues
-      //json schema won't validate outside of properties object -- which some people may forget
-      //this is basically a correct method
-      moveAllToProperties(tJSON);
-
-      // var util = require('util');
-      // self.log("Post move schema: ".cyan, util.inspect(schemaJSON, false, 10));
-
-      tJSON.forEach(function(node)
-      {
-        var needsUpdate = false;
-
-
-       
-          //if we aren't a leaf object, we are a full object
-          //therefore, we must have required (since we're in default mode)
-          //since we cover the properties object inside, we don't need to go indepth for that key too!
-        if(self.requireByDefault && !this.isLeaf && !this.node.required && !Array.isArray(this.node))
-        {
-          //the require needs to be filled iwth all the properties of this thing, except
-          //for anything defined by v4 json schema -- so we run a regex to reject those keys
-          var reqProps = [];
-
-          // self.log("Not leaf: ".magenta, this.node, " Key : ", this.key);
-
-          //do not do this if you're in the properties object
-          //since the prop keys belong to the PARENT not the node
-          if(this.key != "properties")
-          {
-            for(var key in this.node){
-              if(!self.keywordRegExp.test(key)){
-              // self.log('Key added: '.red, key);
-
-                reqProps.push(key);
-              }
-            }
-            // self.log('Post not props: '.blue, reqProps);
-          }
-          
-          //for every object, you can also have a properties object too
-          //required applies to the subling property object as well
-          //so we loop through the properties object as well
-         for(var key in this.node.properties){
-            if(!self.keywordRegExp.test(key)){
-              reqProps.push(key);
-            }
-          }
-
-          if(reqProps.length)
-          {
-            node.required = reqProps;
-            needsUpdate = true;
-          }        
-        }
-
-     
-       if(needsUpdate){
-          // self.log('New required - : ', this.node, ' : ', reqProps);
-          this.update(node);
-        }
-      });
-
-
-
-        // self.log("--post traverse -- ", schemaJSON);
-
-    }
-
-	return self;
-}
-
-
-
-
-});
-
-require.register("optimuslime~win-schema@0.0.5-4/lib/schemaSpec.js", function (exports, module) {
-module.exports = 
-{
-    "id": "http://json-schema.org/draft-04/schema#",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "description": "Core schema meta-schema",
-    "definitions": {
-        "schemaArray": {
-            "type": "array",
-            "minItems": 1,
-            "items": { "$ref": "#" }
-        },
-        "positiveInteger": {
-            "type": "integer",
-            "minimum": 0
-        },
-        "positiveIntegerDefault0": {
-            "allOf": [ { "$ref": "#/definitions/positiveInteger" }, { "default": 0 } ]
-        },
-        "simpleTypes": {
-            "enum": [ "array", "boolean", "integer", "null", "number", "object", "string" ]
-        },
-        "stringArray": {
-            "type": "array",
-            "items": { "type": "string" },
-            "minItems": 1,
-            "uniqueItems": true
-        }
-    },
-    "type": "object",
-    "properties": {
-        "id": {
-            "type": "string",
-            "format": "uri"
-        },
-        "$schema": {
-            "type": "string",
-            "format": "uri"
-        },
-        "title": {
-            "type": "string"
-        },
-        "description": {
-            "type": "string"
-        },
-        "default": {},
-        "multipleOf": {
-            "type": "number",
-            "minimum": 0,
-            "exclusiveMinimum": true
-        },
-        "maximum": {
-            "type": "number"
-        },
-        "exclusiveMaximum": {
-            "type": "boolean",
-            "default": false
-        },
-        "minimum": {
-            "type": "number"
-        },
-        "exclusiveMinimum": {
-            "type": "boolean",
-            "default": false
-        },
-        "maxLength": { "$ref": "#/definitions/positiveInteger" },
-        "minLength": { "$ref": "#/definitions/positiveIntegerDefault0" },
-        "pattern": {
-            "type": "string",
-            "format": "regex"
-        },
-        "additionalItems": {
-            "anyOf": [
-                { "type": "boolean" },
-                { "$ref": "#" }
-            ],
-            "default": {}
-        },
-        "items": {
-            "anyOf": [
-                { "$ref": "#" },
-                { "$ref": "#/definitions/schemaArray" }
-            ],
-            "default": {}
-        },
-        "maxItems": { "$ref": "#/definitions/positiveInteger" },
-        "minItems": { "$ref": "#/definitions/positiveIntegerDefault0" },
-        "uniqueItems": {
-            "type": "boolean",
-            "default": false
-        },
-        "maxProperties": { "$ref": "#/definitions/positiveInteger" },
-        "minProperties": { "$ref": "#/definitions/positiveIntegerDefault0" },
-        "required": { "$ref": "#/definitions/stringArray" },
-        "additionalProperties": {
-            "anyOf": [
-                { "type": "boolean" },
-                { "$ref": "#" }
-            ],
-            "default": {}
-        },
-        "definitions": {
-            "type": "object",
-            "additionalProperties": { "$ref": "#" },
-            "default": {}
-        },
-        "properties": {
-            "type": "object",
-            "additionalProperties": { "$ref": "#" },
-            "default": {}
-        },
-        "patternProperties": {
-            "type": "object",
-            "additionalProperties": { "$ref": "#" },
-            "default": {}
-        },
-        "dependencies": {
-            "type": "object",
-            "additionalProperties": {
-                "anyOf": [
-                    { "$ref": "#" },
-                    { "$ref": "#/definitions/stringArray" }
-                ]
-            }
-        },
-        "enum": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true
-        },
-        "type": {
-            "anyOf": [
-                { "$ref": "#/definitions/simpleTypes" },
-                {
-                    "type": "array",
-                    "items": { "$ref": "#/definitions/simpleTypes" },
-                    "minItems": 1,
-                    "uniqueItems": true
-                }
-            ]
-        },
-        "allOf": { "$ref": "#/definitions/schemaArray" },
-        "anyOf": { "$ref": "#/definitions/schemaArray" },
-        "oneOf": { "$ref": "#/definitions/schemaArray" },
-        "not": { "$ref": "#" }
-    },
-    "dependencies": {
-        "exclusiveMaximum": [ "maximum" ],
-        "exclusiveMinimum": [ "minimum" ]
-    },
-    "default": {}
-}
-});
-
-require.register("optimuslime~win-schema@0.0.5-4", function (exports, module) {
-//pull in the validating workhorse -- checks schema and stuff
-var tv4 = require('geraintluff~tv4@master');
-//pull in traverse object from the repo please!
-var traverse = require('optimuslime~traverse@master');
-
-//pull in the object that knows what all schema look like!
-var schemaSpec = require('optimuslime~win-schema@0.0.5-4/lib/schemaSpec.js');
-
-var addSchemaSupport = require('optimuslime~win-schema@0.0.5-4/lib/addSchema.js');
-
-module.exports = winSchema;
-
-function winSchema(winback, globalConfiguration, localConfiguration)
-{
-	//load up basic win-module stufffff
-	var self = this;
-  self.winFunction = "schema";
-  self.log = winback.getLogger(self);
-
-  //limited only by global -- or we could limit our own verboseness
-  self.log.logLevel = localConfiguration.logLevel || self.log.normal;
-
-  self.pathDelimiter = "///";
-
-  //this creates "internalAddSchema" to handle the weighty add logic
-  //need to thoroughly test and modify incoming schema to align with 
-  //logical schema setup for WIN
-  addSchemaSupport(self, globalConfiguration, localConfiguration);
-
-	self.validator = tv4.freshApi();
-
- //set the backbone and our logging function
-  self.bbEmit = winback.getEmitter(self);
-
-  //config setups
-
-  self.multipleErrors = (localConfiguration.multipleErrors == true || localConfiguration.multipleErrors == "true");
-  //by default you can have unknown keys -- the server environment may desire to change this
-  //if you don't want to be storing extra info
-  //by default, on lockdown -- better that way -- no sneaky stuff
-  self.allowUnknownKeys = localConfiguration.allowUnknownKeys || false;
-
-  //all keys are required by default -- this adds in required objects for everything
-  self.requireByDefault = localConfiguration.requireByDefault || true;
-
-  //do we allow properties with just the type "object" or "array"
-  //this would allow ANY data to be fit in there with no validation checks (other than it is an object or array)
-  //shouldn't allow this because people could slip in all sorts of terrible things without validation
-  self.allowAnyObjects = localConfiguration.allowAnyObjects || false;
-
-  self.eventCallbacks = function()
-  {
-        var callbacks = {};
-
-        //add callbacks to the object-- these are the functions called when the full event is emitted
-        callbacks["schema:validate"] = self.validateData;
-        callbacks["schema:validateMany"] = self.validateDataArray;
-        callbacks["schema:addSchema"] = self.addSchema;
-        callbacks["schema:getSchema"] = self.getSchema;
-        callbacks["schema:getSchemaReferences"] = self.getSchemaReferences;
-        callbacks["schema:getFullSchema"] = self.getFullSchema;
-        callbacks["schema:getSchemaProperties"] = self.getSchemaProperties;
-
-        //these are for deealing with pulling references from a specific object -- it's easier done in this module
-        callbacks["schema:getReferencesAndParents"] = self.getReferencesAndParents;
-        callbacks["schema:replaceParentReferences"] = self.replaceParentReferences;
-
-        //send back our callbacks
-        return callbacks;
-  }
-  self.requiredEvents = function()
-  {
-  	//don't need no one for nuffin'
-  	return [];
-  }
-
-  self.initialize = function(done)
-  {
-  	setTimeout(function()
-  	{
-  		done();
-  	}, 0);
-  }
-
-    //cache all our schema by type
-    self.allSchema = {};
-    self.schemaReferences = {};
-    self.requiredReferences = {};
-    self.fullSchema = {};
-    self.primaryPaths = {};
-    self.typeProperties = {};
-
-    self.validTypes = "\\b" + schemaSpec.definitions.simpleTypes.enum.join('\\b|\\b') + "\\b"; //['object', 'array', 'number', 'string', 'boolean', 'null'].join('|');
-    self.typeRegExp = new RegExp(self.validTypes);
-
-    self.specKeywords = ["\\$ref|\\babcdefg"];
-    for(var key in schemaSpec.properties)
-      self.specKeywords.push(key.replace('$', '\\$'));
-
-    //join using exact phrasing checks
-    self.specKeywords = self.specKeywords.join('\\b|\\b') + "\\b";
-    self.keywordRegExp = new RegExp(self.specKeywords);
-
-    self.log(self.log.testing, "--Specced types: ".green, self.validTypes);
-    self.log(self.log.testing, "--Specced keywords: ".green, self.specKeywords);
-
-    self.validateFunction = (self.multipleErrors ? self.validator.validateMultiple : self.validator.validateResult);
-    self.errorKey = self.multipleErrors ? "errors" : "error";
-
-    function listTypeIssues(type)
-    {
-      if(!self.allSchema[type]){
-        return "Schema type not loaded: " + type;
-      }
-
-      //we have to manually detect missing references -- since the validator is not concerned with such things
-      //FOR WHATEVER REASON
-      var missing = self.validator.getMissingUris();
-      for(var i=0; i < missing.length; i++)
-      {
-        //if we have this type inside our refernces for this object, it means we're missing a ref schema for this type!
-        if(self.requiredReferences[type][missing[i]])
-        {
-          return "Missing at least 1 schema definition: " + missing[i];
-        }
-      }
-    }
-
-    function internalValidate(schema, object)
-    {
-      //validate against what type?
-      var result = self.validateFunction.apply(self.validator, [object, schema, true, !self.allowUnknownKeys]);
-
-       //if it's not an array, make it an array
-      //if it's empty, make it a damn array
-      var errors = result[self.errorKey];
-
-      //if you are multiple errors, then you are a non-undefined array, just return as usual
-      //otherwise, you are an error but not in an array
-      //if errors is undefined then this will deefault to []
-      errors = (errors && !Array.isArray(errors)) ? [errors] : errors || [];
-
-      return {valid : result.valid, errors : errors};
-    }
-    self.validateDataArray = function(type, objects, finished)
-    {
-      var typeIssues = listTypeIssues(type);
-
-      //stop if we have type issues
-      if(typeIssues)
-      {
-        finished(typeIssues);
-        return;
-      }
-      else if(typeof type != "string" || !Array.isArray(objects))
-      {
-        finished("ValidateMany requires type [string], objects [array]");
-        return;
-      }
-
-      var schema = self.validator.getSchema(type);
-      // self.log('validate many against: ', schema);
-
-      var allValid = true;
-      var allErrors = [];
-      for(var i=0; i < objects.length; i++)
-      {
-        var result = internalValidate(schema, objects[i]);
-
-        if(!result.valid){
-          allValid = false;
-          allErrors.push(result.errors);
-        }
-        else //no error? just push empty array!
-          allErrors.push([]);
-      }
-
-      //if we have errors during validation, they'll be passed on thank you!
-      //if you're valid, and there are no errors, then don't send nuffin
-      finished(undefined, allValid, (!allValid ? allErrors : undefined));
-    }
-    self.validateData = function(type, object, finished)
-    {
-      var typeIssues = listTypeIssues(type);
-
-      //stop if we have type issues
-      if(typeIssues)
-      {
-        finished(typeIssues);
-        return;
-      }
-
-      //log object being checked
-      self.log("Validate: ", object);
-
-      //now we need to validate, we definitely have all the refs we need
-      var schema = self.validator.getSchema(type);
-
-      //log what's being validated
-      self.log('validate against: ', schema);
-    	 
-      var result = internalValidate(schema, object);
-
-      //if we have errors during validation, they'll be passed on thank you!
-      //if you're valid, and there are no errors, then don't send nuffin
-      finished(undefined, result.valid, (result.errors.length ? result.errors : undefined));
-    }
-
-    //todo: pull reference objects from schema -- make sure those exist as well?
-   	self.addSchema = function(type, schemaJSON, options, finished)
-   	{
-      //pass args into internal adds
-      return self.internalAddSchema.apply(self, arguments);
-   	}
-
-   	    //todo: pull reference objects from schema -- make sure those exist as well?
-   	self.getSchema = function(typeOrArray, finished)
-   	{   	
-      //did we request one or many?
-      var typeArray = typeOrArray;
-      if(typeof typeOrArray == "string")
-      {
-        //make single type to return
-        typeArray = [typeOrArray];
-      }
-
-      var refArray = [];
-      for(var i=0; i < typeArray.length; i++)
-      {
-        var sType = typeArray[i];
-
-      //failed to get schema for some very odd reason?
-        if(!self.allSchema[sType]){
-          finished("Schema type not loaded: ", sType);
-          return;
-        }
-        //push our reference information as a clone
-        refArray.push(traverse(self.validator.getSchema(sType)).clone());
-        //if you hit an error -send back
-        if(self.validator.error){
-          finished(self.validator.error);
-          return;
-        }
-      }
-
-      //send the schema objects back
-      //send an array regardless of how many requested -- standard behavior
-      finished(undefined, refArray);    
-
-   	}
-
-   	self.getSchemaReferences = function(typeOrArray, finished)
-   	{
-      var typeArray = typeOrArray;
-      if(typeof typeOrArray == "string")
-      {
-        //make single type to return
-        typeArray = [typeOrArray];
-      }
-
-      var refArray = [];
-      for(var i=0; i < typeArray.length; i++)
-      {
-        var sType = typeArray[i];
-
-        if(!self.allSchema[sType]){
-          finished("Schema type not loaded: ", sType);
-          return;
-        }
-        //push our reference information as a clone
-        refArray.push(traverse(self.requiredReferences[sType]).clone());
-      }
-
-  		//send the refernece objects back
-      //if you are a single object, just send the one -- otherwise send an array
-      finished(undefined, refArray); 		
-   	}
-
-    var buildFullSchema = function(type)
-    {
-      var schema = self.validator.getSchema(type);
-      var tSchema = traverse(schema);
-
-      var clone = tSchema.clone();
-      var tClone = traverse(clone);
-      var references = self.schemaReferences[type];
-
-      for(var path in references)
-      {
-        //we get the type of reference
-        var schemaInfo = references[path];
-        var refType = schemaInfo.schemaType;
-
-        //this is recursive behavior -- itwill call buidl full schema if not finished yet
-        var fullRefSchema = internalGetFullSchema(refType);
-
-        if(!fullRefSchema)
-          throw new Error("No schema could be created for: " + refType + ". Please check it's defined.");
-
-        //now we ahve teh full object to replace
-        var tPath = path.split(self.pathDelimiter);
-
-        // self.log(self.log.testing, 'Path to ref: ', tPath, " replacement: ", fullRefSchema);
-
-        //use traverse to set the path object as our full ref object
-        tClone.set(tPath, fullRefSchema);
-      }
-
-      // self.log(self.log.testing, "Returning schema: ", type, " full: ", clone);
-
-      return clone;
-    }
-    var inprogressSchema = {};
-
-    function internalGetFullSchema(type)
-    {
-      if(inprogressSchema[type])
-      {
-          throw new Error("Infinite schema reference loop: " + JSON.stringify(Object.keys(inprogressSchema)));    
-      }
-
-      inprogressSchema[type] = true;
-
-       //if we don't have a full type yet, we build it
-      if(!self.fullSchema[type])
-      {
-        //need to build a full schema object
-        var fSchema = buildFullSchema(type);
-
-        self.fullSchema[type] = fSchema;
-      }
-
-      //mark the in progress as false!
-      delete inprogressSchema[type];
-
-      return self.fullSchema[type];
-    }
-
-    self.getFullSchema = function(typeOrArray, finished)
-    { 
-      var typeArray = typeOrArray;
-      if(typeof typeOrArray == "string")
-      {
-        //make single type to return
-        typeArray = [typeOrArray];
-      }
-
-      var fullArray = [];
-      for(var i=0; i < typeArray.length; i++)
-      {
-        var sType = typeArray[i];
-
-         if(!self.allSchema[sType]){
-          finished("Schema type not loaded: ", sType);
-          return;
-        }
-
-        try
-        {
-          //get the full schema from internal function
-          //throws error if something is wrong
-          var fullSchema = internalGetFullSchema(sType);
-         
-          //pull the full object -- guaranteed to exist -- send a clone
-           fullArray.push(traverse(fullSchema).clone());
-        }
-        catch(e)
-        {
-          //send the error if we have one
-          finished(e);
-          return;
-        }
-      }
-
-      //send the refernece objects back
-      //if you are a single object, just send the one -- otherwise send an array
-      finished(undefined, fullArray);
-    }
-
-    self.getSchemaProperties = function(typeOrArray, finished)
-    {
-       var typeArray = typeOrArray;
-      if(typeof typeOrArray == "string")
-      {
-        //make single type to return
-        typeArray = [typeOrArray];
-      }
-
-      var propArray = [];
-      for(var i=0; i < typeArray.length; i++)
-      {
-        var sType = typeArray[i];
-
-         if(!self.allSchema[sType]){
-          finished("Schema type not loaded: ", sType);
-          return;
-        }
-
-        //get our schema properties
-        propArray.push({type: sType, primaryPaths: traverse(self.primaryPaths[sType]).clone(), properties: traverse(self.typeProperties[sType]).clone()});
-
-      }
-
-
-      //send the refernece objects back
-      //if you are a single object, just send the one -- otherwise send an array
-      finished(undefined, propArray);
-    }
-
-    //we're going to clone the object, then replace all of the reference wids with new an improved parents
-    self.replaceParentReferences = function(type, object, parentMapping, finished)
-    {
-      var tClone = traverse(object).clone();
-
-      traverse(tClone).forEach(function(node)
-      {
-         //if we have a wid object and parents object -- likely we are a tracked reference
-        if(this.node.wid && this.node.parents)
-        {
-          var replaceParents = parentMapping[this.node.wid];
-
-          if(replaceParents)
-          {
-            //straight up replacement therapy yo
-            this.node.parents = replaceParents;
-
-            //then make sure to update and continue onwards!
-            this.update(this.node);
-          }
-        }
-      })
-
-      //we've replaced the innards of the object with a better future!
-      finished(undefined, tClone);
-    }
-
-    self.getReferencesAndParents = function(type, widObjects, finished)
-    {
-
-        //listed by some identifier, then the object, we need to look through the type, and pull references
-        var fSchema = internalGetFullSchema(type);
-        // self.log("Full schema: ", fSchema);
-        if(!fSchema)
-        {
-          finished("Full schema undefined, might be missing a reference type within " + type);
-          return;
-        } 
-        var widToParents = {};
-        var traverseObjects = {};
-
-        for(var wid in widObjects){
-          widToParents[wid] = {};
-          traverseObjects[wid] = traverse(widObjects[wid]);
-        }
-
-        
-        //for every wid object we see, we loop through and pull that 
-        traverse(fSchema).forEach(function(node)
-        {
-          // self.log("Node: ", this.node, "", " key: ", this.key);
-          //if we have a wid object and parents object -- likely we are a tracked reference
-          if(this.node.wid && this.node.parents)
-          {
-            //let's pull these bad boys our of our other objects
-            var pathToObject = self.stripObjectPath(this.path);
-            
-            //if you aren't root, split it up!
-            if(pathToObject != "")
-              pathToObject = pathToObject.split(self.pathDelimiter);
-
-            // self.log("\nKey before :", this.key, " node-p: ", this.parent.node, " path: ", this.path);
-            
-            var isArray = (this.key == "properties" && this.path[this.path.length - 2] == "items");
-            // self.log("Is array? : ", isArray);
-            for(var wid in traverseObjects)
-            {
-
-              var wtp = widToParents[wid];
-              var tob = traverseObjects[wid];
-
-
-              //fetch object from our traverse thing using this path
-              var arrayOrObject = tob.get(pathToObject);
-
-              // self.log("Path to obj: ", pathToObject, " get: ", arrayOrObject);
-
-              //grab wid to parent mappings, always cloning parent arrays
-              if(isArray)
-              {
-                for(var i=0; i < arrayOrObject.length; i++)
-                {
-                  var aobj = arrayOrObject[i];
-                  //map wid objects to parent wids always thank you
-                  wtp[aobj.wid] = aobj.parents.slice(0);
-                }
-              }
-              else
-                wtp[arrayOrObject.wid] = arrayOrObject.parents.slice(0);
-
-              //now we've aded a mapping from the objects wid to the parents for that wid
-
-            }
-          }
-        });
-
-        //we send back the wids of the original widObjects mapped to the wid internal reference && the corresponding parents
-        //so many damn layers -- it gets confusing
-        finished(undefined, widToParents);
-
-    }
-
-
-	return self;
-}
-
-
-
-
-});
-
-require.modules["optimuslime-win-schema"] = require.modules["optimuslime~win-schema@0.0.5-4"];
-require.modules["optimuslime~win-schema"] = require.modules["optimuslime~win-schema@0.0.5-4"];
-require.modules["win-schema"] = require.modules["optimuslime~win-schema@0.0.5-4"];
 
 
 require.register("techjacker~q@master", function (exports, module) {
@@ -9134,8 +4522,8 @@ require.modules["q"] = require.modules["techjacker~q@master"];
 require.register("optimuslime~win-backbone@0.0.4-5", function (exports, module) {
 
 //Control all the win module! Need emitter for basic usage. 
-var Emitter = (typeof process != "undefined" ?  require('component~emitter@master') : require('component~emitter@master'));
-var Q = require('techjacker~q@master');
+var Emitter = (typeof process != "undefined" ?  require("component~emitter@master") : require("component~emitter@master"));
+var Q = require("techjacker~q@master");
 //
 
 module.exports = winBB;
@@ -9408,7 +4796,7 @@ function winBB(homeDirectory)
 		var jsonModules = inputNameOrObject;
 		if(typeof inputNameOrObject == "string")
 		{
-			var fs = require('fs');
+			var fs = require("fs");
 			var fBuffer = fs.readFileSync(inputNameOrObject);
 			jsonModules = JSON.parse(fBuffer);
 		}
@@ -9945,6 +5333,4343 @@ require.modules["optimuslime~win-backbone"] = require.modules["optimuslime~win-b
 require.modules["win-backbone"] = require.modules["optimuslime~win-backbone@0.0.4-5"];
 
 
+require.register("geraintluff~tv4@master/lang/de.js", function (exports, module) {
+(function (global) {
+	var lang = {
+		INVALID_TYPE: "Ungültiger Typ: {type} (erwartet wurde: {expected})",
+		ENUM_MISMATCH: "Keine Übereinstimmung mit der Aufzählung (enum) für: {value}",
+		ANY_OF_MISSING: "Daten stimmen nicht überein mit einem der Schemas von \"anyOf\"",
+		ONE_OF_MISSING: "Daten stimmen nicht überein mit einem der Schemas von \"oneOf\"",
+		ONE_OF_MULTIPLE: "Daten sind valid in Bezug auf mehreren Schemas von \"oneOf\": index {index1} und {index2}",
+		NOT_PASSED: "Daten stimmen mit dem \"not\" Schema überein",
+		// Numeric errors
+		NUMBER_MULTIPLE_OF: "Wert {value} ist kein Vielfaches von {multipleOf}",
+		NUMBER_MINIMUM: "Wert {value} ist kleiner als das Minimum {minimum}",
+		NUMBER_MINIMUM_EXCLUSIVE: "Wert {value} ist gleich dem Exklusiven Minimum {minimum}",
+		NUMBER_MAXIMUM: "Wert {value} ist größer als das Maximum {maximum}",
+		NUMBER_MAXIMUM_EXCLUSIVE: "Wert {value} ist gleich dem Exklusiven Maximum {maximum}",
+		// String errors
+		STRING_LENGTH_SHORT: "Zeichenkette zu kurz ({length} chars), minimum {minimum}",
+		STRING_LENGTH_LONG: "Zeichenkette zu lang ({length} chars), maximum {maximum}",
+		STRING_PATTERN: "Zeichenkette entspricht nicht dem Muster: {pattern}",
+		// Object errors
+		OBJECT_PROPERTIES_MINIMUM: "Zu wenige Attribute definiert ({propertyCount}), minimum {minimum}",
+		OBJECT_PROPERTIES_MAXIMUM: "Zu viele Attribute definiert ({propertyCount}), maximum {maximum}",
+		OBJECT_REQUIRED: "Notwendiges Attribut fehlt: {key}",
+		OBJECT_ADDITIONAL_PROPERTIES: "Zusätzliche Attribute nicht erlaubt",
+		OBJECT_DEPENDENCY_KEY: "Abhängigkeit fehlt - Schlüssel nicht vorhanden: {missing} (wegen Schlüssel: {key})",
+		// Array errors
+		ARRAY_LENGTH_SHORT: "Array zu kurz ({length}), minimum {minimum}",
+		ARRAY_LENGTH_LONG: "Array zu lang ({length}), maximum {maximum}",
+		ARRAY_UNIQUE: "Array Einträge nicht eindeutig (Index {match1} und {match2})",
+		ARRAY_ADDITIONAL_ITEMS: "Zusätzliche Einträge nicht erlaubt"
+	};
+
+	if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['../tv4'], function(tv4) {
+			tv4.addLanguage('de', lang);
+			return tv4;
+		});
+	} else if (typeof module !== 'undefined' && module.exports){
+		// CommonJS. Define export.
+		var tv4 = require("geraintluff~tv4@master");
+		tv4.addLanguage('de', lang);
+		module.exports = tv4;
+	} else {
+		// Browser globals
+		global.tv4.addLanguage('de', lang);
+	}
+})(this);
+
+});
+
+require.register("geraintluff~tv4@master", function (exports, module) {
+/*
+Author: Geraint Luff and others
+Year: 2013
+
+This code is released into the "public domain" by its author(s).  Anybody may use, alter and distribute the code without restriction.  The author makes no guarantees, and takes no liability of any kind for use of this code.
+
+If you find a bug or make an improvement, it would be courteous to let the author know, but it is not compulsory.
+*/
+(function (global, factory) {
+  if (typeof define === 'function' && define.amd) {
+    // AMD. Register as an anonymous module.
+    define([], factory);
+  } else if (typeof module !== 'undefined' && module.exports){
+    // CommonJS. Define export.
+    module.exports = factory();
+  } else {
+    // Browser globals
+    global.tv4 = factory();
+  }
+}(this, function () {
+
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys?redirectlocale=en-US&redirectslug=JavaScript%2FReference%2FGlobal_Objects%2FObject%2Fkeys
+if (!Object.keys) {
+	Object.keys = (function () {
+		var hasOwnProperty = Object.prototype.hasOwnProperty,
+			hasDontEnumBug = !({toString: null}).propertyIsEnumerable('toString'),
+			dontEnums = [
+				'toString',
+				'toLocaleString',
+				'valueOf',
+				'hasOwnProperty',
+				'isPrototypeOf',
+				'propertyIsEnumerable',
+				'constructor'
+			],
+			dontEnumsLength = dontEnums.length;
+
+		return function (obj) {
+			if (typeof obj !== 'object' && typeof obj !== 'function' || obj === null) {
+				throw new TypeError('Object.keys called on non-object');
+			}
+
+			var result = [];
+
+			for (var prop in obj) {
+				if (hasOwnProperty.call(obj, prop)) {
+					result.push(prop);
+				}
+			}
+
+			if (hasDontEnumBug) {
+				for (var i=0; i < dontEnumsLength; i++) {
+					if (hasOwnProperty.call(obj, dontEnums[i])) {
+						result.push(dontEnums[i]);
+					}
+				}
+			}
+			return result;
+		};
+	})();
+}
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/create
+if (!Object.create) {
+	Object.create = (function(){
+		function F(){}
+
+		return function(o){
+			if (arguments.length !== 1) {
+				throw new Error('Object.create implementation only accepts one parameter.');
+			}
+			F.prototype = o;
+			return new F();
+		};
+	})();
+}
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/isArray?redirectlocale=en-US&redirectslug=JavaScript%2FReference%2FGlobal_Objects%2FArray%2FisArray
+if(!Array.isArray) {
+	Array.isArray = function (vArg) {
+		return Object.prototype.toString.call(vArg) === "[object Array]";
+	};
+}
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/indexOf?redirectlocale=en-US&redirectslug=JavaScript%2FReference%2FGlobal_Objects%2FArray%2FindexOf
+if (!Array.prototype.indexOf) {
+	Array.prototype.indexOf = function (searchElement /*, fromIndex */ ) {
+		if (this === null) {
+			throw new TypeError();
+		}
+		var t = Object(this);
+		var len = t.length >>> 0;
+
+		if (len === 0) {
+			return -1;
+		}
+		var n = 0;
+		if (arguments.length > 1) {
+			n = Number(arguments[1]);
+			if (n !== n) { // shortcut for verifying if it's NaN
+				n = 0;
+			} else if (n !== 0 && n !== Infinity && n !== -Infinity) {
+				n = (n > 0 || -1) * Math.floor(Math.abs(n));
+			}
+		}
+		if (n >= len) {
+			return -1;
+		}
+		var k = n >= 0 ? n : Math.max(len - Math.abs(n), 0);
+		for (; k < len; k++) {
+			if (k in t && t[k] === searchElement) {
+				return k;
+			}
+		}
+		return -1;
+	};
+}
+
+// Grungey Object.isFrozen hack
+if (!Object.isFrozen) {
+	Object.isFrozen = function (obj) {
+		var key = "tv4_test_frozen_key";
+		while (obj.hasOwnProperty(key)) {
+			key += Math.random();
+		}
+		try {
+			obj[key] = true;
+			delete obj[key];
+			return false;
+		} catch (e) {
+			return true;
+		}
+	};
+}
+// Based on: https://github.com/geraintluff/uri-templates, but with all the de-substitution stuff removed
+
+var uriTemplateGlobalModifiers = {
+	"+": true,
+	"#": true,
+	".": true,
+	"/": true,
+	";": true,
+	"?": true,
+	"&": true
+};
+var uriTemplateSuffices = {
+	"*": true
+};
+
+function notReallyPercentEncode(string) {
+	return encodeURI(string).replace(/%25[0-9][0-9]/g, function (doubleEncoded) {
+		return "%" + doubleEncoded.substring(3);
+	});
+}
+
+function uriTemplateSubstitution(spec) {
+	var modifier = "";
+	if (uriTemplateGlobalModifiers[spec.charAt(0)]) {
+		modifier = spec.charAt(0);
+		spec = spec.substring(1);
+	}
+	var separator = "";
+	var prefix = "";
+	var shouldEscape = true;
+	var showVariables = false;
+	var trimEmptyString = false;
+	if (modifier === '+') {
+		shouldEscape = false;
+	} else if (modifier === ".") {
+		prefix = ".";
+		separator = ".";
+	} else if (modifier === "/") {
+		prefix = "/";
+		separator = "/";
+	} else if (modifier === '#') {
+		prefix = "#";
+		shouldEscape = false;
+	} else if (modifier === ';') {
+		prefix = ";";
+		separator = ";";
+		showVariables = true;
+		trimEmptyString = true;
+	} else if (modifier === '?') {
+		prefix = "?";
+		separator = "&";
+		showVariables = true;
+	} else if (modifier === '&') {
+		prefix = "&";
+		separator = "&";
+		showVariables = true;
+	}
+
+	var varNames = [];
+	var varList = spec.split(",");
+	var varSpecs = [];
+	var varSpecMap = {};
+	for (var i = 0; i < varList.length; i++) {
+		var varName = varList[i];
+		var truncate = null;
+		if (varName.indexOf(":") !== -1) {
+			var parts = varName.split(":");
+			varName = parts[0];
+			truncate = parseInt(parts[1], 10);
+		}
+		var suffices = {};
+		while (uriTemplateSuffices[varName.charAt(varName.length - 1)]) {
+			suffices[varName.charAt(varName.length - 1)] = true;
+			varName = varName.substring(0, varName.length - 1);
+		}
+		var varSpec = {
+			truncate: truncate,
+			name: varName,
+			suffices: suffices
+		};
+		varSpecs.push(varSpec);
+		varSpecMap[varName] = varSpec;
+		varNames.push(varName);
+	}
+	var subFunction = function (valueFunction) {
+		var result = "";
+		var startIndex = 0;
+		for (var i = 0; i < varSpecs.length; i++) {
+			var varSpec = varSpecs[i];
+			var value = valueFunction(varSpec.name);
+			if (value === null || value === undefined || (Array.isArray(value) && value.length === 0) || (typeof value === 'object' && Object.keys(value).length === 0)) {
+				startIndex++;
+				continue;
+			}
+			if (i === startIndex) {
+				result += prefix;
+			} else {
+				result += (separator || ",");
+			}
+			if (Array.isArray(value)) {
+				if (showVariables) {
+					result += varSpec.name + "=";
+				}
+				for (var j = 0; j < value.length; j++) {
+					if (j > 0) {
+						result += varSpec.suffices['*'] ? (separator || ",") : ",";
+						if (varSpec.suffices['*'] && showVariables) {
+							result += varSpec.name + "=";
+						}
+					}
+					result += shouldEscape ? encodeURIComponent(value[j]).replace(/!/g, "%21") : notReallyPercentEncode(value[j]);
+				}
+			} else if (typeof value === "object") {
+				if (showVariables && !varSpec.suffices['*']) {
+					result += varSpec.name + "=";
+				}
+				var first = true;
+				for (var key in value) {
+					if (!first) {
+						result += varSpec.suffices['*'] ? (separator || ",") : ",";
+					}
+					first = false;
+					result += shouldEscape ? encodeURIComponent(key).replace(/!/g, "%21") : notReallyPercentEncode(key);
+					result += varSpec.suffices['*'] ? '=' : ",";
+					result += shouldEscape ? encodeURIComponent(value[key]).replace(/!/g, "%21") : notReallyPercentEncode(value[key]);
+				}
+			} else {
+				if (showVariables) {
+					result += varSpec.name;
+					if (!trimEmptyString || value !== "") {
+						result += "=";
+					}
+				}
+				if (varSpec.truncate != null) {
+					value = value.substring(0, varSpec.truncate);
+				}
+				result += shouldEscape ? encodeURIComponent(value).replace(/!/g, "%21"): notReallyPercentEncode(value);
+			}
+		}
+		return result;
+	};
+	subFunction.varNames = varNames;
+	return {
+		prefix: prefix,
+		substitution: subFunction,
+	};
+}
+
+function UriTemplate(template) {
+	if (!(this instanceof UriTemplate)) {
+		return new UriTemplate(template);
+	}
+	var parts = template.split("{");
+	var textParts = [parts.shift()];
+	var prefixes = [];
+	var substitutions = [];
+	var varNames = [];
+	while (parts.length > 0) {
+		var part = parts.shift();
+		var spec = part.split("}")[0];
+		var remainder = part.substring(spec.length + 1);
+		var funcs = uriTemplateSubstitution(spec);
+		substitutions.push(funcs.substitution);
+		prefixes.push(funcs.prefix);
+		textParts.push(remainder);
+		varNames = varNames.concat(funcs.substitution.varNames);
+	}
+	this.fill = function (valueFunction) {
+		var result = textParts[0];
+		for (var i = 0; i < substitutions.length; i++) {
+			var substitution = substitutions[i];
+			result += substitution(valueFunction);
+			result += textParts[i + 1];
+		}
+		return result;
+	};
+	this.varNames = varNames;
+	this.template = template;
+}
+UriTemplate.prototype = {
+	toString: function () {
+		return this.template;
+	},
+	fillFromObject: function (obj) {
+		return this.fill(function (varName) {
+			return obj[varName];
+		});
+	}
+};
+var ValidatorContext = function ValidatorContext(parent, collectMultiple, errorMessages, checkRecursive, trackUnknownProperties) {
+	this.missing = [];
+	this.missingMap = {};
+	this.formatValidators = parent ? Object.create(parent.formatValidators) : {};
+	this.schemas = parent ? Object.create(parent.schemas) : {};
+	this.collectMultiple = collectMultiple;
+	this.errors = [];
+	this.handleError = collectMultiple ? this.collectError : this.returnError;
+	if (checkRecursive) {
+		this.checkRecursive = true;
+		this.scanned = [];
+		this.scannedFrozen = [];
+		this.scannedFrozenSchemas = [];
+		this.scannedFrozenValidationErrors = [];
+		this.validatedSchemasKey = 'tv4_validation_id';
+		this.validationErrorsKey = 'tv4_validation_errors_id';
+	}
+	if (trackUnknownProperties) {
+		this.trackUnknownProperties = true;
+		this.knownPropertyPaths = {};
+		this.unknownPropertyPaths = {};
+	}
+	this.errorMessages = errorMessages;
+	this.definedKeywords = {};
+	if (parent) {
+		for (var key in parent.definedKeywords) {
+			this.definedKeywords[key] = parent.definedKeywords[key].slice(0);
+		}
+	}
+};
+ValidatorContext.prototype.defineKeyword = function (keyword, keywordFunction) {
+	this.definedKeywords[keyword] = this.definedKeywords[keyword] || [];
+	this.definedKeywords[keyword].push(keywordFunction);
+};
+ValidatorContext.prototype.createError = function (code, messageParams, dataPath, schemaPath, subErrors) {
+	var messageTemplate = this.errorMessages[code] || ErrorMessagesDefault[code];
+	if (typeof messageTemplate !== 'string') {
+		return new ValidationError(code, "Unknown error code " + code + ": " + JSON.stringify(messageParams), dataPath, schemaPath, subErrors);
+	}
+	// Adapted from Crockford's supplant()
+	var message = messageTemplate.replace(/\{([^{}]*)\}/g, function (whole, varName) {
+		var subValue = messageParams[varName];
+		return typeof subValue === 'string' || typeof subValue === 'number' ? subValue : whole;
+	});
+	return new ValidationError(code, message, dataPath, schemaPath, subErrors);
+};
+ValidatorContext.prototype.returnError = function (error) {
+	return error;
+};
+ValidatorContext.prototype.collectError = function (error) {
+	if (error) {
+		this.errors.push(error);
+	}
+	return null;
+};
+ValidatorContext.prototype.prefixErrors = function (startIndex, dataPath, schemaPath) {
+	for (var i = startIndex; i < this.errors.length; i++) {
+		this.errors[i] = this.errors[i].prefixWith(dataPath, schemaPath);
+	}
+	return this;
+};
+ValidatorContext.prototype.banUnknownProperties = function () {
+	for (var unknownPath in this.unknownPropertyPaths) {
+		var error = this.createError(ErrorCodes.UNKNOWN_PROPERTY, {path: unknownPath}, unknownPath, "");
+		var result = this.handleError(error);
+		if (result) {
+			return result;
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.addFormat = function (format, validator) {
+	if (typeof format === 'object') {
+		for (var key in format) {
+			this.addFormat(key, format[key]);
+		}
+		return this;
+	}
+	this.formatValidators[format] = validator;
+};
+ValidatorContext.prototype.resolveRefs = function (schema, urlHistory) {
+	if (schema['$ref'] !== undefined) {
+		urlHistory = urlHistory || {};
+		if (urlHistory[schema['$ref']]) {
+			return this.createError(ErrorCodes.CIRCULAR_REFERENCE, {urls: Object.keys(urlHistory).join(', ')}, '', '');
+		}
+		urlHistory[schema['$ref']] = true;
+		schema = this.getSchema(schema['$ref'], urlHistory);
+	}
+	return schema;
+};
+ValidatorContext.prototype.getSchema = function (url, urlHistory) {
+	var schema;
+	if (this.schemas[url] !== undefined) {
+		schema = this.schemas[url];
+		return this.resolveRefs(schema, urlHistory);
+	}
+	var baseUrl = url;
+	var fragment = "";
+	if (url.indexOf('#') !== -1) {
+		fragment = url.substring(url.indexOf("#") + 1);
+		baseUrl = url.substring(0, url.indexOf("#"));
+	}
+	if (typeof this.schemas[baseUrl] === 'object') {
+		schema = this.schemas[baseUrl];
+		var pointerPath = decodeURIComponent(fragment);
+		if (pointerPath === "") {
+			return this.resolveRefs(schema, urlHistory);
+		} else if (pointerPath.charAt(0) !== "/") {
+			return undefined;
+		}
+		var parts = pointerPath.split("/").slice(1);
+		for (var i = 0; i < parts.length; i++) {
+			var component = parts[i].replace(/~1/g, "/").replace(/~0/g, "~");
+			if (schema[component] === undefined) {
+				schema = undefined;
+				break;
+			}
+			schema = schema[component];
+		}
+		if (schema !== undefined) {
+			return this.resolveRefs(schema, urlHistory);
+		}
+	}
+	if (this.missing[baseUrl] === undefined) {
+		this.missing.push(baseUrl);
+		this.missing[baseUrl] = baseUrl;
+		this.missingMap[baseUrl] = baseUrl;
+	}
+};
+ValidatorContext.prototype.searchSchemas = function (schema, url) {
+	if (schema && typeof schema === "object") {
+		if (typeof schema.id === "string") {
+			if (isTrustedUrl(url, schema.id)) {
+				if (this.schemas[schema.id] === undefined) {
+					this.schemas[schema.id] = schema;
+				}
+			}
+		}
+		for (var key in schema) {
+			if (key !== "enum") {
+				if (typeof schema[key] === "object") {
+					this.searchSchemas(schema[key], url);
+				} else if (key === "$ref") {
+					var uri = getDocumentUri(schema[key]);
+					if (uri && this.schemas[uri] === undefined && this.missingMap[uri] === undefined) {
+						this.missingMap[uri] = uri;
+					}
+				}
+			}
+		}
+	}
+};
+ValidatorContext.prototype.addSchema = function (url, schema) {
+	//overload
+	if (typeof url !== 'string' || typeof schema === 'undefined') {
+		if (typeof url === 'object' && typeof url.id === 'string') {
+			schema = url;
+			url = schema.id;
+		}
+		else {
+			return;
+		}
+	}
+	if (url === getDocumentUri(url) + "#") {
+		// Remove empty fragment
+		url = getDocumentUri(url);
+	}
+	this.schemas[url] = schema;
+	delete this.missingMap[url];
+	normSchema(schema, url);
+	this.searchSchemas(schema, url);
+};
+
+ValidatorContext.prototype.getSchemaMap = function () {
+	var map = {};
+	for (var key in this.schemas) {
+		map[key] = this.schemas[key];
+	}
+	return map;
+};
+
+ValidatorContext.prototype.getSchemaUris = function (filterRegExp) {
+	var list = [];
+	for (var key in this.schemas) {
+		if (!filterRegExp || filterRegExp.test(key)) {
+			list.push(key);
+		}
+	}
+	return list;
+};
+
+ValidatorContext.prototype.getMissingUris = function (filterRegExp) {
+	var list = [];
+	for (var key in this.missingMap) {
+		if (!filterRegExp || filterRegExp.test(key)) {
+			list.push(key);
+		}
+	}
+	return list;
+};
+
+ValidatorContext.prototype.dropSchemas = function () {
+	this.schemas = {};
+	this.reset();
+};
+ValidatorContext.prototype.reset = function () {
+	this.missing = [];
+	this.missingMap = {};
+	this.errors = [];
+};
+
+ValidatorContext.prototype.validateAll = function (data, schema, dataPathParts, schemaPathParts, dataPointerPath) {
+	var topLevel;
+	schema = this.resolveRefs(schema);
+	if (!schema) {
+		return null;
+	} else if (schema instanceof ValidationError) {
+		this.errors.push(schema);
+		return schema;
+	}
+
+	var startErrorCount = this.errors.length;
+	var frozenIndex, scannedFrozenSchemaIndex = null, scannedSchemasIndex = null;
+	if (this.checkRecursive && data && typeof data === 'object') {
+		topLevel = !this.scanned.length;
+		if (data[this.validatedSchemasKey]) {
+			var schemaIndex = data[this.validatedSchemasKey].indexOf(schema);
+			if (schemaIndex !== -1) {
+				this.errors = this.errors.concat(data[this.validationErrorsKey][schemaIndex]);
+				return null;
+			}
+		}
+		if (Object.isFrozen(data)) {
+			frozenIndex = this.scannedFrozen.indexOf(data);
+			if (frozenIndex !== -1) {
+				var frozenSchemaIndex = this.scannedFrozenSchemas[frozenIndex].indexOf(schema);
+				if (frozenSchemaIndex !== -1) {
+					this.errors = this.errors.concat(this.scannedFrozenValidationErrors[frozenIndex][frozenSchemaIndex]);
+					return null;
+				}
+			}
+		}
+		this.scanned.push(data);
+		if (Object.isFrozen(data)) {
+			if (frozenIndex === -1) {
+				frozenIndex = this.scannedFrozen.length;
+				this.scannedFrozen.push(data);
+				this.scannedFrozenSchemas.push([]);
+			}
+			scannedFrozenSchemaIndex = this.scannedFrozenSchemas[frozenIndex].length;
+			this.scannedFrozenSchemas[frozenIndex][scannedFrozenSchemaIndex] = schema;
+			this.scannedFrozenValidationErrors[frozenIndex][scannedFrozenSchemaIndex] = [];
+		} else {
+			if (!data[this.validatedSchemasKey]) {
+				try {
+					Object.defineProperty(data, this.validatedSchemasKey, {
+						value: [],
+						configurable: true
+					});
+					Object.defineProperty(data, this.validationErrorsKey, {
+						value: [],
+						configurable: true
+					});
+				} catch (e) {
+					//IE 7/8 workaround
+					data[this.validatedSchemasKey] = [];
+					data[this.validationErrorsKey] = [];
+				}
+			}
+			scannedSchemasIndex = data[this.validatedSchemasKey].length;
+			data[this.validatedSchemasKey][scannedSchemasIndex] = schema;
+			data[this.validationErrorsKey][scannedSchemasIndex] = [];
+		}
+	}
+
+	var errorCount = this.errors.length;
+	var error = this.validateBasic(data, schema, dataPointerPath)
+		|| this.validateNumeric(data, schema, dataPointerPath)
+		|| this.validateString(data, schema, dataPointerPath)
+		|| this.validateArray(data, schema, dataPointerPath)
+		|| this.validateObject(data, schema, dataPointerPath)
+		|| this.validateCombinations(data, schema, dataPointerPath)
+		|| this.validateHypermedia(data, schema, dataPointerPath)
+		|| this.validateFormat(data, schema, dataPointerPath)
+		|| this.validateDefinedKeywords(data, schema, dataPointerPath)
+		|| null;
+
+	if (topLevel) {
+		while (this.scanned.length) {
+			var item = this.scanned.pop();
+			delete item[this.validatedSchemasKey];
+		}
+		this.scannedFrozen = [];
+		this.scannedFrozenSchemas = [];
+	}
+
+	if (error || errorCount !== this.errors.length) {
+		while ((dataPathParts && dataPathParts.length) || (schemaPathParts && schemaPathParts.length)) {
+			var dataPart = (dataPathParts && dataPathParts.length) ? "" + dataPathParts.pop() : null;
+			var schemaPart = (schemaPathParts && schemaPathParts.length) ? "" + schemaPathParts.pop() : null;
+			if (error) {
+				error = error.prefixWith(dataPart, schemaPart);
+			}
+			this.prefixErrors(errorCount, dataPart, schemaPart);
+		}
+	}
+	
+	if (scannedFrozenSchemaIndex !== null) {
+		this.scannedFrozenValidationErrors[frozenIndex][scannedFrozenSchemaIndex] = this.errors.slice(startErrorCount);
+	} else if (scannedSchemasIndex !== null) {
+		data[this.validationErrorsKey][scannedSchemasIndex] = this.errors.slice(startErrorCount);
+	}
+
+	return this.handleError(error);
+};
+ValidatorContext.prototype.validateFormat = function (data, schema) {
+	if (typeof schema.format !== 'string' || !this.formatValidators[schema.format]) {
+		return null;
+	}
+	var errorMessage = this.formatValidators[schema.format].call(null, data, schema);
+	if (typeof errorMessage === 'string' || typeof errorMessage === 'number') {
+		return this.createError(ErrorCodes.FORMAT_CUSTOM, {message: errorMessage}).prefixWith(null, "format");
+	} else if (errorMessage && typeof errorMessage === 'object') {
+		return this.createError(ErrorCodes.FORMAT_CUSTOM, {message: errorMessage.message || "?"}, errorMessage.dataPath || null, errorMessage.schemaPath || "/format");
+	}
+	return null;
+};
+ValidatorContext.prototype.validateDefinedKeywords = function (data, schema) {
+	for (var key in this.definedKeywords) {
+		if (typeof schema[key] === 'undefined') {
+			continue;
+		}
+		var validationFunctions = this.definedKeywords[key];
+		for (var i = 0; i < validationFunctions.length; i++) {
+			var func = validationFunctions[i];
+			var result = func(data, schema[key], schema);
+			if (typeof result === 'string' || typeof result === 'number') {
+				return this.createError(ErrorCodes.KEYWORD_CUSTOM, {key: key, message: result}).prefixWith(null, "format");
+			} else if (result && typeof result === 'object') {
+				var code = result.code || ErrorCodes.KEYWORD_CUSTOM;
+				if (typeof code === 'string') {
+					if (!ErrorCodes[code]) {
+						throw new Error('Undefined error code (use defineError): ' + code);
+					}
+					code = ErrorCodes[code];
+				}
+				var messageParams = (typeof result.message === 'object') ? result.message : {key: key, message: result.message || "?"};
+				var schemaPath = result.schemaPath ||( "/" + key.replace(/~/g, '~0').replace(/\//g, '~1'));
+				return this.createError(code, messageParams, result.dataPath || null, schemaPath);
+			}
+		}
+	}
+	return null;
+};
+
+function recursiveCompare(A, B) {
+	if (A === B) {
+		return true;
+	}
+	if (typeof A === "object" && typeof B === "object") {
+		if (Array.isArray(A) !== Array.isArray(B)) {
+			return false;
+		} else if (Array.isArray(A)) {
+			if (A.length !== B.length) {
+				return false;
+			}
+			for (var i = 0; i < A.length; i++) {
+				if (!recursiveCompare(A[i], B[i])) {
+					return false;
+				}
+			}
+		} else {
+			var key;
+			for (key in A) {
+				if (B[key] === undefined && A[key] !== undefined) {
+					return false;
+				}
+			}
+			for (key in B) {
+				if (A[key] === undefined && B[key] !== undefined) {
+					return false;
+				}
+			}
+			for (key in A) {
+				if (!recursiveCompare(A[key], B[key])) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+	return false;
+}
+
+ValidatorContext.prototype.validateBasic = function validateBasic(data, schema, dataPointerPath) {
+	var error;
+	if (error = this.validateType(data, schema, dataPointerPath)) {
+		return error.prefixWith(null, "type");
+	}
+	if (error = this.validateEnum(data, schema, dataPointerPath)) {
+		return error.prefixWith(null, "type");
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateType = function validateType(data, schema) {
+	if (schema.type === undefined) {
+		return null;
+	}
+	var dataType = typeof data;
+	if (data === null) {
+		dataType = "null";
+	} else if (Array.isArray(data)) {
+		dataType = "array";
+	}
+	var allowedTypes = schema.type;
+	if (typeof allowedTypes !== "object") {
+		allowedTypes = [allowedTypes];
+	}
+
+	for (var i = 0; i < allowedTypes.length; i++) {
+		var type = allowedTypes[i];
+		if (type === dataType || (type === "integer" && dataType === "number" && (data % 1 === 0))) {
+			return null;
+		}
+	}
+	return this.createError(ErrorCodes.INVALID_TYPE, {type: dataType, expected: allowedTypes.join("/")});
+};
+
+ValidatorContext.prototype.validateEnum = function validateEnum(data, schema) {
+	if (schema["enum"] === undefined) {
+		return null;
+	}
+	for (var i = 0; i < schema["enum"].length; i++) {
+		var enumVal = schema["enum"][i];
+		if (recursiveCompare(data, enumVal)) {
+			return null;
+		}
+	}
+	return this.createError(ErrorCodes.ENUM_MISMATCH, {value: (typeof JSON !== 'undefined') ? JSON.stringify(data) : data});
+};
+
+ValidatorContext.prototype.validateNumeric = function validateNumeric(data, schema, dataPointerPath) {
+	return this.validateMultipleOf(data, schema, dataPointerPath)
+		|| this.validateMinMax(data, schema, dataPointerPath)
+		|| null;
+};
+
+ValidatorContext.prototype.validateMultipleOf = function validateMultipleOf(data, schema) {
+	var multipleOf = schema.multipleOf || schema.divisibleBy;
+	if (multipleOf === undefined) {
+		return null;
+	}
+	if (typeof data === "number") {
+		if (data % multipleOf !== 0) {
+			return this.createError(ErrorCodes.NUMBER_MULTIPLE_OF, {value: data, multipleOf: multipleOf});
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateMinMax = function validateMinMax(data, schema) {
+	if (typeof data !== "number") {
+		return null;
+	}
+	if (schema.minimum !== undefined) {
+		if (data < schema.minimum) {
+			return this.createError(ErrorCodes.NUMBER_MINIMUM, {value: data, minimum: schema.minimum}).prefixWith(null, "minimum");
+		}
+		if (schema.exclusiveMinimum && data === schema.minimum) {
+			return this.createError(ErrorCodes.NUMBER_MINIMUM_EXCLUSIVE, {value: data, minimum: schema.minimum}).prefixWith(null, "exclusiveMinimum");
+		}
+	}
+	if (schema.maximum !== undefined) {
+		if (data > schema.maximum) {
+			return this.createError(ErrorCodes.NUMBER_MAXIMUM, {value: data, maximum: schema.maximum}).prefixWith(null, "maximum");
+		}
+		if (schema.exclusiveMaximum && data === schema.maximum) {
+			return this.createError(ErrorCodes.NUMBER_MAXIMUM_EXCLUSIVE, {value: data, maximum: schema.maximum}).prefixWith(null, "exclusiveMaximum");
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateString = function validateString(data, schema, dataPointerPath) {
+	return this.validateStringLength(data, schema, dataPointerPath)
+		|| this.validateStringPattern(data, schema, dataPointerPath)
+		|| null;
+};
+
+ValidatorContext.prototype.validateStringLength = function validateStringLength(data, schema) {
+	if (typeof data !== "string") {
+		return null;
+	}
+	if (schema.minLength !== undefined) {
+		if (data.length < schema.minLength) {
+			return this.createError(ErrorCodes.STRING_LENGTH_SHORT, {length: data.length, minimum: schema.minLength}).prefixWith(null, "minLength");
+		}
+	}
+	if (schema.maxLength !== undefined) {
+		if (data.length > schema.maxLength) {
+			return this.createError(ErrorCodes.STRING_LENGTH_LONG, {length: data.length, maximum: schema.maxLength}).prefixWith(null, "maxLength");
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateStringPattern = function validateStringPattern(data, schema) {
+	if (typeof data !== "string" || schema.pattern === undefined) {
+		return null;
+	}
+	var regexp = new RegExp(schema.pattern);
+	if (!regexp.test(data)) {
+		return this.createError(ErrorCodes.STRING_PATTERN, {pattern: schema.pattern}).prefixWith(null, "pattern");
+	}
+	return null;
+};
+ValidatorContext.prototype.validateArray = function validateArray(data, schema, dataPointerPath) {
+	if (!Array.isArray(data)) {
+		return null;
+	}
+	return this.validateArrayLength(data, schema, dataPointerPath)
+		|| this.validateArrayUniqueItems(data, schema, dataPointerPath)
+		|| this.validateArrayItems(data, schema, dataPointerPath)
+		|| null;
+};
+
+ValidatorContext.prototype.validateArrayLength = function validateArrayLength(data, schema) {
+	var error;
+	if (schema.minItems !== undefined) {
+		if (data.length < schema.minItems) {
+			error = (this.createError(ErrorCodes.ARRAY_LENGTH_SHORT, {length: data.length, minimum: schema.minItems})).prefixWith(null, "minItems");
+			if (this.handleError(error)) {
+				return error;
+			}
+		}
+	}
+	if (schema.maxItems !== undefined) {
+		if (data.length > schema.maxItems) {
+			error = (this.createError(ErrorCodes.ARRAY_LENGTH_LONG, {length: data.length, maximum: schema.maxItems})).prefixWith(null, "maxItems");
+			if (this.handleError(error)) {
+				return error;
+			}
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateArrayUniqueItems = function validateArrayUniqueItems(data, schema) {
+	if (schema.uniqueItems) {
+		for (var i = 0; i < data.length; i++) {
+			for (var j = i + 1; j < data.length; j++) {
+				if (recursiveCompare(data[i], data[j])) {
+					var error = (this.createError(ErrorCodes.ARRAY_UNIQUE, {match1: i, match2: j})).prefixWith(null, "uniqueItems");
+					if (this.handleError(error)) {
+						return error;
+					}
+				}
+			}
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateArrayItems = function validateArrayItems(data, schema, dataPointerPath) {
+	if (schema.items === undefined) {
+		return null;
+	}
+	var error, i;
+	if (Array.isArray(schema.items)) {
+		for (i = 0; i < data.length; i++) {
+			if (i < schema.items.length) {
+				if (error = this.validateAll(data[i], schema.items[i], [i], ["items", i], dataPointerPath + "/" + i)) {
+					return error;
+				}
+			} else if (schema.additionalItems !== undefined) {
+				if (typeof schema.additionalItems === "boolean") {
+					if (!schema.additionalItems) {
+						error = (this.createError(ErrorCodes.ARRAY_ADDITIONAL_ITEMS, {})).prefixWith("" + i, "additionalItems");
+						if (this.handleError(error)) {
+							return error;
+						}
+					}
+				} else if (error = this.validateAll(data[i], schema.additionalItems, [i], ["additionalItems"], dataPointerPath + "/" + i)) {
+					return error;
+				}
+			}
+		}
+	} else {
+		for (i = 0; i < data.length; i++) {
+			if (error = this.validateAll(data[i], schema.items, [i], ["items"], dataPointerPath + "/" + i)) {
+				return error;
+			}
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateObject = function validateObject(data, schema, dataPointerPath) {
+	if (typeof data !== "object" || data === null || Array.isArray(data)) {
+		return null;
+	}
+	return this.validateObjectMinMaxProperties(data, schema, dataPointerPath)
+		|| this.validateObjectRequiredProperties(data, schema, dataPointerPath)
+		|| this.validateObjectProperties(data, schema, dataPointerPath)
+		|| this.validateObjectDependencies(data, schema, dataPointerPath)
+		|| null;
+};
+
+ValidatorContext.prototype.validateObjectMinMaxProperties = function validateObjectMinMaxProperties(data, schema) {
+	var keys = Object.keys(data);
+	var error;
+	if (schema.minProperties !== undefined) {
+		if (keys.length < schema.minProperties) {
+			error = this.createError(ErrorCodes.OBJECT_PROPERTIES_MINIMUM, {propertyCount: keys.length, minimum: schema.minProperties}).prefixWith(null, "minProperties");
+			if (this.handleError(error)) {
+				return error;
+			}
+		}
+	}
+	if (schema.maxProperties !== undefined) {
+		if (keys.length > schema.maxProperties) {
+			error = this.createError(ErrorCodes.OBJECT_PROPERTIES_MAXIMUM, {propertyCount: keys.length, maximum: schema.maxProperties}).prefixWith(null, "maxProperties");
+			if (this.handleError(error)) {
+				return error;
+			}
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateObjectRequiredProperties = function validateObjectRequiredProperties(data, schema) {
+	if (schema.required !== undefined) {
+		for (var i = 0; i < schema.required.length; i++) {
+			var key = schema.required[i];
+			if (data[key] === undefined) {
+				var error = this.createError(ErrorCodes.OBJECT_REQUIRED, {key: key}).prefixWith(null, "" + i).prefixWith(null, "required");
+				if (this.handleError(error)) {
+					return error;
+				}
+			}
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateObjectProperties = function validateObjectProperties(data, schema, dataPointerPath) {
+	var error;
+	for (var key in data) {
+		var keyPointerPath = dataPointerPath + "/" + key.replace(/~/g, '~0').replace(/\//g, '~1');
+		var foundMatch = false;
+		if (schema.properties !== undefined && schema.properties[key] !== undefined) {
+			foundMatch = true;
+			if (error = this.validateAll(data[key], schema.properties[key], [key], ["properties", key], keyPointerPath)) {
+				return error;
+			}
+		}
+		if (schema.patternProperties !== undefined) {
+			for (var patternKey in schema.patternProperties) {
+				var regexp = new RegExp(patternKey);
+				if (regexp.test(key)) {
+					foundMatch = true;
+					if (error = this.validateAll(data[key], schema.patternProperties[patternKey], [key], ["patternProperties", patternKey], keyPointerPath)) {
+						return error;
+					}
+				}
+			}
+		}
+		if (!foundMatch) {
+			if (schema.additionalProperties !== undefined) {
+				if (this.trackUnknownProperties) {
+					this.knownPropertyPaths[keyPointerPath] = true;
+					delete this.unknownPropertyPaths[keyPointerPath];
+				}
+				if (typeof schema.additionalProperties === "boolean") {
+					if (!schema.additionalProperties) {
+						error = this.createError(ErrorCodes.OBJECT_ADDITIONAL_PROPERTIES, {}).prefixWith(key, "additionalProperties");
+						if (this.handleError(error)) {
+							return error;
+						}
+					}
+				} else {
+					if (error = this.validateAll(data[key], schema.additionalProperties, [key], ["additionalProperties"], keyPointerPath)) {
+						return error;
+					}
+				}
+			} else if (this.trackUnknownProperties && !this.knownPropertyPaths[keyPointerPath]) {
+				this.unknownPropertyPaths[keyPointerPath] = true;
+			}
+		} else if (this.trackUnknownProperties) {
+			this.knownPropertyPaths[keyPointerPath] = true;
+			delete this.unknownPropertyPaths[keyPointerPath];
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateObjectDependencies = function validateObjectDependencies(data, schema, dataPointerPath) {
+	var error;
+	if (schema.dependencies !== undefined) {
+		for (var depKey in schema.dependencies) {
+			if (data[depKey] !== undefined) {
+				var dep = schema.dependencies[depKey];
+				if (typeof dep === "string") {
+					if (data[dep] === undefined) {
+						error = this.createError(ErrorCodes.OBJECT_DEPENDENCY_KEY, {key: depKey, missing: dep}).prefixWith(null, depKey).prefixWith(null, "dependencies");
+						if (this.handleError(error)) {
+							return error;
+						}
+					}
+				} else if (Array.isArray(dep)) {
+					for (var i = 0; i < dep.length; i++) {
+						var requiredKey = dep[i];
+						if (data[requiredKey] === undefined) {
+							error = this.createError(ErrorCodes.OBJECT_DEPENDENCY_KEY, {key: depKey, missing: requiredKey}).prefixWith(null, "" + i).prefixWith(null, depKey).prefixWith(null, "dependencies");
+							if (this.handleError(error)) {
+								return error;
+							}
+						}
+					}
+				} else {
+					if (error = this.validateAll(data, dep, [], ["dependencies", depKey], dataPointerPath)) {
+						return error;
+					}
+				}
+			}
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateCombinations = function validateCombinations(data, schema, dataPointerPath) {
+	return this.validateAllOf(data, schema, dataPointerPath)
+		|| this.validateAnyOf(data, schema, dataPointerPath)
+		|| this.validateOneOf(data, schema, dataPointerPath)
+		|| this.validateNot(data, schema, dataPointerPath)
+		|| null;
+};
+
+ValidatorContext.prototype.validateAllOf = function validateAllOf(data, schema, dataPointerPath) {
+	if (schema.allOf === undefined) {
+		return null;
+	}
+	var error;
+	for (var i = 0; i < schema.allOf.length; i++) {
+		var subSchema = schema.allOf[i];
+		if (error = this.validateAll(data, subSchema, [], ["allOf", i], dataPointerPath)) {
+			return error;
+		}
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateAnyOf = function validateAnyOf(data, schema, dataPointerPath) {
+	if (schema.anyOf === undefined) {
+		return null;
+	}
+	var errors = [];
+	var startErrorCount = this.errors.length;
+	var oldUnknownPropertyPaths, oldKnownPropertyPaths;
+	if (this.trackUnknownProperties) {
+		oldUnknownPropertyPaths = this.unknownPropertyPaths;
+		oldKnownPropertyPaths = this.knownPropertyPaths;
+	}
+	var errorAtEnd = true;
+	for (var i = 0; i < schema.anyOf.length; i++) {
+		if (this.trackUnknownProperties) {
+			this.unknownPropertyPaths = {};
+			this.knownPropertyPaths = {};
+		}
+		var subSchema = schema.anyOf[i];
+
+		var errorCount = this.errors.length;
+		var error = this.validateAll(data, subSchema, [], ["anyOf", i], dataPointerPath);
+
+		if (error === null && errorCount === this.errors.length) {
+			this.errors = this.errors.slice(0, startErrorCount);
+
+			if (this.trackUnknownProperties) {
+				for (var knownKey in this.knownPropertyPaths) {
+					oldKnownPropertyPaths[knownKey] = true;
+					delete oldUnknownPropertyPaths[knownKey];
+				}
+				for (var unknownKey in this.unknownPropertyPaths) {
+					if (!oldKnownPropertyPaths[unknownKey]) {
+						oldUnknownPropertyPaths[unknownKey] = true;
+					}
+				}
+				// We need to continue looping so we catch all the property definitions, but we don't want to return an error
+				errorAtEnd = false;
+				continue;
+			}
+
+			return null;
+		}
+		if (error) {
+			errors.push(error.prefixWith(null, "" + i).prefixWith(null, "anyOf"));
+		}
+	}
+	if (this.trackUnknownProperties) {
+		this.unknownPropertyPaths = oldUnknownPropertyPaths;
+		this.knownPropertyPaths = oldKnownPropertyPaths;
+	}
+	if (errorAtEnd) {
+		errors = errors.concat(this.errors.slice(startErrorCount));
+		this.errors = this.errors.slice(0, startErrorCount);
+		return this.createError(ErrorCodes.ANY_OF_MISSING, {}, "", "/anyOf", errors);
+	}
+};
+
+ValidatorContext.prototype.validateOneOf = function validateOneOf(data, schema, dataPointerPath) {
+	if (schema.oneOf === undefined) {
+		return null;
+	}
+	var validIndex = null;
+	var errors = [];
+	var startErrorCount = this.errors.length;
+	var oldUnknownPropertyPaths, oldKnownPropertyPaths;
+	if (this.trackUnknownProperties) {
+		oldUnknownPropertyPaths = this.unknownPropertyPaths;
+		oldKnownPropertyPaths = this.knownPropertyPaths;
+	}
+	for (var i = 0; i < schema.oneOf.length; i++) {
+		if (this.trackUnknownProperties) {
+			this.unknownPropertyPaths = {};
+			this.knownPropertyPaths = {};
+		}
+		var subSchema = schema.oneOf[i];
+
+		var errorCount = this.errors.length;
+		var error = this.validateAll(data, subSchema, [], ["oneOf", i], dataPointerPath);
+
+		if (error === null && errorCount === this.errors.length) {
+			if (validIndex === null) {
+				validIndex = i;
+			} else {
+				this.errors = this.errors.slice(0, startErrorCount);
+				return this.createError(ErrorCodes.ONE_OF_MULTIPLE, {index1: validIndex, index2: i}, "", "/oneOf");
+			}
+			if (this.trackUnknownProperties) {
+				for (var knownKey in this.knownPropertyPaths) {
+					oldKnownPropertyPaths[knownKey] = true;
+					delete oldUnknownPropertyPaths[knownKey];
+				}
+				for (var unknownKey in this.unknownPropertyPaths) {
+					if (!oldKnownPropertyPaths[unknownKey]) {
+						oldUnknownPropertyPaths[unknownKey] = true;
+					}
+				}
+			}
+		} else if (error) {
+			errors.push(error);
+		}
+	}
+	if (this.trackUnknownProperties) {
+		this.unknownPropertyPaths = oldUnknownPropertyPaths;
+		this.knownPropertyPaths = oldKnownPropertyPaths;
+	}
+	if (validIndex === null) {
+		errors = errors.concat(this.errors.slice(startErrorCount));
+		this.errors = this.errors.slice(0, startErrorCount);
+		return this.createError(ErrorCodes.ONE_OF_MISSING, {}, "", "/oneOf", errors);
+	} else {
+		this.errors = this.errors.slice(0, startErrorCount);
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateNot = function validateNot(data, schema, dataPointerPath) {
+	if (schema.not === undefined) {
+		return null;
+	}
+	var oldErrorCount = this.errors.length;
+	var oldUnknownPropertyPaths, oldKnownPropertyPaths;
+	if (this.trackUnknownProperties) {
+		oldUnknownPropertyPaths = this.unknownPropertyPaths;
+		oldKnownPropertyPaths = this.knownPropertyPaths;
+		this.unknownPropertyPaths = {};
+		this.knownPropertyPaths = {};
+	}
+	var error = this.validateAll(data, schema.not, null, null, dataPointerPath);
+	var notErrors = this.errors.slice(oldErrorCount);
+	this.errors = this.errors.slice(0, oldErrorCount);
+	if (this.trackUnknownProperties) {
+		this.unknownPropertyPaths = oldUnknownPropertyPaths;
+		this.knownPropertyPaths = oldKnownPropertyPaths;
+	}
+	if (error === null && notErrors.length === 0) {
+		return this.createError(ErrorCodes.NOT_PASSED, {}, "", "/not");
+	}
+	return null;
+};
+
+ValidatorContext.prototype.validateHypermedia = function validateCombinations(data, schema, dataPointerPath) {
+	if (!schema.links) {
+		return null;
+	}
+	var error;
+	for (var i = 0; i < schema.links.length; i++) {
+		var ldo = schema.links[i];
+		if (ldo.rel === "describedby") {
+			var template = new UriTemplate(ldo.href);
+			var allPresent = true;
+			for (var j = 0; j < template.varNames.length; j++) {
+				if (!(template.varNames[j] in data)) {
+					allPresent = false;
+					break;
+				}
+			}
+			if (allPresent) {
+				var schemaUrl = template.fillFromObject(data);
+				var subSchema = {"$ref": schemaUrl};
+				if (error = this.validateAll(data, subSchema, [], ["links", i], dataPointerPath)) {
+					return error;
+				}
+			}
+		}
+	}
+};
+
+// parseURI() and resolveUrl() are from https://gist.github.com/1088850
+//   -  released as public domain by author ("Yaffle") - see comments on gist
+
+function parseURI(url) {
+	var m = String(url).replace(/^\s+|\s+$/g, '').match(/^([^:\/?#]+:)?(\/\/(?:[^:@]*(?::[^:@]*)?@)?(([^:\/?#]*)(?::(\d*))?))?([^?#]*)(\?[^#]*)?(#[\s\S]*)?/);
+	// authority = '//' + user + ':' + pass '@' + hostname + ':' port
+	return (m ? {
+		href     : m[0] || '',
+		protocol : m[1] || '',
+		authority: m[2] || '',
+		host     : m[3] || '',
+		hostname : m[4] || '',
+		port     : m[5] || '',
+		pathname : m[6] || '',
+		search   : m[7] || '',
+		hash     : m[8] || ''
+	} : null);
+}
+
+function resolveUrl(base, href) {// RFC 3986
+
+	function removeDotSegments(input) {
+		var output = [];
+		input.replace(/^(\.\.?(\/|$))+/, '')
+			.replace(/\/(\.(\/|$))+/g, '/')
+			.replace(/\/\.\.$/, '/../')
+			.replace(/\/?[^\/]*/g, function (p) {
+				if (p === '/..') {
+					output.pop();
+				} else {
+					output.push(p);
+				}
+		});
+		return output.join('').replace(/^\//, input.charAt(0) === '/' ? '/' : '');
+	}
+
+	href = parseURI(href || '');
+	base = parseURI(base || '');
+
+	return !href || !base ? null : (href.protocol || base.protocol) +
+		(href.protocol || href.authority ? href.authority : base.authority) +
+		removeDotSegments(href.protocol || href.authority || href.pathname.charAt(0) === '/' ? href.pathname : (href.pathname ? ((base.authority && !base.pathname ? '/' : '') + base.pathname.slice(0, base.pathname.lastIndexOf('/') + 1) + href.pathname) : base.pathname)) +
+		(href.protocol || href.authority || href.pathname ? href.search : (href.search || base.search)) +
+		href.hash;
+}
+
+function getDocumentUri(uri) {
+	return uri.split('#')[0];
+}
+function normSchema(schema, baseUri) {
+	if (schema && typeof schema === "object") {
+		if (baseUri === undefined) {
+			baseUri = schema.id;
+		} else if (typeof schema.id === "string") {
+			baseUri = resolveUrl(baseUri, schema.id);
+			schema.id = baseUri;
+		}
+		if (Array.isArray(schema)) {
+			for (var i = 0; i < schema.length; i++) {
+				normSchema(schema[i], baseUri);
+			}
+		} else {
+			if (typeof schema['$ref'] === "string") {
+				schema['$ref'] = resolveUrl(baseUri, schema['$ref']);
+			}
+			for (var key in schema) {
+				if (key !== "enum") {
+					normSchema(schema[key], baseUri);
+				}
+			}
+		}
+	}
+}
+
+var ErrorCodes = {
+	INVALID_TYPE: 0,
+	ENUM_MISMATCH: 1,
+	ANY_OF_MISSING: 10,
+	ONE_OF_MISSING: 11,
+	ONE_OF_MULTIPLE: 12,
+	NOT_PASSED: 13,
+	// Numeric errors
+	NUMBER_MULTIPLE_OF: 100,
+	NUMBER_MINIMUM: 101,
+	NUMBER_MINIMUM_EXCLUSIVE: 102,
+	NUMBER_MAXIMUM: 103,
+	NUMBER_MAXIMUM_EXCLUSIVE: 104,
+	// String errors
+	STRING_LENGTH_SHORT: 200,
+	STRING_LENGTH_LONG: 201,
+	STRING_PATTERN: 202,
+	// Object errors
+	OBJECT_PROPERTIES_MINIMUM: 300,
+	OBJECT_PROPERTIES_MAXIMUM: 301,
+	OBJECT_REQUIRED: 302,
+	OBJECT_ADDITIONAL_PROPERTIES: 303,
+	OBJECT_DEPENDENCY_KEY: 304,
+	// Array errors
+	ARRAY_LENGTH_SHORT: 400,
+	ARRAY_LENGTH_LONG: 401,
+	ARRAY_UNIQUE: 402,
+	ARRAY_ADDITIONAL_ITEMS: 403,
+	// Custom/user-defined errors
+	FORMAT_CUSTOM: 500,
+	KEYWORD_CUSTOM: 501,
+	// Schema structure
+	CIRCULAR_REFERENCE: 600,
+	// Non-standard validation options
+	UNKNOWN_PROPERTY: 1000
+};
+var ErrorCodeLookup = {};
+for (var key in ErrorCodes) {
+	ErrorCodeLookup[ErrorCodes[key]] = key;
+}
+var ErrorMessagesDefault = {
+	INVALID_TYPE: "invalid type: {type} (expected {expected})",
+	ENUM_MISMATCH: "No enum match for: {value}",
+	ANY_OF_MISSING: "Data does not match any schemas from \"anyOf\"",
+	ONE_OF_MISSING: "Data does not match any schemas from \"oneOf\"",
+	ONE_OF_MULTIPLE: "Data is valid against more than one schema from \"oneOf\": indices {index1} and {index2}",
+	NOT_PASSED: "Data matches schema from \"not\"",
+	// Numeric errors
+	NUMBER_MULTIPLE_OF: "Value {value} is not a multiple of {multipleOf}",
+	NUMBER_MINIMUM: "Value {value} is less than minimum {minimum}",
+	NUMBER_MINIMUM_EXCLUSIVE: "Value {value} is equal to exclusive minimum {minimum}",
+	NUMBER_MAXIMUM: "Value {value} is greater than maximum {maximum}",
+	NUMBER_MAXIMUM_EXCLUSIVE: "Value {value} is equal to exclusive maximum {maximum}",
+	// String errors
+	STRING_LENGTH_SHORT: "String is too short ({length} chars), minimum {minimum}",
+	STRING_LENGTH_LONG: "String is too long ({length} chars), maximum {maximum}",
+	STRING_PATTERN: "String does not match pattern: {pattern}",
+	// Object errors
+	OBJECT_PROPERTIES_MINIMUM: "Too few properties defined ({propertyCount}), minimum {minimum}",
+	OBJECT_PROPERTIES_MAXIMUM: "Too many properties defined ({propertyCount}), maximum {maximum}",
+	OBJECT_REQUIRED: "Missing required property: {key}",
+	OBJECT_ADDITIONAL_PROPERTIES: "Additional properties not allowed",
+	OBJECT_DEPENDENCY_KEY: "Dependency failed - key must exist: {missing} (due to key: {key})",
+	// Array errors
+	ARRAY_LENGTH_SHORT: "Array is too short ({length}), minimum {minimum}",
+	ARRAY_LENGTH_LONG: "Array is too long ({length}), maximum {maximum}",
+	ARRAY_UNIQUE: "Array items are not unique (indices {match1} and {match2})",
+	ARRAY_ADDITIONAL_ITEMS: "Additional items not allowed",
+	// Format errors
+	FORMAT_CUSTOM: "Format validation failed ({message})",
+	KEYWORD_CUSTOM: "Keyword failed: {key} ({message})",
+	// Schema structure
+	CIRCULAR_REFERENCE: "Circular $refs: {urls}",
+	// Non-standard validation options
+	UNKNOWN_PROPERTY: "Unknown property (not in schema)"
+};
+
+function ValidationError(code, message, dataPath, schemaPath, subErrors) {
+	Error.call(this);
+	if (code === undefined) {
+		throw new Error ("No code supplied for error: "+ message);
+	}
+	this.message = message;
+	this.code = code;
+	this.dataPath = dataPath || "";
+	this.schemaPath = schemaPath || "";
+	this.subErrors = subErrors || null;
+
+	var err = new Error(this.message);
+	this.stack = err.stack || err.stacktrace;
+	if (!this.stack) {
+		try {
+			throw err;
+		}
+		catch(err) {
+			this.stack = err.stack || err.stacktrace;
+		}
+	}
+}
+ValidationError.prototype = Object.create(Error.prototype);
+ValidationError.prototype.constructor = ValidationError;
+ValidationError.prototype.name = 'ValidationError';
+
+ValidationError.prototype.prefixWith = function (dataPrefix, schemaPrefix) {
+	if (dataPrefix !== null) {
+		dataPrefix = dataPrefix.replace(/~/g, "~0").replace(/\//g, "~1");
+		this.dataPath = "/" + dataPrefix + this.dataPath;
+	}
+	if (schemaPrefix !== null) {
+		schemaPrefix = schemaPrefix.replace(/~/g, "~0").replace(/\//g, "~1");
+		this.schemaPath = "/" + schemaPrefix + this.schemaPath;
+	}
+	if (this.subErrors !== null) {
+		for (var i = 0; i < this.subErrors.length; i++) {
+			this.subErrors[i].prefixWith(dataPrefix, schemaPrefix);
+		}
+	}
+	return this;
+};
+
+function isTrustedUrl(baseUrl, testUrl) {
+	if(testUrl.substring(0, baseUrl.length) === baseUrl){
+		var remainder = testUrl.substring(baseUrl.length);
+		if ((testUrl.length > 0 && testUrl.charAt(baseUrl.length - 1) === "/")
+			|| remainder.charAt(0) === "#"
+			|| remainder.charAt(0) === "?") {
+			return true;
+		}
+	}
+	return false;
+}
+
+var languages = {};
+function createApi(language) {
+	var globalContext = new ValidatorContext();
+	var currentLanguage = language || 'en';
+	var api = {
+		addFormat: function () {
+			globalContext.addFormat.apply(globalContext, arguments);
+		},
+		language: function (code) {
+			if (!code) {
+				return currentLanguage;
+			}
+			if (!languages[code]) {
+				code = code.split('-')[0]; // fall back to base language
+			}
+			if (languages[code]) {
+				currentLanguage = code;
+				return code; // so you can tell if fall-back has happened
+			}
+			return false;
+		},
+		addLanguage: function (code, messageMap) {
+			var key;
+			for (key in ErrorCodes) {
+				if (messageMap[key] && !messageMap[ErrorCodes[key]]) {
+					messageMap[ErrorCodes[key]] = messageMap[key];
+				}
+			}
+			var rootCode = code.split('-')[0];
+			if (!languages[rootCode]) { // use for base language if not yet defined
+				languages[code] = messageMap;
+				languages[rootCode] = messageMap;
+			} else {
+				languages[code] = Object.create(languages[rootCode]);
+				for (key in messageMap) {
+					if (typeof languages[rootCode][key] === 'undefined') {
+						languages[rootCode][key] = messageMap[key];
+					}
+					languages[code][key] = messageMap[key];
+				}
+			}
+			return this;
+		},
+		freshApi: function (language) {
+			var result = createApi();
+			if (language) {
+				result.language(language);
+			}
+			return result;
+		},
+		validate: function (data, schema, checkRecursive, banUnknownProperties) {
+			var context = new ValidatorContext(globalContext, false, languages[currentLanguage], checkRecursive, banUnknownProperties);
+			if (typeof schema === "string") {
+				schema = {"$ref": schema};
+			}
+			context.addSchema("", schema);
+			var error = context.validateAll(data, schema, null, null, "");
+			if (!error && banUnknownProperties) {
+				error = context.banUnknownProperties();
+			}
+			this.error = error;
+			this.missing = context.missing;
+			this.valid = (error === null);
+			return this.valid;
+		},
+		validateResult: function () {
+			var result = {};
+			this.validate.apply(result, arguments);
+			return result;
+		},
+		validateMultiple: function (data, schema, checkRecursive, banUnknownProperties) {
+			var context = new ValidatorContext(globalContext, true, languages[currentLanguage], checkRecursive, banUnknownProperties);
+			if (typeof schema === "string") {
+				schema = {"$ref": schema};
+			}
+			context.addSchema("", schema);
+			context.validateAll(data, schema, null, null, "");
+			if (banUnknownProperties) {
+				context.banUnknownProperties();
+			}
+			var result = {};
+			result.errors = context.errors;
+			result.missing = context.missing;
+			result.valid = (result.errors.length === 0);
+			return result;
+		},
+		addSchema: function () {
+			return globalContext.addSchema.apply(globalContext, arguments);
+		},
+		getSchema: function () {
+			return globalContext.getSchema.apply(globalContext, arguments);
+		},
+		getSchemaMap: function () {
+			return globalContext.getSchemaMap.apply(globalContext, arguments);
+		},
+		getSchemaUris: function () {
+			return globalContext.getSchemaUris.apply(globalContext, arguments);
+		},
+		getMissingUris: function () {
+			return globalContext.getMissingUris.apply(globalContext, arguments);
+		},
+		dropSchemas: function () {
+			globalContext.dropSchemas.apply(globalContext, arguments);
+		},
+		defineKeyword: function () {
+			globalContext.defineKeyword.apply(globalContext, arguments);
+		},
+		defineError: function (codeName, codeNumber, defaultMessage) {
+			if (typeof codeName !== 'string' || !/^[A-Z]+(_[A-Z]+)*$/.test(codeName)) {
+				throw new Error('Code name must be a string in UPPER_CASE_WITH_UNDERSCORES');
+			}
+			if (typeof codeNumber !== 'number' || codeNumber%1 !== 0 || codeNumber < 10000) {
+				throw new Error('Code number must be an integer > 10000');
+			}
+			if (typeof ErrorCodes[codeName] !== 'undefined') {
+				throw new Error('Error already defined: ' + codeName + ' as ' + ErrorCodes[codeName]);
+			}
+			if (typeof ErrorCodeLookup[codeNumber] !== 'undefined') {
+				throw new Error('Error code already used: ' + ErrorCodeLookup[codeNumber] + ' as ' + codeNumber);
+			}
+			ErrorCodes[codeName] = codeNumber;
+			ErrorCodeLookup[codeNumber] = codeName;
+			ErrorMessagesDefault[codeName] = ErrorMessagesDefault[codeNumber] = defaultMessage;
+			for (var langCode in languages) {
+				var language = languages[langCode];
+				if (language[codeName]) {
+					language[codeNumber] = language[codeNumber] || language[codeName];
+				}
+			}
+		},
+		reset: function () {
+			globalContext.reset();
+			this.error = null;
+			this.missing = [];
+			this.valid = true;
+		},
+		missing: [],
+		error: null,
+		valid: true,
+		normSchema: normSchema,
+		resolveUrl: resolveUrl,
+		getDocumentUri: getDocumentUri,
+		errorCodes: ErrorCodes
+	};
+	return api;
+}
+
+var tv4 = createApi();
+tv4.addLanguage('en-gb', ErrorMessagesDefault);
+
+//legacy property
+tv4.tv4 = tv4;
+
+return tv4; // used by _header.js to globalise.
+
+}));
+});
+
+require.modules["geraintluff-tv4"] = require.modules["geraintluff~tv4@master"];
+require.modules["geraintluff~tv4"] = require.modules["geraintluff~tv4@master"];
+require.modules["tv4"] = require.modules["geraintluff~tv4@master"];
+
+
+require.register("optimuslime~win-schema@master/lib/addSchema.js", function (exports, module) {
+//pull in traverse object for this guy
+var traverse = require("optimuslime~traverse@master");
+var schemaSpec = require("optimuslime~win-schema@master/lib/schemaSpec.js");
+
+
+module.exports = extendAddSchema;
+
+function extendAddSchema(self)
+{
+
+  var pathDelim = self.pathDelimiter;
+
+  var defaultWINAdd = {
+    wid : "string",
+    dbType : "string",
+    parents : {
+      type: "array",
+      items : {
+        type : "string"
+      }
+    }
+  }
+
+  var winTypeRegExp = [];
+  for(var key in defaultWINAdd)
+  {
+    winTypeRegExp.push(key);
+  }
+  self.log("--All WIN keywords: ", winTypeRegExp);
+
+  winTypeRegExp = new RegExp("\\b" + winTypeRegExp.join("\\b|\\b") + "\\b");
+
+  //everything we need to do to add a schema inside
+  //this requires checking if it's properly formatted, pulling references, and moving
+  //around things if it's not formatted but we would like to make it less wordy to make schema
+    self.internalAddSchema = function(type, schemaJSON, options, finished)
+    {
+      if(typeof options == "function")
+      {
+        finished = options;
+        options = {};
+      }
+      else
+        options = options || {};
+
+      if((schemaJSON.type == "array" || schemaJSON.items) && !options.skipWINAdditions)
+      {
+        finished("Array-types for schema cannot have WIN additions. It doesn't make any sense. The object must be an array, but also have a wid property? Failed: " + type);
+        return;
+      }
+
+      //make a clone of the object 
+      schemaJSON = JSON.parse(JSON.stringify(schemaJSON)); 
+
+      //force all types to lower case -- always -- deal with weird validation errors otherwise
+      traverse(schemaJSON).forEach(function(node)
+      {
+          if(this.key == "type" && typeof this.node == "string")
+            this.update(this.node.toLowerCase());
+      })
+
+      //we add or move objects inside the schema to make it conform to expected v4 JSON schema validation
+      appendSchemaInformation(schemaJSON, options);      
+
+      //check our schema for wacky errors!
+      var schemaCheck = checkSchemaErrors(schemaJSON);
+      if(schemaCheck && schemaCheck.errors)
+      {
+        finished("Improper schema format for " + type + " - " + JSON.stringify(schemaCheck));
+        return;
+      }
+
+      if(schemaCheck && schemaCheck.warnings)
+      {
+        self.log("Warnings: ".yellow, schemaCheck.warnings);
+      }
+
+      //save it in our map
+      self.allSchema[type] = schemaJSON;
+
+      if(!schemaJSON.id || schemaJSON.id != type)
+        schemaJSON.id = type;
+
+      if(!schemaJSON['$schema'])
+        schemaJSON['$schema'] = "http://json-schema.org/draft-04/schema#";
+      
+      if(!schemaJSON.type)
+        schemaJSON.type = "object";
+
+      //add the schema to our validator -- this does most heavy lifting for us
+      self.validator.addSchema(schemaJSON);
+
+      //failed to add schema for some reason?
+      if(self.validator.error){
+        finished(self.validator.error);
+      }
+      else
+      {
+        //no error from validator, store the references inside
+        storeSchemaReferences(type, schemaJSON);
+
+        //when we create it 
+        setSchemaProperties(type, schemaJSON, options);
+        //take what you want, and give nothing back! The pirates way for us!
+        finished();
+      }
+    }
+    function setSchemaProperties(type, schemaJSON, options)
+    {
+      var props = {};
+      if(options.skipWINAdditions)
+        props.isWIN = false;
+      else
+        props.isWIN = true;
+      
+      var primePaths = {};
+
+      var tJSON = traverse(schemaJSON);
+
+      var references = self.requiredReferences[type];
+      var refMap = {};
+
+      for(var refType in references)
+      {
+          var locations = references[refType];
+          for(var l =0; l < locations.length; l++)
+          {
+              var refInfo = locations[l];
+              refMap[refInfo.typePath] = refInfo;
+          }
+      }
+      // self.log("Refmap: ", refMap);
+      function isRef(path){ return refMap[path.join(pathDelim)]}
+
+      tJSON.forEach(function(node)
+      {
+        if(this.isRoot || this.isLeaf)
+          return;
+
+        //kill the future investigation of references
+        if(isRef(this.path))
+            this.keys = [];
+
+          //if we are a known keyword -- that's not properties or items, we skip you!
+        if(this.key != "properties" && this.key != "items" && self.keywordRegExp.test(this.key))
+          this.keys = [];
+
+        //we also ignore this as well
+        if(winTypeRegExp.test(this.key))
+          this.keys = [];
+
+        // self.log("Isref?".green, isRef(this.path));
+
+        // if(this.keys.length)
+          // self.log("Potential PrimePath: ".green, this.key, " node: ", this.node);
+
+        if(this.keys.length){
+
+          var objPath = self.stripObjectPath(this.path);
+
+          //we're an array, or we're inisde an array!
+          if(this.node.type == "array" || this.node.items || this.key =="items")
+          {
+              //we are an array, we'll pull the array info -- and then we close off this array -- forever!
+              //remember, primary paths are all about the objects, and the FIRST layer of array
+              primePaths[objPath] = {type: "array"};
+              this.keys = [];
+          }
+          else
+          {
+            //you must be a properties object
+            //either you have a type, or you're an object
+            primePaths[objPath] = {type: this.node.type || "object"};
+          }
+        }
+        
+
+      })
+
+      // self.log("\n\tprimaryPaths: ".cyan, primePaths);
+
+      self.primaryPaths[type] = primePaths;
+      self.typeProperties[type] = props;
+
+    }
+    function hasNonKeywords(obj)
+    {
+      var hasNonKeywords = false;
+        
+      if(Array.isArray(obj))
+      {
+        //loop through object to grab keys
+        for(var i=0; i < obj.length; i++)
+        {
+          var iKey = obj[i];
+          //check if you're not a keyword
+          if(!self.keywordRegExp.test(iKey))
+          {
+            //just one is enough
+            hasNonKeywords = true;
+            break;
+          }
+        }
+      }
+      else
+      {
+        for(var iKey in obj)
+        {
+          if(!self.keywordRegExp.test(iKey))
+          {
+            //just one is enough
+            hasNonKeywords = true;
+            break;
+          }
+        }
+      }
+
+      return hasNonKeywords;           
+    }
+
+  //handle everything associated with adding a schema
+    function checkSchemaErrors(schemaJSON)
+    {
+
+      //check against the proper schema definition
+      // var vck = self.validator.validateMultiple(schemaJSON, schemaSpec, true);
+       var valCheck = self.validateFunction.apply(self.validator, [schemaJSON, schemaSpec, true]);
+       
+       //grab all possible errors
+       var checkErrors = {length: 0};
+       var checkWarnings = {length: 0};
+
+       //if we're valid -- which we almost certainly are -- just keep going
+       if(!valCheck.valid)
+       {
+          //let it be known -- this is a weird error
+          self.log("Invalid from v4 JSON schema perspective: ", valCheck[errorKey]);
+
+          checkErrors["root"] = valCheck[errorKey];
+          checkErrors.length++;
+
+          //not valid, throw it back
+          return checkErrors;
+       }
+
+
+       //make sure we have some properties -- otherwise there is literally no validation/
+       //during the move process, this is overridden, but it's a good check nonetheless
+       if(!schemaJSON.properties && !schemaJSON.items)
+       {
+          checkErrors["root"] = "No properties/items defined at root. Schema has no validation without properties!";
+          checkErrors.length++;
+       }
+
+       //going to need to traverse our schema object
+       var tJSON = traverse(schemaJSON);
+
+       tJSON.forEach(function(node)
+       {
+        //skip the root please
+        if(this.isRoot || this.path.join(pathDelim).indexOf('required') != -1)
+          return;
+
+        //this should be a warning
+        if(!self.requireByDefault && !this.isLeaf && !this.node.required)
+        {
+            //if you don't have a required object, then you're gonna have a bad time
+            //this is a warning
+            checkWarnings[this.path.join(pathDelim)] = "warning: if you disable requireByDefault and don't put require arrays, validation will ignore those properties.";
+            checkWarnings.length++;
+
+        }
+        if(this.key == "properties" && this.node.properties)
+        {
+           checkErrors[this.path.join(pathDelim)] = "Properties inside properties is meaningless.";
+           checkErrors.length++;
+        }
+        if(this.key == "type" && typeof this.node != "string")
+        {
+            //for whatever reason, there is a type defined, but not a string in it's place? Waa?
+            checkErrors[this.path.join(pathDelim)] = "Types must be string";
+            checkErrors.length++;
+        }
+        if(this.key == "type" && !self.typeRegExp.test(this.node.toLowerCase()))
+        {
+           checkErrors[this.path.join(pathDelim)] = "Types must be one of " + self.validTypes + " not " + this.node;
+           checkErrors.length++;
+        }
+        if(this.isLeaf)
+        {
+          //if you don't have a type, and there is no ref object
+          if(!this.parent.node.properties && (this.key != "type" && this.key != "$ref") && !this.parent.node.type && !this.parent.node["$ref"])
+          {
+              checkErrors[this.path.join(pathDelim)] = "Object doesn't have any properties, a valid type, or a reference, therefore it is invalid in the WIN spec.";
+              checkErrors.length++;
+          }
+        }
+        //not a leaf, you don't have a reference
+        if(!self.allowAnyObjects && !this.isLeaf && !this.node["$ref"] )
+        {
+          //special case for items -- doesn't apply
+          if(this.node.type == "object" && this.key != "items")
+          {
+            //we're going to check if the list of keys to follow have any non keywords
+            //for instance if {type: "object", otherThing: "string"} keys = type, otherThing
+            //if instead it's just {type : "object", required : []}, keys = type, required 
+            //notice that the top has non-keyword keys, and the bottom example does not 
+            //we're looking for the bottom example and rejecting it
+            var bHasNonKeywords = hasNonKeywords(this.keys);
+            
+            //if you ONLY have keywords -- you don't have any other object types
+            //you are a violation of win spec and you allow any object or array to be passed in
+            if(!bHasNonKeywords){
+              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
+              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'object' type with no inner properties";
+              checkErrors.length++;
+            }
+          }
+          else if(this.node.type == "array")
+          {
+            //if you are an array and you have no items -- not allowed!
+            if(!this.node.items){
+              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
+              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no inner items";
+              checkErrors.length++;
+            }
+            else
+            {
+              //if you have a ref -- you're okay for us!
+              var bIemsHaveNonKey = this.node.items["$ref"] || this.node.items["type"] || hasNonKeywords(this.node.items.properties || {});
+               if(!bIemsHaveNonKey){
+                // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
+                checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no non-keyword inner items";
+                checkErrors.length++;
+              }
+            }
+          }
+        
+        }
+        //if you're an array
+        if(this.node.type == "array")
+        {
+          //grab your items
+          var items = this.node.items;
+          if(!items && !self.allowAnyObjects)
+          {
+             checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off for arrays, therefore you cannot simple have an 'array' type with no inner items";
+              checkErrors.length++;
+          }
+          else
+          {
+            items = items || {};
+            //we have items -- we shouldn't have a reference type && other items
+            if(items.properties && items["$ref"])
+            {
+              checkErrors[this.path.join(pathDelim)] = "Array items in WIN cannot have properties AND a reference type. One or the other.";
+              checkErrors.length++;
+            }
+          }
+        }
+
+
+       });
+
+       if(checkErrors.length || checkWarnings.length)
+        return {errors: checkErrors, warnings: checkWarnings};
+      else
+        return null;
+
+    }
+
+    self.stripObjectPath = function(path)
+    {
+      //obj path will be returned
+      var objectPath = [];
+
+      //travere this path, yo
+      traverse(path).forEach(function()
+      {
+        //no routes including properties or items -- made up schema info!
+        if(!this.isRoot && (this.node != "properties" && this.node != "items"))
+          objectPath.push(this.node);
+      });
+
+      return objectPath.join(pathDelim);
+    }
+
+    //storing the references inside of a schema object (if we don't already know them)
+    function parseSchemaReferences(schemaJSON)
+    {
+    	//first we wrap our object with traverse methods
+    	var tJSON = traverse(schemaJSON);
+
+    	var references = {};
+
+    	self.log('--  Parsing refs -- ');
+      // self.log(schemaJSON);
+    	//now we step through pulling the path whenever we hit a reference
+    	tJSON.forEach(function(node)
+    	{
+    		//we are at a reference point
+        //we make an exception for arrays -- since the items object can hold references!
+        if(this.node["$ref"] && (this.key == "items" || !self.keywordRegExp.test(this.key)))
+    		// if(this.isLeaf && this.key == "$ref")
+    		{
+    			//todo logic for when it's "oneOf" or other valid JSON schema things
+    			var fullPath = this.path.join(pathDelim);//this.path.slice(0, this.path.length-1).join(pathDelim);
+    			var referenceType = this.node["$ref"];
+
+          
+          var objectPath = self.stripObjectPath(this.path);
+
+          //pull the "items" piece out of the path -- otherwise, if you're just a normal object -- it's the same as fullPath
+          var typePath = this.key == "items" ? this.path.slice(0, this.path.length-1).join(pathDelim) : fullPath;
+
+
+
+    			if(references[fullPath])
+    			{
+    				throw new Error("Not yet supported reference behavior, arrays of references: ", fullPath);
+    			}
+
+          //assuming type is defined here!
+    			references[fullPath] = {schemaType: referenceType, schemaPath: fullPath, objectPath: objectPath, typePath: typePath};
+          self.log(self.log.testing, 'Reference detected @ '+fullPath+': ', references[fullPath]);
+    		}
+    	});
+
+    	self.log("-- Full refs -- ", references);
+
+    	return references;
+    } 
+
+    function storeSchemaReferences(type, schemaJSON)
+    {
+    	self.schemaReferences[type] = parseSchemaReferences(schemaJSON);
+
+      self.requiredReferences[type] = {};
+
+      for(var path in self.schemaReferences[type])
+      {
+        var schemaInfo = self.schemaReferences[type][path];
+        var refType = schemaInfo.schemaType;
+        var aReqRefs = self.requiredReferences[type][refType];
+
+        if(!aReqRefs)
+        {
+          aReqRefs = [];
+          self.requiredReferences[type][refType] = aReqRefs;
+        }
+        //value is the reference type 
+        aReqRefs.push(schemaInfo);
+      }
+
+
+      //now we know all the references, their paths, and what type needs what references
+    }
+    function moveAllToProperties(tJSON)
+    {
+       tJSON.forEach(function(node)
+       {          
+
+          // self.log("Investigating: ", this.key, " @ ", this.path.join(pathDelim), " all keys: ", this.keys);
+          //for all non-arrays and non-leafs and non-properties object -- move to a properties object if not a keyword!
+          if(!this.isLeaf && this.key != "properties" && !Array.isArray(this.node))
+          {
+
+            //movement dpeends on what type you are -- arrays move to items, while objects move to properties
+            var moveLocation = "properties";
+            if(this.node.type == "array")
+              moveLocation = "items";
+
+            // self.log('Movement: ', this.key, " @ ", this.path.join(pathDelim) + " : ", this.node);
+            // self.log("Move to : ".green + moveLocation);
+
+
+            // self.log("Move innitiated: ".magenta, this.node);
+            // self.log('Original node: '.green, node);
+            var empty = true;
+            var move = {};
+            //any key that isn't one of our keywords is getting moved inside!
+            for(var key in this.node){
+                if(!self.keywordRegExp.test(key)){
+                  // self.log('Moving key @ ', this.path.join(pathDelim) || "Is root? ", " : ", this.key || this.isRoot); 
+                  move[key] = this.node[key];
+                  empty = false;
+                }
+            }
+
+            //don't move nothing derrr
+            if(!empty)
+            {
+               // self.log('Moving: '.red, move);
+
+              //create proeprties if it doesn't exist
+              node[moveLocation] = node[moveLocation] || {};
+
+              for(var key in move)
+              {
+                //move to its new home
+                node[moveLocation][key] = move[key];
+                //remove from previous location 
+                delete node[key];
+              }
+
+              //make sure to update, thank you
+              this.update(node);
+
+              //we need to investigate the newly created properties/items object -- to continue down the rabbit hole
+              this.keys.push(moveLocation);
+            }
+           
+
+          }
+       });
+    }
+    function addWINTypes(schemaJSON, options)
+    {
+      for(var key in defaultWINAdd)
+      {
+        var winAdd = defaultWINAdd[key];
+        
+        //if it's just a shallow string -- add it directly
+        if(typeof winAdd == "string")
+          schemaJSON[key] = winAdd;
+        else //otehrwise, we should clone the larger object
+          schemaJSON[key] = traverse(defaultWINAdd[key]).clone();
+      }
+    }
+    function appendSchemaInformation(schemaJSON, options)
+    {
+      //add in default win types
+      if(!options.skipWINAdditions)
+        addWINTypes(schemaJSON, options);
+
+      //build a traverse object for navigating and updating the object
+      var tJSON = traverse(schemaJSON);
+
+      //step one convert string to types
+      tJSON.forEach(function(node)
+      {
+        var needsUpdate = false;
+          //if you are a leaf -- and you only dictate the type e.g. string/number/array etc -- we'll convert you to proper type
+        if(this.isLeaf && typeof this.node == "string")
+        {
+          //if the key is not a known keyword, and the node string is a proper type
+          if(!self.keywordRegExp.test(this.key) && self.typeRegExp.test(node.toLowerCase()))
+          {
+            //node is a type! make sure it's a lower case type being stored.
+            node = {type: node.toLowerCase()};
+            needsUpdate = true;
+          }
+        }
+
+        if(this.node)
+        {
+
+         if(this.node.items && !this.node.type)
+          {
+            this.node.type = "array";
+            needsUpdate = true;
+          }
+
+          //rewrite {type : "array", "$ref" : "something"} => {type : "array", items : {"$ref" : "something"}}
+          if(this.node.type == "array" && this.node["$ref"])
+          {
+            this.node.items = this.node.items || {};
+            this.node.items["$ref"] = this.node["$ref"];
+            delete this.node["$ref"];
+            needsUpdate = true;
+          }
+
+        }
+
+
+        if(needsUpdate)
+          this.update(node);
+
+      })
+
+      //update location of objects to match validation issues
+      //json schema won't validate outside of properties object -- which some people may forget
+      //this is basically a correct method
+      moveAllToProperties(tJSON);
+
+      // var util = require('util');
+      // self.log("Post move schema: ".cyan, util.inspect(schemaJSON, false, 10));
+
+      tJSON.forEach(function(node)
+      {
+        var needsUpdate = false;
+
+
+       
+          //if we aren't a leaf object, we are a full object
+          //therefore, we must have required (since we're in default mode)
+          //since we cover the properties object inside, we don't need to go indepth for that key too!
+        if(self.requireByDefault && !this.isLeaf && !this.node.required && !Array.isArray(this.node))
+        {
+          //the require needs to be filled iwth all the properties of this thing, except
+          //for anything defined by v4 json schema -- so we run a regex to reject those keys
+          var reqProps = [];
+
+          // self.log("Not leaf: ".magenta, this.node, " Key : ", this.key);
+
+          //do not do this if you're in the properties object
+          //since the prop keys belong to the PARENT not the node
+          if(this.key != "properties")
+          {
+            for(var key in this.node){
+              if(!self.keywordRegExp.test(key)){
+              // self.log('Key added: '.red, key);
+
+                reqProps.push(key);
+              }
+            }
+            // self.log('Post not props: '.blue, reqProps);
+          }
+          
+          //for every object, you can also have a properties object too
+          //required applies to the subling property object as well
+          //so we loop through the properties object as well
+         for(var key in this.node.properties){
+            if(!self.keywordRegExp.test(key)){
+              reqProps.push(key);
+            }
+          }
+
+          if(reqProps.length)
+          {
+            node.required = reqProps;
+            needsUpdate = true;
+          }        
+        }
+
+     
+       if(needsUpdate){
+          // self.log('New required - : ', this.node, ' : ', reqProps);
+          this.update(node);
+        }
+      });
+
+
+
+        // self.log("--post traverse -- ", schemaJSON);
+
+    }
+
+	return self;
+}
+
+
+
+
+});
+
+require.register("optimuslime~win-schema@master/lib/schemaSpec.js", function (exports, module) {
+module.exports = 
+{
+    "id": "http://json-schema.org/draft-04/schema#",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "description": "Core schema meta-schema",
+    "definitions": {
+        "schemaArray": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#" }
+        },
+        "positiveInteger": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "positiveIntegerDefault0": {
+            "allOf": [ { "$ref": "#/definitions/positiveInteger" }, { "default": 0 } ]
+        },
+        "simpleTypes": {
+            "enum": [ "array", "boolean", "integer", "null", "number", "object", "string" ]
+        },
+        "stringArray": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "uniqueItems": true
+        }
+    },
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "string",
+            "format": "uri"
+        },
+        "$schema": {
+            "type": "string",
+            "format": "uri"
+        },
+        "title": {
+            "type": "string"
+        },
+        "description": {
+            "type": "string"
+        },
+        "default": {},
+        "multipleOf": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+        },
+        "maximum": {
+            "type": "number"
+        },
+        "exclusiveMaximum": {
+            "type": "boolean",
+            "default": false
+        },
+        "minimum": {
+            "type": "number"
+        },
+        "exclusiveMinimum": {
+            "type": "boolean",
+            "default": false
+        },
+        "maxLength": { "$ref": "#/definitions/positiveInteger" },
+        "minLength": { "$ref": "#/definitions/positiveIntegerDefault0" },
+        "pattern": {
+            "type": "string",
+            "format": "regex"
+        },
+        "additionalItems": {
+            "anyOf": [
+                { "type": "boolean" },
+                { "$ref": "#" }
+            ],
+            "default": {}
+        },
+        "items": {
+            "anyOf": [
+                { "$ref": "#" },
+                { "$ref": "#/definitions/schemaArray" }
+            ],
+            "default": {}
+        },
+        "maxItems": { "$ref": "#/definitions/positiveInteger" },
+        "minItems": { "$ref": "#/definitions/positiveIntegerDefault0" },
+        "uniqueItems": {
+            "type": "boolean",
+            "default": false
+        },
+        "maxProperties": { "$ref": "#/definitions/positiveInteger" },
+        "minProperties": { "$ref": "#/definitions/positiveIntegerDefault0" },
+        "required": { "$ref": "#/definitions/stringArray" },
+        "additionalProperties": {
+            "anyOf": [
+                { "type": "boolean" },
+                { "$ref": "#" }
+            ],
+            "default": {}
+        },
+        "definitions": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#" },
+            "default": {}
+        },
+        "properties": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#" },
+            "default": {}
+        },
+        "patternProperties": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#" },
+            "default": {}
+        },
+        "dependencies": {
+            "type": "object",
+            "additionalProperties": {
+                "anyOf": [
+                    { "$ref": "#" },
+                    { "$ref": "#/definitions/stringArray" }
+                ]
+            }
+        },
+        "enum": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true
+        },
+        "type": {
+            "anyOf": [
+                { "$ref": "#/definitions/simpleTypes" },
+                {
+                    "type": "array",
+                    "items": { "$ref": "#/definitions/simpleTypes" },
+                    "minItems": 1,
+                    "uniqueItems": true
+                }
+            ]
+        },
+        "allOf": { "$ref": "#/definitions/schemaArray" },
+        "anyOf": { "$ref": "#/definitions/schemaArray" },
+        "oneOf": { "$ref": "#/definitions/schemaArray" },
+        "not": { "$ref": "#" }
+    },
+    "dependencies": {
+        "exclusiveMaximum": [ "maximum" ],
+        "exclusiveMinimum": [ "minimum" ]
+    },
+    "default": {}
+}
+});
+
+require.register("optimuslime~win-schema@master", function (exports, module) {
+//pull in the validating workhorse -- checks schema and stuff
+var tv4 = require("geraintluff~tv4@master");
+//pull in traverse object from the repo please!
+var traverse = require("optimuslime~traverse@master");
+
+//pull in the object that knows what all schema look like!
+var schemaSpec = require("optimuslime~win-schema@master/lib/schemaSpec.js");
+
+var addSchemaSupport = require("optimuslime~win-schema@master/lib/addSchema.js");
+
+module.exports = winSchema;
+
+function winSchema(winback, globalConfiguration, localConfiguration)
+{
+	//load up basic win-module stufffff
+	var self = this;
+  self.winFunction = "schema";
+  self.log = winback.getLogger(self);
+
+  //limited only by global -- or we could limit our own verboseness
+  self.log.logLevel = localConfiguration.logLevel || self.log.normal;
+
+  self.pathDelimiter = "///";
+
+  //this creates "internalAddSchema" to handle the weighty add logic
+  //need to thoroughly test and modify incoming schema to align with 
+  //logical schema setup for WIN
+  addSchemaSupport(self, globalConfiguration, localConfiguration);
+
+	self.validator = tv4.freshApi();
+
+ //set the backbone and our logging function
+  self.bbEmit = winback.getEmitter(self);
+
+  //config setups
+
+  self.multipleErrors = (localConfiguration.multipleErrors == true || localConfiguration.multipleErrors == "true");
+  //by default you can have unknown keys -- the server environment may desire to change this
+  //if you don't want to be storing extra info
+  //by default, on lockdown -- better that way -- no sneaky stuff
+  self.allowUnknownKeys = localConfiguration.allowUnknownKeys || false;
+
+  //all keys are required by default -- this adds in required objects for everything
+  self.requireByDefault = localConfiguration.requireByDefault || true;
+
+  //do we allow properties with just the type "object" or "array"
+  //this would allow ANY data to be fit in there with no validation checks (other than it is an object or array)
+  //shouldn't allow this because people could slip in all sorts of terrible things without validation
+  self.allowAnyObjects = localConfiguration.allowAnyObjects || false;
+
+  self.eventCallbacks = function()
+  {
+        var callbacks = {};
+
+        //add callbacks to the object-- these are the functions called when the full event is emitted
+        callbacks["schema:validate"] = self.validateData;
+        callbacks["schema:validateMany"] = self.validateDataArray;
+        callbacks["schema:addSchema"] = self.addSchema;
+        callbacks["schema:getSchema"] = self.getSchema;
+        callbacks["schema:getSchemaReferences"] = self.getSchemaReferences;
+        callbacks["schema:getFullSchema"] = self.getFullSchema;
+        callbacks["schema:getSchemaProperties"] = self.getSchemaProperties;
+
+        //these are for deealing with pulling references from a specific object -- it's easier done in this module
+        callbacks["schema:getReferencesAndParents"] = self.getReferencesAndParents;
+        callbacks["schema:replaceParentReferences"] = self.replaceParentReferences;
+
+        //send back our callbacks
+        return callbacks;
+  }
+  self.requiredEvents = function()
+  {
+  	//don't need no one for nuffin'
+  	return [];
+  }
+
+  self.initialize = function(done)
+  {
+  	setTimeout(function()
+  	{
+  		done();
+  	}, 0);
+  }
+
+    //cache all our schema by type
+    self.allSchema = {};
+    self.schemaReferences = {};
+    self.requiredReferences = {};
+    self.fullSchema = {};
+    self.primaryPaths = {};
+    self.typeProperties = {};
+
+    self.validTypes = "\\b" + schemaSpec.definitions.simpleTypes.enum.join('\\b|\\b') + "\\b"; //['object', 'array', 'number', 'string', 'boolean', 'null'].join('|');
+    self.typeRegExp = new RegExp(self.validTypes);
+
+    self.specKeywords = ["\\$ref|\\babcdefg"];
+    for(var key in schemaSpec.properties)
+      self.specKeywords.push(key.replace('$', '\\$'));
+
+    //join using exact phrasing checks
+    self.specKeywords = self.specKeywords.join('\\b|\\b') + "\\b";
+    self.keywordRegExp = new RegExp(self.specKeywords);
+
+    self.log(self.log.testing, "--Specced types: ".green, self.validTypes);
+    self.log(self.log.testing, "--Specced keywords: ".green, self.specKeywords);
+
+    self.validateFunction = (self.multipleErrors ? self.validator.validateMultiple : self.validator.validateResult);
+    self.errorKey = self.multipleErrors ? "errors" : "error";
+
+    function listTypeIssues(type)
+    {
+      if(!self.allSchema[type]){
+        return "Schema type not loaded: " + type;
+      }
+
+      //we have to manually detect missing references -- since the validator is not concerned with such things
+      //FOR WHATEVER REASON
+      var missing = self.validator.getMissingUris();
+      for(var i=0; i < missing.length; i++)
+      {
+        //if we have this type inside our refernces for this object, it means we're missing a ref schema for this type!
+        if(self.requiredReferences[type][missing[i]])
+        {
+          return "Missing at least 1 schema definition: " + missing[i];
+        }
+      }
+    }
+
+    function internalValidate(schema, object)
+    {
+      //validate against what type?
+      var result = self.validateFunction.apply(self.validator, [object, schema, true, !self.allowUnknownKeys]);
+
+       //if it's not an array, make it an array
+      //if it's empty, make it a damn array
+      var errors = result[self.errorKey];
+
+      //if you are multiple errors, then you are a non-undefined array, just return as usual
+      //otherwise, you are an error but not in an array
+      //if errors is undefined then this will deefault to []
+      errors = (errors && !Array.isArray(errors)) ? [errors] : errors || [];
+
+      return {valid : result.valid, errors : errors};
+    }
+    self.validateDataArray = function(type, objects, finished)
+    {
+      var typeIssues = listTypeIssues(type);
+
+      //stop if we have type issues
+      if(typeIssues)
+      {
+        finished(typeIssues);
+        return;
+      }
+      else if(typeof type != "string" || !Array.isArray(objects))
+      {
+        finished("ValidateMany requires type [string], objects [array]");
+        return;
+      }
+
+      var schema = self.validator.getSchema(type);
+      // self.log('validate many against: ', schema);
+
+      var allValid = true;
+      var allErrors = [];
+      for(var i=0; i < objects.length; i++)
+      {
+        var result = internalValidate(schema, objects[i]);
+
+        if(!result.valid){
+          allValid = false;
+          allErrors.push(result.errors);
+        }
+        else //no error? just push empty array!
+          allErrors.push([]);
+      }
+
+      //if we have errors during validation, they'll be passed on thank you!
+      //if you're valid, and there are no errors, then don't send nuffin
+      finished(undefined, allValid, (!allValid ? allErrors : undefined));
+    }
+    self.validateData = function(type, object, finished)
+    {
+      var typeIssues = listTypeIssues(type);
+
+      //stop if we have type issues
+      if(typeIssues)
+      {
+        finished(typeIssues);
+        return;
+      }
+
+      //log object being checked
+      self.log("Validate: ", object);
+
+      //now we need to validate, we definitely have all the refs we need
+      var schema = self.validator.getSchema(type);
+
+      //log what's being validated
+      self.log('validate against: ', schema);
+    	 
+      var result = internalValidate(schema, object);
+
+      //if we have errors during validation, they'll be passed on thank you!
+      //if you're valid, and there are no errors, then don't send nuffin
+      finished(undefined, result.valid, (result.errors.length ? result.errors : undefined));
+    }
+
+    //todo: pull reference objects from schema -- make sure those exist as well?
+   	self.addSchema = function(type, schemaJSON, options, finished)
+   	{
+      //pass args into internal adds
+      return self.internalAddSchema.apply(self, arguments);
+   	}
+
+   	    //todo: pull reference objects from schema -- make sure those exist as well?
+   	self.getSchema = function(typeOrArray, finished)
+   	{   	
+      //did we request one or many?
+      var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var refArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+      //failed to get schema for some very odd reason?
+        if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+        //push our reference information as a clone
+        refArray.push(traverse(self.validator.getSchema(sType)).clone());
+        //if you hit an error -send back
+        if(self.validator.error){
+          finished(self.validator.error);
+          return;
+        }
+      }
+
+      //send the schema objects back
+      //send an array regardless of how many requested -- standard behavior
+      finished(undefined, refArray);    
+
+   	}
+
+   	self.getSchemaReferences = function(typeOrArray, finished)
+   	{
+      var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var refArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+        if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+        //push our reference information as a clone
+        refArray.push(traverse(self.requiredReferences[sType]).clone());
+      }
+
+  		//send the refernece objects back
+      //if you are a single object, just send the one -- otherwise send an array
+      finished(undefined, refArray); 		
+   	}
+
+    var buildFullSchema = function(type)
+    {
+      var schema = self.validator.getSchema(type);
+      var tSchema = traverse(schema);
+
+      var clone = tSchema.clone();
+      var tClone = traverse(clone);
+      var references = self.schemaReferences[type];
+
+      for(var path in references)
+      {
+        //we get the type of reference
+        var schemaInfo = references[path];
+        var refType = schemaInfo.schemaType;
+
+        //this is recursive behavior -- itwill call buidl full schema if not finished yet
+        var fullRefSchema = internalGetFullSchema(refType);
+
+        if(!fullRefSchema)
+          throw new Error("No schema could be created for: " + refType + ". Please check it's defined.");
+
+        //now we ahve teh full object to replace
+        var tPath = path.split(self.pathDelimiter);
+
+        // self.log(self.log.testing, 'Path to ref: ', tPath, " replacement: ", fullRefSchema);
+
+        //use traverse to set the path object as our full ref object
+        tClone.set(tPath, fullRefSchema);
+      }
+
+      // self.log(self.log.testing, "Returning schema: ", type, " full: ", clone);
+
+      return clone;
+    }
+    var inprogressSchema = {};
+
+    function internalGetFullSchema(type)
+    {
+      if(inprogressSchema[type])
+      {
+          throw new Error("Infinite schema reference loop: " + JSON.stringify(Object.keys(inprogressSchema)));    
+      }
+
+      inprogressSchema[type] = true;
+
+       //if we don't have a full type yet, we build it
+      if(!self.fullSchema[type])
+      {
+        //need to build a full schema object
+        var fSchema = buildFullSchema(type);
+
+        self.fullSchema[type] = fSchema;
+      }
+
+      //mark the in progress as false!
+      delete inprogressSchema[type];
+
+      return self.fullSchema[type];
+    }
+
+    self.getFullSchema = function(typeOrArray, finished)
+    { 
+      var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var fullArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+         if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+
+        try
+        {
+          //get the full schema from internal function
+          //throws error if something is wrong
+          var fullSchema = internalGetFullSchema(sType);
+         
+          //pull the full object -- guaranteed to exist -- send a clone
+           fullArray.push(traverse(fullSchema).clone());
+        }
+        catch(e)
+        {
+          //send the error if we have one
+          finished(e);
+          return;
+        }
+      }
+
+      //send the refernece objects back
+      //if you are a single object, just send the one -- otherwise send an array
+      finished(undefined, fullArray);
+    }
+
+    self.getSchemaProperties = function(typeOrArray, finished)
+    {
+       var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var propArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+         if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+
+        //get our schema properties
+        propArray.push({type: sType, primaryPaths: traverse(self.primaryPaths[sType]).clone(), properties: traverse(self.typeProperties[sType]).clone()});
+
+      }
+
+
+      //send the refernece objects back
+      //if you are a single object, just send the one -- otherwise send an array
+      finished(undefined, propArray);
+    }
+
+    //we're going to clone the object, then replace all of the reference wids with new an improved parents
+    self.replaceParentReferences = function(type, object, parentMapping, finished)
+    {
+      var tClone = traverse(object).clone();
+
+      traverse(tClone).forEach(function(node)
+      {
+         //if we have a wid object and parents object -- likely we are a tracked reference
+        if(this.node.wid && this.node.parents)
+        {
+          var replaceParents = parentMapping[this.node.wid];
+
+          if(replaceParents)
+          {
+            //straight up replacement therapy yo
+            this.node.parents = replaceParents;
+
+            //then make sure to update and continue onwards!
+            this.update(this.node);
+          }
+        }
+      })
+
+      //we've replaced the innards of the object with a better future!
+      finished(undefined, tClone);
+    }
+
+    self.getReferencesAndParents = function(type, widObjects, finished)
+    {
+
+        //listed by some identifier, then the object, we need to look through the type, and pull references
+        var fSchema = internalGetFullSchema(type);
+        // self.log("Full schema: ", fSchema);
+        if(!fSchema)
+        {
+          finished("Full schema undefined, might be missing a reference type within " + type);
+          return;
+        } 
+        var widToParents = {};
+        var traverseObjects = {};
+
+        for(var wid in widObjects){
+          widToParents[wid] = {};
+          traverseObjects[wid] = traverse(widObjects[wid]);
+        }
+
+        
+        //for every wid object we see, we loop through and pull that 
+        traverse(fSchema).forEach(function(node)
+        {
+          // self.log("Node: ", this.node, "", " key: ", this.key);
+          //if we have a wid object and parents object -- likely we are a tracked reference
+          if(this.node.wid && this.node.parents)
+          {
+            //let's pull these bad boys our of our other objects
+            var pathToObject = self.stripObjectPath(this.path);
+            
+            //if you aren't root, split it up!
+            if(pathToObject != "")
+              pathToObject = pathToObject.split(self.pathDelimiter);
+
+            // self.log("\nKey before :", this.key, " node-p: ", this.parent.node, " path: ", this.path);
+            
+            var isArray = (this.key == "properties" && this.path[this.path.length - 2] == "items");
+            // self.log("Is array? : ", isArray);
+            for(var wid in traverseObjects)
+            {
+
+              var wtp = widToParents[wid];
+              var tob = traverseObjects[wid];
+
+
+              //fetch object from our traverse thing using this path
+              var arrayOrObject = tob.get(pathToObject);
+
+              // self.log("Path to obj: ", pathToObject, " get: ", arrayOrObject);
+
+              //grab wid to parent mappings, always cloning parent arrays
+              if(isArray)
+              {
+                for(var i=0; i < arrayOrObject.length; i++)
+                {
+                  var aobj = arrayOrObject[i];
+                  //map wid objects to parent wids always thank you
+                  wtp[aobj.wid] = aobj.parents.slice(0);
+                }
+              }
+              else
+                wtp[arrayOrObject.wid] = arrayOrObject.parents.slice(0);
+
+              //now we've aded a mapping from the objects wid to the parents for that wid
+
+            }
+          }
+        });
+
+        //we send back the wids of the original widObjects mapped to the wid internal reference && the corresponding parents
+        //so many damn layers -- it gets confusing
+        finished(undefined, widToParents);
+
+    }
+
+
+	return self;
+}
+
+
+
+
+});
+
+require.modules["optimuslime-win-schema"] = require.modules["optimuslime~win-schema@master"];
+require.modules["optimuslime~win-schema"] = require.modules["optimuslime~win-schema@master"];
+require.modules["win-schema"] = require.modules["optimuslime~win-schema@master"];
+
+
+require.register("optimuslime~win-schema@0.0.5-4/lib/addSchema.js", function (exports, module) {
+//pull in traverse object for this guy
+var traverse = require("optimuslime~traverse@master");
+var schemaSpec = require("optimuslime~win-schema@0.0.5-4/lib/schemaSpec.js");
+
+
+module.exports = extendAddSchema;
+
+function extendAddSchema(self)
+{
+
+  var pathDelim = self.pathDelimiter;
+
+  var defaultWINAdd = {
+    wid : "string",
+    dbType : "string",
+    parents : {
+      type: "array",
+      items : {
+        type : "string"
+      }
+    }
+  }
+
+  var winTypeRegExp = [];
+  for(var key in defaultWINAdd)
+  {
+    winTypeRegExp.push(key);
+  }
+  self.log("--All WIN keywords: ", winTypeRegExp);
+
+  winTypeRegExp = new RegExp("\\b" + winTypeRegExp.join("\\b|\\b") + "\\b");
+
+  //everything we need to do to add a schema inside
+  //this requires checking if it's properly formatted, pulling references, and moving
+  //around things if it's not formatted but we would like to make it less wordy to make schema
+    self.internalAddSchema = function(type, schemaJSON, options, finished)
+    {
+      if(typeof options == "function")
+      {
+        finished = options;
+        options = {};
+      }
+      else
+        options = options || {};
+
+      if((schemaJSON.type == "array" || schemaJSON.items) && !options.skipWINAdditions)
+      {
+        finished("Array-types for schema cannot have WIN additions. It doesn't make any sense. The object must be an array, but also have a wid property? Failed: " + type);
+        return;
+      }
+
+      //make a clone of the object 
+      schemaJSON = JSON.parse(JSON.stringify(schemaJSON)); 
+
+      //force all types to lower case -- always -- deal with weird validation errors otherwise
+      traverse(schemaJSON).forEach(function(node)
+      {
+          if(this.key == "type" && typeof this.node == "string")
+            this.update(this.node.toLowerCase());
+      })
+
+      //we add or move objects inside the schema to make it conform to expected v4 JSON schema validation
+      appendSchemaInformation(schemaJSON, options);      
+
+      //check our schema for wacky errors!
+      var schemaCheck = checkSchemaErrors(schemaJSON);
+      if(schemaCheck && schemaCheck.errors)
+      {
+        finished("Improper schema format for " + type + " - " + JSON.stringify(schemaCheck));
+        return;
+      }
+
+      if(schemaCheck && schemaCheck.warnings)
+      {
+        self.log("Warnings: ".yellow, schemaCheck.warnings);
+      }
+
+      //save it in our map
+      self.allSchema[type] = schemaJSON;
+
+      if(!schemaJSON.id || schemaJSON.id != type)
+        schemaJSON.id = type;
+
+      if(!schemaJSON['$schema'])
+        schemaJSON['$schema'] = "http://json-schema.org/draft-04/schema#";
+      
+      if(!schemaJSON.type)
+        schemaJSON.type = "object";
+
+      //add the schema to our validator -- this does most heavy lifting for us
+      self.validator.addSchema(schemaJSON);
+
+      //failed to add schema for some reason?
+      if(self.validator.error){
+        finished(self.validator.error);
+      }
+      else
+      {
+        //no error from validator, store the references inside
+        storeSchemaReferences(type, schemaJSON);
+
+        //when we create it 
+        setSchemaProperties(type, schemaJSON, options);
+        //take what you want, and give nothing back! The pirates way for us!
+        finished();
+      }
+    }
+    function setSchemaProperties(type, schemaJSON, options)
+    {
+      var props = {};
+      if(options.skipWINAdditions)
+        props.isWIN = false;
+      else
+        props.isWIN = true;
+      
+      var primePaths = {};
+
+      var tJSON = traverse(schemaJSON);
+
+      var references = self.requiredReferences[type];
+      var refMap = {};
+
+      for(var refType in references)
+      {
+          var locations = references[refType];
+          for(var l =0; l < locations.length; l++)
+          {
+              var refInfo = locations[l];
+              refMap[refInfo.typePath] = refInfo;
+          }
+      }
+      // self.log("Refmap: ", refMap);
+      function isRef(path){ return refMap[path.join(pathDelim)]}
+
+      tJSON.forEach(function(node)
+      {
+        if(this.isRoot || this.isLeaf)
+          return;
+
+        //kill the future investigation of references
+        if(isRef(this.path))
+            this.keys = [];
+
+          //if we are a known keyword -- that's not properties or items, we skip you!
+        if(this.key != "properties" && this.key != "items" && self.keywordRegExp.test(this.key))
+          this.keys = [];
+
+        //we also ignore this as well
+        if(winTypeRegExp.test(this.key))
+          this.keys = [];
+
+        // self.log("Isref?".green, isRef(this.path));
+
+        // if(this.keys.length)
+          // self.log("Potential PrimePath: ".green, this.key, " node: ", this.node);
+
+        if(this.keys.length){
+
+          var objPath = self.stripObjectPath(this.path);
+
+          //we're an array, or we're inisde an array!
+          if(this.node.type == "array" || this.node.items || this.key =="items")
+          {
+              //we are an array, we'll pull the array info -- and then we close off this array -- forever!
+              //remember, primary paths are all about the objects, and the FIRST layer of array
+              primePaths[objPath] = {type: "array"};
+              this.keys = [];
+          }
+          else
+          {
+            //you must be a properties object
+            //either you have a type, or you're an object
+            primePaths[objPath] = {type: this.node.type || "object"};
+          }
+        }
+        
+
+      })
+
+      // self.log("\n\tprimaryPaths: ".cyan, primePaths);
+
+      self.primaryPaths[type] = primePaths;
+      self.typeProperties[type] = props;
+
+    }
+    function hasNonKeywords(obj)
+    {
+      var hasNonKeywords = false;
+        
+      if(Array.isArray(obj))
+      {
+        //loop through object to grab keys
+        for(var i=0; i < obj.length; i++)
+        {
+          var iKey = obj[i];
+          //check if you're not a keyword
+          if(!self.keywordRegExp.test(iKey))
+          {
+            //just one is enough
+            hasNonKeywords = true;
+            break;
+          }
+        }
+      }
+      else
+      {
+        for(var iKey in obj)
+        {
+          if(!self.keywordRegExp.test(iKey))
+          {
+            //just one is enough
+            hasNonKeywords = true;
+            break;
+          }
+        }
+      }
+
+      return hasNonKeywords;           
+    }
+
+  //handle everything associated with adding a schema
+    function checkSchemaErrors(schemaJSON)
+    {
+
+      //check against the proper schema definition
+      // var vck = self.validator.validateMultiple(schemaJSON, schemaSpec, true);
+       var valCheck = self.validateFunction.apply(self.validator, [schemaJSON, schemaSpec, true]);
+       
+       //grab all possible errors
+       var checkErrors = {length: 0};
+       var checkWarnings = {length: 0};
+
+       //if we're valid -- which we almost certainly are -- just keep going
+       if(!valCheck.valid)
+       {
+          //let it be known -- this is a weird error
+          self.log("Invalid from v4 JSON schema perspective: ", valCheck[errorKey]);
+
+          checkErrors["root"] = valCheck[errorKey];
+          checkErrors.length++;
+
+          //not valid, throw it back
+          return checkErrors;
+       }
+
+
+       //make sure we have some properties -- otherwise there is literally no validation/
+       //during the move process, this is overridden, but it's a good check nonetheless
+       if(!schemaJSON.properties && !schemaJSON.items)
+       {
+          checkErrors["root"] = "No properties/items defined at root. Schema has no validation without properties!";
+          checkErrors.length++;
+       }
+
+       //going to need to traverse our schema object
+       var tJSON = traverse(schemaJSON);
+
+       tJSON.forEach(function(node)
+       {
+        //skip the root please
+        if(this.isRoot || this.path.join(pathDelim).indexOf('required') != -1)
+          return;
+
+        //this should be a warning
+        if(!self.requireByDefault && !this.isLeaf && !this.node.required)
+        {
+            //if you don't have a required object, then you're gonna have a bad time
+            //this is a warning
+            checkWarnings[this.path.join(pathDelim)] = "warning: if you disable requireByDefault and don't put require arrays, validation will ignore those properties.";
+            checkWarnings.length++;
+
+        }
+        if(this.key == "properties" && this.node.properties)
+        {
+           checkErrors[this.path.join(pathDelim)] = "Properties inside properties is meaningless.";
+           checkErrors.length++;
+        }
+        if(this.key == "type" && typeof this.node != "string")
+        {
+            //for whatever reason, there is a type defined, but not a string in it's place? Waa?
+            checkErrors[this.path.join(pathDelim)] = "Types must be string";
+            checkErrors.length++;
+        }
+        if(this.key == "type" && !self.typeRegExp.test(this.node.toLowerCase()))
+        {
+           checkErrors[this.path.join(pathDelim)] = "Types must be one of " + self.validTypes + " not " + this.node;
+           checkErrors.length++;
+        }
+        if(this.isLeaf)
+        {
+          //if you don't have a type, and there is no ref object
+          if(!this.parent.node.properties && (this.key != "type" && this.key != "$ref") && !this.parent.node.type && !this.parent.node["$ref"])
+          {
+              checkErrors[this.path.join(pathDelim)] = "Object doesn't have any properties, a valid type, or a reference, therefore it is invalid in the WIN spec.";
+              checkErrors.length++;
+          }
+        }
+        //not a leaf, you don't have a reference
+        if(!self.allowAnyObjects && !this.isLeaf && !this.node["$ref"] )
+        {
+          //special case for items -- doesn't apply
+          if(this.node.type == "object" && this.key != "items")
+          {
+            //we're going to check if the list of keys to follow have any non keywords
+            //for instance if {type: "object", otherThing: "string"} keys = type, otherThing
+            //if instead it's just {type : "object", required : []}, keys = type, required 
+            //notice that the top has non-keyword keys, and the bottom example does not 
+            //we're looking for the bottom example and rejecting it
+            var bHasNonKeywords = hasNonKeywords(this.keys);
+            
+            //if you ONLY have keywords -- you don't have any other object types
+            //you are a violation of win spec and you allow any object or array to be passed in
+            if(!bHasNonKeywords){
+              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
+              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'object' type with no inner properties";
+              checkErrors.length++;
+            }
+          }
+          else if(this.node.type == "array")
+          {
+            //if you are an array and you have no items -- not allowed!
+            if(!this.node.items){
+              // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
+              checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no inner items";
+              checkErrors.length++;
+            }
+            else
+            {
+              //if you have a ref -- you're okay for us!
+              var bIemsHaveNonKey = this.node.items["$ref"] || this.node.items["type"] || hasNonKeywords(this.node.items.properties || {});
+               if(!bIemsHaveNonKey){
+                // self.log("Current: ".magenta, this.key, " Keys: ".cyan, this.keys || "none, node: " + this.node, " has non? ".red + bHasNonKeywords);
+                checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off, therefore you cannot simple have an 'array' type with no non-keyword inner items";
+                checkErrors.length++;
+              }
+            }
+          }
+        
+        }
+        //if you're an array
+        if(this.node.type == "array")
+        {
+          //grab your items
+          var items = this.node.items;
+          if(!items && !self.allowAnyObjects)
+          {
+             checkErrors[this.path.join(pathDelim)] = "AllowAnyObjects is off for arrays, therefore you cannot simple have an 'array' type with no inner items";
+              checkErrors.length++;
+          }
+          else
+          {
+            items = items || {};
+            //we have items -- we shouldn't have a reference type && other items
+            if(items.properties && items["$ref"])
+            {
+              checkErrors[this.path.join(pathDelim)] = "Array items in WIN cannot have properties AND a reference type. One or the other.";
+              checkErrors.length++;
+            }
+          }
+        }
+
+
+       });
+
+       if(checkErrors.length || checkWarnings.length)
+        return {errors: checkErrors, warnings: checkWarnings};
+      else
+        return null;
+
+    }
+
+    self.stripObjectPath = function(path)
+    {
+      //obj path will be returned
+      var objectPath = [];
+
+      //travere this path, yo
+      traverse(path).forEach(function()
+      {
+        //no routes including properties or items -- made up schema info!
+        if(!this.isRoot && (this.node != "properties" && this.node != "items"))
+          objectPath.push(this.node);
+      });
+
+      return objectPath.join(pathDelim);
+    }
+
+    //storing the references inside of a schema object (if we don't already know them)
+    function parseSchemaReferences(schemaJSON)
+    {
+    	//first we wrap our object with traverse methods
+    	var tJSON = traverse(schemaJSON);
+
+    	var references = {};
+
+    	self.log('--  Parsing refs -- ');
+      // self.log(schemaJSON);
+    	//now we step through pulling the path whenever we hit a reference
+    	tJSON.forEach(function(node)
+    	{
+    		//we are at a reference point
+        //we make an exception for arrays -- since the items object can hold references!
+        if(this.node["$ref"] && (this.key == "items" || !self.keywordRegExp.test(this.key)))
+    		// if(this.isLeaf && this.key == "$ref")
+    		{
+    			//todo logic for when it's "oneOf" or other valid JSON schema things
+    			var fullPath = this.path.join(pathDelim);//this.path.slice(0, this.path.length-1).join(pathDelim);
+    			var referenceType = this.node["$ref"];
+
+          
+          var objectPath = self.stripObjectPath(this.path);
+
+          //pull the "items" piece out of the path -- otherwise, if you're just a normal object -- it's the same as fullPath
+          var typePath = this.key == "items" ? this.path.slice(0, this.path.length-1).join(pathDelim) : fullPath;
+
+
+
+    			if(references[fullPath])
+    			{
+    				throw new Error("Not yet supported reference behavior, arrays of references: ", fullPath);
+    			}
+
+          //assuming type is defined here!
+    			references[fullPath] = {schemaType: referenceType, schemaPath: fullPath, objectPath: objectPath, typePath: typePath};
+          self.log(self.log.testing, 'Reference detected @ '+fullPath+': ', references[fullPath]);
+    		}
+    	});
+
+    	self.log("-- Full refs -- ", references);
+
+    	return references;
+    } 
+
+    function storeSchemaReferences(type, schemaJSON)
+    {
+    	self.schemaReferences[type] = parseSchemaReferences(schemaJSON);
+
+      self.requiredReferences[type] = {};
+
+      for(var path in self.schemaReferences[type])
+      {
+        var schemaInfo = self.schemaReferences[type][path];
+        var refType = schemaInfo.schemaType;
+        var aReqRefs = self.requiredReferences[type][refType];
+
+        if(!aReqRefs)
+        {
+          aReqRefs = [];
+          self.requiredReferences[type][refType] = aReqRefs;
+        }
+        //value is the reference type 
+        aReqRefs.push(schemaInfo);
+      }
+
+
+      //now we know all the references, their paths, and what type needs what references
+    }
+    function moveAllToProperties(tJSON)
+    {
+       tJSON.forEach(function(node)
+       {          
+
+          // self.log("Investigating: ", this.key, " @ ", this.path.join(pathDelim), " all keys: ", this.keys);
+          //for all non-arrays and non-leafs and non-properties object -- move to a properties object if not a keyword!
+          if(!this.isLeaf && this.key != "properties" && !Array.isArray(this.node))
+          {
+
+            //movement dpeends on what type you are -- arrays move to items, while objects move to properties
+            var moveLocation = "properties";
+            if(this.node.type == "array")
+              moveLocation = "items";
+
+            // self.log('Movement: ', this.key, " @ ", this.path.join(pathDelim) + " : ", this.node);
+            // self.log("Move to : ".green + moveLocation);
+
+
+            // self.log("Move innitiated: ".magenta, this.node);
+            // self.log('Original node: '.green, node);
+            var empty = true;
+            var move = {};
+            //any key that isn't one of our keywords is getting moved inside!
+            for(var key in this.node){
+                if(!self.keywordRegExp.test(key)){
+                  // self.log('Moving key @ ', this.path.join(pathDelim) || "Is root? ", " : ", this.key || this.isRoot); 
+                  move[key] = this.node[key];
+                  empty = false;
+                }
+            }
+
+            //don't move nothing derrr
+            if(!empty)
+            {
+               // self.log('Moving: '.red, move);
+
+              //create proeprties if it doesn't exist
+              node[moveLocation] = node[moveLocation] || {};
+
+              for(var key in move)
+              {
+                //move to its new home
+                node[moveLocation][key] = move[key];
+                //remove from previous location 
+                delete node[key];
+              }
+
+              //make sure to update, thank you
+              this.update(node);
+
+              //we need to investigate the newly created properties/items object -- to continue down the rabbit hole
+              this.keys.push(moveLocation);
+            }
+           
+
+          }
+       });
+    }
+    function addWINTypes(schemaJSON, options)
+    {
+      for(var key in defaultWINAdd)
+      {
+        var winAdd = defaultWINAdd[key];
+        
+        //if it's just a shallow string -- add it directly
+        if(typeof winAdd == "string")
+          schemaJSON[key] = winAdd;
+        else //otehrwise, we should clone the larger object
+          schemaJSON[key] = traverse(defaultWINAdd[key]).clone();
+      }
+    }
+    function appendSchemaInformation(schemaJSON, options)
+    {
+      //add in default win types
+      if(!options.skipWINAdditions)
+        addWINTypes(schemaJSON, options);
+
+      //build a traverse object for navigating and updating the object
+      var tJSON = traverse(schemaJSON);
+
+      //step one convert string to types
+      tJSON.forEach(function(node)
+      {
+        var needsUpdate = false;
+          //if you are a leaf -- and you only dictate the type e.g. string/number/array etc -- we'll convert you to proper type
+        if(this.isLeaf && typeof this.node == "string")
+        {
+          //if the key is not a known keyword, and the node string is a proper type
+          if(!self.keywordRegExp.test(this.key) && self.typeRegExp.test(node.toLowerCase()))
+          {
+            //node is a type! make sure it's a lower case type being stored.
+            node = {type: node.toLowerCase()};
+            needsUpdate = true;
+          }
+        }
+
+        if(this.node)
+        {
+
+         if(this.node.items && !this.node.type)
+          {
+            this.node.type = "array";
+            needsUpdate = true;
+          }
+
+          //rewrite {type : "array", "$ref" : "something"} => {type : "array", items : {"$ref" : "something"}}
+          if(this.node.type == "array" && this.node["$ref"])
+          {
+            this.node.items = this.node.items || {};
+            this.node.items["$ref"] = this.node["$ref"];
+            delete this.node["$ref"];
+            needsUpdate = true;
+          }
+
+        }
+
+
+        if(needsUpdate)
+          this.update(node);
+
+      })
+
+      //update location of objects to match validation issues
+      //json schema won't validate outside of properties object -- which some people may forget
+      //this is basically a correct method
+      moveAllToProperties(tJSON);
+
+      // var util = require('util');
+      // self.log("Post move schema: ".cyan, util.inspect(schemaJSON, false, 10));
+
+      tJSON.forEach(function(node)
+      {
+        var needsUpdate = false;
+
+
+       
+          //if we aren't a leaf object, we are a full object
+          //therefore, we must have required (since we're in default mode)
+          //since we cover the properties object inside, we don't need to go indepth for that key too!
+        if(self.requireByDefault && !this.isLeaf && !this.node.required && !Array.isArray(this.node))
+        {
+          //the require needs to be filled iwth all the properties of this thing, except
+          //for anything defined by v4 json schema -- so we run a regex to reject those keys
+          var reqProps = [];
+
+          // self.log("Not leaf: ".magenta, this.node, " Key : ", this.key);
+
+          //do not do this if you're in the properties object
+          //since the prop keys belong to the PARENT not the node
+          if(this.key != "properties")
+          {
+            for(var key in this.node){
+              if(!self.keywordRegExp.test(key)){
+              // self.log('Key added: '.red, key);
+
+                reqProps.push(key);
+              }
+            }
+            // self.log('Post not props: '.blue, reqProps);
+          }
+          
+          //for every object, you can also have a properties object too
+          //required applies to the subling property object as well
+          //so we loop through the properties object as well
+         for(var key in this.node.properties){
+            if(!self.keywordRegExp.test(key)){
+              reqProps.push(key);
+            }
+          }
+
+          if(reqProps.length)
+          {
+            node.required = reqProps;
+            needsUpdate = true;
+          }        
+        }
+
+     
+       if(needsUpdate){
+          // self.log('New required - : ', this.node, ' : ', reqProps);
+          this.update(node);
+        }
+      });
+
+
+
+        // self.log("--post traverse -- ", schemaJSON);
+
+    }
+
+	return self;
+}
+
+
+
+
+});
+
+require.register("optimuslime~win-schema@0.0.5-4/lib/schemaSpec.js", function (exports, module) {
+module.exports = 
+{
+    "id": "http://json-schema.org/draft-04/schema#",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "description": "Core schema meta-schema",
+    "definitions": {
+        "schemaArray": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#" }
+        },
+        "positiveInteger": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "positiveIntegerDefault0": {
+            "allOf": [ { "$ref": "#/definitions/positiveInteger" }, { "default": 0 } ]
+        },
+        "simpleTypes": {
+            "enum": [ "array", "boolean", "integer", "null", "number", "object", "string" ]
+        },
+        "stringArray": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "uniqueItems": true
+        }
+    },
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "string",
+            "format": "uri"
+        },
+        "$schema": {
+            "type": "string",
+            "format": "uri"
+        },
+        "title": {
+            "type": "string"
+        },
+        "description": {
+            "type": "string"
+        },
+        "default": {},
+        "multipleOf": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+        },
+        "maximum": {
+            "type": "number"
+        },
+        "exclusiveMaximum": {
+            "type": "boolean",
+            "default": false
+        },
+        "minimum": {
+            "type": "number"
+        },
+        "exclusiveMinimum": {
+            "type": "boolean",
+            "default": false
+        },
+        "maxLength": { "$ref": "#/definitions/positiveInteger" },
+        "minLength": { "$ref": "#/definitions/positiveIntegerDefault0" },
+        "pattern": {
+            "type": "string",
+            "format": "regex"
+        },
+        "additionalItems": {
+            "anyOf": [
+                { "type": "boolean" },
+                { "$ref": "#" }
+            ],
+            "default": {}
+        },
+        "items": {
+            "anyOf": [
+                { "$ref": "#" },
+                { "$ref": "#/definitions/schemaArray" }
+            ],
+            "default": {}
+        },
+        "maxItems": { "$ref": "#/definitions/positiveInteger" },
+        "minItems": { "$ref": "#/definitions/positiveIntegerDefault0" },
+        "uniqueItems": {
+            "type": "boolean",
+            "default": false
+        },
+        "maxProperties": { "$ref": "#/definitions/positiveInteger" },
+        "minProperties": { "$ref": "#/definitions/positiveIntegerDefault0" },
+        "required": { "$ref": "#/definitions/stringArray" },
+        "additionalProperties": {
+            "anyOf": [
+                { "type": "boolean" },
+                { "$ref": "#" }
+            ],
+            "default": {}
+        },
+        "definitions": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#" },
+            "default": {}
+        },
+        "properties": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#" },
+            "default": {}
+        },
+        "patternProperties": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#" },
+            "default": {}
+        },
+        "dependencies": {
+            "type": "object",
+            "additionalProperties": {
+                "anyOf": [
+                    { "$ref": "#" },
+                    { "$ref": "#/definitions/stringArray" }
+                ]
+            }
+        },
+        "enum": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true
+        },
+        "type": {
+            "anyOf": [
+                { "$ref": "#/definitions/simpleTypes" },
+                {
+                    "type": "array",
+                    "items": { "$ref": "#/definitions/simpleTypes" },
+                    "minItems": 1,
+                    "uniqueItems": true
+                }
+            ]
+        },
+        "allOf": { "$ref": "#/definitions/schemaArray" },
+        "anyOf": { "$ref": "#/definitions/schemaArray" },
+        "oneOf": { "$ref": "#/definitions/schemaArray" },
+        "not": { "$ref": "#" }
+    },
+    "dependencies": {
+        "exclusiveMaximum": [ "maximum" ],
+        "exclusiveMinimum": [ "minimum" ]
+    },
+    "default": {}
+}
+});
+
+require.register("optimuslime~win-schema@0.0.5-4", function (exports, module) {
+//pull in the validating workhorse -- checks schema and stuff
+var tv4 = require("geraintluff~tv4@master");
+//pull in traverse object from the repo please!
+var traverse = require("optimuslime~traverse@master");
+
+//pull in the object that knows what all schema look like!
+var schemaSpec = require("optimuslime~win-schema@0.0.5-4/lib/schemaSpec.js");
+
+var addSchemaSupport = require("optimuslime~win-schema@0.0.5-4/lib/addSchema.js");
+
+module.exports = winSchema;
+
+function winSchema(winback, globalConfiguration, localConfiguration)
+{
+	//load up basic win-module stufffff
+	var self = this;
+  self.winFunction = "schema";
+  self.log = winback.getLogger(self);
+
+  //limited only by global -- or we could limit our own verboseness
+  self.log.logLevel = localConfiguration.logLevel || self.log.normal;
+
+  self.pathDelimiter = "///";
+
+  //this creates "internalAddSchema" to handle the weighty add logic
+  //need to thoroughly test and modify incoming schema to align with 
+  //logical schema setup for WIN
+  addSchemaSupport(self, globalConfiguration, localConfiguration);
+
+	self.validator = tv4.freshApi();
+
+ //set the backbone and our logging function
+  self.bbEmit = winback.getEmitter(self);
+
+  //config setups
+
+  self.multipleErrors = (localConfiguration.multipleErrors == true || localConfiguration.multipleErrors == "true");
+  //by default you can have unknown keys -- the server environment may desire to change this
+  //if you don't want to be storing extra info
+  //by default, on lockdown -- better that way -- no sneaky stuff
+  self.allowUnknownKeys = localConfiguration.allowUnknownKeys || false;
+
+  //all keys are required by default -- this adds in required objects for everything
+  self.requireByDefault = localConfiguration.requireByDefault || true;
+
+  //do we allow properties with just the type "object" or "array"
+  //this would allow ANY data to be fit in there with no validation checks (other than it is an object or array)
+  //shouldn't allow this because people could slip in all sorts of terrible things without validation
+  self.allowAnyObjects = localConfiguration.allowAnyObjects || false;
+
+  self.eventCallbacks = function()
+  {
+        var callbacks = {};
+
+        //add callbacks to the object-- these are the functions called when the full event is emitted
+        callbacks["schema:validate"] = self.validateData;
+        callbacks["schema:validateMany"] = self.validateDataArray;
+        callbacks["schema:addSchema"] = self.addSchema;
+        callbacks["schema:getSchema"] = self.getSchema;
+        callbacks["schema:getSchemaReferences"] = self.getSchemaReferences;
+        callbacks["schema:getFullSchema"] = self.getFullSchema;
+        callbacks["schema:getSchemaProperties"] = self.getSchemaProperties;
+
+        //these are for deealing with pulling references from a specific object -- it's easier done in this module
+        callbacks["schema:getReferencesAndParents"] = self.getReferencesAndParents;
+        callbacks["schema:replaceParentReferences"] = self.replaceParentReferences;
+
+        //send back our callbacks
+        return callbacks;
+  }
+  self.requiredEvents = function()
+  {
+  	//don't need no one for nuffin'
+  	return [];
+  }
+
+  self.initialize = function(done)
+  {
+  	setTimeout(function()
+  	{
+  		done();
+  	}, 0);
+  }
+
+    //cache all our schema by type
+    self.allSchema = {};
+    self.schemaReferences = {};
+    self.requiredReferences = {};
+    self.fullSchema = {};
+    self.primaryPaths = {};
+    self.typeProperties = {};
+
+    self.validTypes = "\\b" + schemaSpec.definitions.simpleTypes.enum.join('\\b|\\b') + "\\b"; //['object', 'array', 'number', 'string', 'boolean', 'null'].join('|');
+    self.typeRegExp = new RegExp(self.validTypes);
+
+    self.specKeywords = ["\\$ref|\\babcdefg"];
+    for(var key in schemaSpec.properties)
+      self.specKeywords.push(key.replace('$', '\\$'));
+
+    //join using exact phrasing checks
+    self.specKeywords = self.specKeywords.join('\\b|\\b') + "\\b";
+    self.keywordRegExp = new RegExp(self.specKeywords);
+
+    self.log(self.log.testing, "--Specced types: ".green, self.validTypes);
+    self.log(self.log.testing, "--Specced keywords: ".green, self.specKeywords);
+
+    self.validateFunction = (self.multipleErrors ? self.validator.validateMultiple : self.validator.validateResult);
+    self.errorKey = self.multipleErrors ? "errors" : "error";
+
+    function listTypeIssues(type)
+    {
+      if(!self.allSchema[type]){
+        return "Schema type not loaded: " + type;
+      }
+
+      //we have to manually detect missing references -- since the validator is not concerned with such things
+      //FOR WHATEVER REASON
+      var missing = self.validator.getMissingUris();
+      for(var i=0; i < missing.length; i++)
+      {
+        //if we have this type inside our refernces for this object, it means we're missing a ref schema for this type!
+        if(self.requiredReferences[type][missing[i]])
+        {
+          return "Missing at least 1 schema definition: " + missing[i];
+        }
+      }
+    }
+
+    function internalValidate(schema, object)
+    {
+      //validate against what type?
+      var result = self.validateFunction.apply(self.validator, [object, schema, true, !self.allowUnknownKeys]);
+
+       //if it's not an array, make it an array
+      //if it's empty, make it a damn array
+      var errors = result[self.errorKey];
+
+      //if you are multiple errors, then you are a non-undefined array, just return as usual
+      //otherwise, you are an error but not in an array
+      //if errors is undefined then this will deefault to []
+      errors = (errors && !Array.isArray(errors)) ? [errors] : errors || [];
+
+      return {valid : result.valid, errors : errors};
+    }
+    self.validateDataArray = function(type, objects, finished)
+    {
+      var typeIssues = listTypeIssues(type);
+
+      //stop if we have type issues
+      if(typeIssues)
+      {
+        finished(typeIssues);
+        return;
+      }
+      else if(typeof type != "string" || !Array.isArray(objects))
+      {
+        finished("ValidateMany requires type [string], objects [array]");
+        return;
+      }
+
+      var schema = self.validator.getSchema(type);
+      // self.log('validate many against: ', schema);
+
+      var allValid = true;
+      var allErrors = [];
+      for(var i=0; i < objects.length; i++)
+      {
+        var result = internalValidate(schema, objects[i]);
+
+        if(!result.valid){
+          allValid = false;
+          allErrors.push(result.errors);
+        }
+        else //no error? just push empty array!
+          allErrors.push([]);
+      }
+
+      //if we have errors during validation, they'll be passed on thank you!
+      //if you're valid, and there are no errors, then don't send nuffin
+      finished(undefined, allValid, (!allValid ? allErrors : undefined));
+    }
+    self.validateData = function(type, object, finished)
+    {
+      var typeIssues = listTypeIssues(type);
+
+      //stop if we have type issues
+      if(typeIssues)
+      {
+        finished(typeIssues);
+        return;
+      }
+
+      //log object being checked
+      self.log("Validate: ", object);
+
+      //now we need to validate, we definitely have all the refs we need
+      var schema = self.validator.getSchema(type);
+
+      //log what's being validated
+      self.log('validate against: ', schema);
+    	 
+      var result = internalValidate(schema, object);
+
+      //if we have errors during validation, they'll be passed on thank you!
+      //if you're valid, and there are no errors, then don't send nuffin
+      finished(undefined, result.valid, (result.errors.length ? result.errors : undefined));
+    }
+
+    //todo: pull reference objects from schema -- make sure those exist as well?
+   	self.addSchema = function(type, schemaJSON, options, finished)
+   	{
+      //pass args into internal adds
+      return self.internalAddSchema.apply(self, arguments);
+   	}
+
+   	    //todo: pull reference objects from schema -- make sure those exist as well?
+   	self.getSchema = function(typeOrArray, finished)
+   	{   	
+      //did we request one or many?
+      var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var refArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+      //failed to get schema for some very odd reason?
+        if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+        //push our reference information as a clone
+        refArray.push(traverse(self.validator.getSchema(sType)).clone());
+        //if you hit an error -send back
+        if(self.validator.error){
+          finished(self.validator.error);
+          return;
+        }
+      }
+
+      //send the schema objects back
+      //send an array regardless of how many requested -- standard behavior
+      finished(undefined, refArray);    
+
+   	}
+
+   	self.getSchemaReferences = function(typeOrArray, finished)
+   	{
+      var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var refArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+        if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+        //push our reference information as a clone
+        refArray.push(traverse(self.requiredReferences[sType]).clone());
+      }
+
+  		//send the refernece objects back
+      //if you are a single object, just send the one -- otherwise send an array
+      finished(undefined, refArray); 		
+   	}
+
+    var buildFullSchema = function(type)
+    {
+      var schema = self.validator.getSchema(type);
+      var tSchema = traverse(schema);
+
+      var clone = tSchema.clone();
+      var tClone = traverse(clone);
+      var references = self.schemaReferences[type];
+
+      for(var path in references)
+      {
+        //we get the type of reference
+        var schemaInfo = references[path];
+        var refType = schemaInfo.schemaType;
+
+        //this is recursive behavior -- itwill call buidl full schema if not finished yet
+        var fullRefSchema = internalGetFullSchema(refType);
+
+        if(!fullRefSchema)
+          throw new Error("No schema could be created for: " + refType + ". Please check it's defined.");
+
+        //now we ahve teh full object to replace
+        var tPath = path.split(self.pathDelimiter);
+
+        // self.log(self.log.testing, 'Path to ref: ', tPath, " replacement: ", fullRefSchema);
+
+        //use traverse to set the path object as our full ref object
+        tClone.set(tPath, fullRefSchema);
+      }
+
+      // self.log(self.log.testing, "Returning schema: ", type, " full: ", clone);
+
+      return clone;
+    }
+    var inprogressSchema = {};
+
+    function internalGetFullSchema(type)
+    {
+      if(inprogressSchema[type])
+      {
+          throw new Error("Infinite schema reference loop: " + JSON.stringify(Object.keys(inprogressSchema)));    
+      }
+
+      inprogressSchema[type] = true;
+
+       //if we don't have a full type yet, we build it
+      if(!self.fullSchema[type])
+      {
+        //need to build a full schema object
+        var fSchema = buildFullSchema(type);
+
+        self.fullSchema[type] = fSchema;
+      }
+
+      //mark the in progress as false!
+      delete inprogressSchema[type];
+
+      return self.fullSchema[type];
+    }
+
+    self.getFullSchema = function(typeOrArray, finished)
+    { 
+      var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var fullArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+         if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+
+        try
+        {
+          //get the full schema from internal function
+          //throws error if something is wrong
+          var fullSchema = internalGetFullSchema(sType);
+         
+          //pull the full object -- guaranteed to exist -- send a clone
+           fullArray.push(traverse(fullSchema).clone());
+        }
+        catch(e)
+        {
+          //send the error if we have one
+          finished(e);
+          return;
+        }
+      }
+
+      //send the refernece objects back
+      //if you are a single object, just send the one -- otherwise send an array
+      finished(undefined, fullArray);
+    }
+
+    self.getSchemaProperties = function(typeOrArray, finished)
+    {
+       var typeArray = typeOrArray;
+      if(typeof typeOrArray == "string")
+      {
+        //make single type to return
+        typeArray = [typeOrArray];
+      }
+
+      var propArray = [];
+      for(var i=0; i < typeArray.length; i++)
+      {
+        var sType = typeArray[i];
+
+         if(!self.allSchema[sType]){
+          finished("Schema type not loaded: ", sType);
+          return;
+        }
+
+        //get our schema properties
+        propArray.push({type: sType, primaryPaths: traverse(self.primaryPaths[sType]).clone(), properties: traverse(self.typeProperties[sType]).clone()});
+
+      }
+
+
+      //send the refernece objects back
+      //if you are a single object, just send the one -- otherwise send an array
+      finished(undefined, propArray);
+    }
+
+    //we're going to clone the object, then replace all of the reference wids with new an improved parents
+    self.replaceParentReferences = function(type, object, parentMapping, finished)
+    {
+      var tClone = traverse(object).clone();
+
+      traverse(tClone).forEach(function(node)
+      {
+         //if we have a wid object and parents object -- likely we are a tracked reference
+        if(this.node.wid && this.node.parents)
+        {
+          var replaceParents = parentMapping[this.node.wid];
+
+          if(replaceParents)
+          {
+            //straight up replacement therapy yo
+            this.node.parents = replaceParents;
+
+            //then make sure to update and continue onwards!
+            this.update(this.node);
+          }
+        }
+      })
+
+      //we've replaced the innards of the object with a better future!
+      finished(undefined, tClone);
+    }
+
+    self.getReferencesAndParents = function(type, widObjects, finished)
+    {
+
+        //listed by some identifier, then the object, we need to look through the type, and pull references
+        var fSchema = internalGetFullSchema(type);
+        // self.log("Full schema: ", fSchema);
+        if(!fSchema)
+        {
+          finished("Full schema undefined, might be missing a reference type within " + type);
+          return;
+        } 
+        var widToParents = {};
+        var traverseObjects = {};
+
+        for(var wid in widObjects){
+          widToParents[wid] = {};
+          traverseObjects[wid] = traverse(widObjects[wid]);
+        }
+
+        
+        //for every wid object we see, we loop through and pull that 
+        traverse(fSchema).forEach(function(node)
+        {
+          // self.log("Node: ", this.node, "", " key: ", this.key);
+          //if we have a wid object and parents object -- likely we are a tracked reference
+          if(this.node.wid && this.node.parents)
+          {
+            //let's pull these bad boys our of our other objects
+            var pathToObject = self.stripObjectPath(this.path);
+            
+            //if you aren't root, split it up!
+            if(pathToObject != "")
+              pathToObject = pathToObject.split(self.pathDelimiter);
+
+            // self.log("\nKey before :", this.key, " node-p: ", this.parent.node, " path: ", this.path);
+            
+            var isArray = (this.key == "properties" && this.path[this.path.length - 2] == "items");
+            // self.log("Is array? : ", isArray);
+            for(var wid in traverseObjects)
+            {
+
+              var wtp = widToParents[wid];
+              var tob = traverseObjects[wid];
+
+
+              //fetch object from our traverse thing using this path
+              var arrayOrObject = tob.get(pathToObject);
+
+              // self.log("Path to obj: ", pathToObject, " get: ", arrayOrObject);
+
+              //grab wid to parent mappings, always cloning parent arrays
+              if(isArray)
+              {
+                for(var i=0; i < arrayOrObject.length; i++)
+                {
+                  var aobj = arrayOrObject[i];
+                  //map wid objects to parent wids always thank you
+                  wtp[aobj.wid] = aobj.parents.slice(0);
+                }
+              }
+              else
+                wtp[arrayOrObject.wid] = arrayOrObject.parents.slice(0);
+
+              //now we've aded a mapping from the objects wid to the parents for that wid
+
+            }
+          }
+        });
+
+        //we send back the wids of the original widObjects mapped to the wid internal reference && the corresponding parents
+        //so many damn layers -- it gets confusing
+        finished(undefined, widToParents);
+
+    }
+
+
+	return self;
+}
+
+
+
+
+});
+
+require.modules["optimuslime-win-schema"] = require.modules["optimuslime~win-schema@0.0.5-4"];
+require.modules["optimuslime~win-schema"] = require.modules["optimuslime~win-schema@0.0.5-4"];
+require.modules["win-schema"] = require.modules["optimuslime~win-schema@0.0.5-4"];
+
+
 require.register("optimuslime~win-utils@master", function (exports, module) {
 
 var winutils = {};
@@ -9952,9 +9677,9 @@ var winutils = {};
 module.exports = winutils;
 
 //right now, it's all we have setup -- later there will be more utilities
-winutils.cuid = require('optimuslime~win-utils@master/uuid/cuid.js');
+winutils.cuid = require("optimuslime~win-utils@master/uuid/cuid.js");
 
-winutils.math = require('optimuslime~win-utils@master/math/winmath.js');
+winutils.math = require("optimuslime~win-utils@master/math/winmath.js");
 
 
 });
@@ -10044,7 +9769,7 @@ api.fingerprint = isBrowser ?
           api.globalCount().toString(36), 4);
   }
 : function nodePrint() {
-  var os = require('os'),
+  var os = require("os"),
 
   padding = 2,
   pid = pad((process.pid).toString(36), padding),
@@ -10154,9 +9879,9 @@ var winutils = {};
 module.exports = winutils;
 
 //right now, it's all we have setup -- later there will be more utilities
-winutils.cuid = require('optimuslime~win-utils@0.1.1/uuid/cuid.js');
+winutils.cuid = require("optimuslime~win-utils@0.1.1/uuid/cuid.js");
 
-winutils.math = require('optimuslime~win-utils@0.1.1/math/winmath.js');
+winutils.math = require("optimuslime~win-utils@0.1.1/math/winmath.js");
 
 
 });
@@ -10246,7 +9971,7 @@ api.fingerprint = isBrowser ?
           api.globalCount().toString(36), 4);
   }
 : function nodePrint() {
-  var os = require('os'),
+  var os = require("os"),
 
   padding = 2,
   pid = pad((process.pid).toString(36), padding),
@@ -10351,12 +10076,12 @@ require.modules["win-utils"] = require.modules["optimuslime~win-utils@0.1.1"];
 
 require.register("optimuslime~win-gen@0.0.2-6", function (exports, module) {
 //need our general utils functions
-var winutils = require('optimuslime~win-utils@master');
-var extendModuleDefinitions = require('optimuslime~win-gen@0.0.2-6/lib/module/backbone.js');
-var traverse = require('optimuslime~traverse@master');
-var uuid = require('optimuslime~win-utils@master').cuid;
+var winutils = require("optimuslime~win-utils@master");
+var extendModuleDefinitions = require("optimuslime~win-gen@0.0.2-6/lib/module/backbone.js");
+var traverse = require("optimuslime~traverse@master");
+var uuid = require("optimuslime~win-utils@master").cuid;
 //for component: techjacker/q
-var Q = require('techjacker~q@master');
+var Q = require("techjacker~q@master");
 
 var cuid = winutils.cuid;
 var wMath = winutils.math;
@@ -11312,9 +11037,123 @@ require.modules["optimuslime~win-gen"] = require.modules["optimuslime~win-gen@0.
 require.modules["win-gen"] = require.modules["optimuslime~win-gen@0.0.2-6"];
 
 
+require.register("optimuslime~win-data@0.0.1-3", function (exports, module) {
+var request = require("visionmedia~superagent@master");
+
+module.exports = windata;
+
+
+function windata(backbone, globalConfig, localConfig)
+{
+	var self= this;
+
+	//need to make requests, much like win-publish
+	//pull in backbone info, we gotta set our logger/emitter up
+	var self = this;
+
+	self.winFunction = "data";
+
+	//this is how we talk to win-backbone
+	self.backEmit = backbone.getEmitter(self);
+
+	//grab our logger
+	self.log = backbone.getLogger(self);
+
+	//only vital stuff goes out for normal logs
+	self.log.logLevel = localConfig.logLevel || self.log.normal;
+
+	//we have logger and emitter, set up some of our functions
+
+	if(!globalConfig.server)
+		throw new Error("Global configuration requires server location and port")
+
+	self.hostname = globalConfig.server;
+	self.port = globalConfig.port;
+
+	//what events do we need?
+	//none for now, though in the future, we might have a way to communicate with foreign win-backbones as if it was just sending
+	//a message within our own backbone -- thereby obfuscating what is done remotely and what is done locally 
+	self.requiredEvents = function()
+	{
+		return [
+		];
+	}
+
+	//what events do we respond to?
+	self.eventCallbacks = function()
+	{ 
+		return {
+			"data:winPOST" : self.postWIN,
+			"data:winGET" : self.getWIN
+		};
+	}
+
+	 var baseWIN = function()
+	{
+		return self.hostname + (self.port ? ":" + self.port : "") + "/api";
+	}
+
+	self.getWIN = function(apiPath, queryObjects, resFunction)
+	{
+		var base = baseWIN();
+
+		if(typeof queryObjects == "function")
+		{
+		  resFunction = queryObjects;
+		  queryObjects = {};
+		}
+		else //make sure to always have at least an empty object
+		  queryObjects = queryObjects || {};
+
+		var qNotEmpty = false;
+		var queryAdditions = "?";
+		for(var key in queryObjects){
+		  if(queryAdditions.length > 1)
+		    queryAdditions += "&";
+
+		  qNotEmpty = true;
+		  queryAdditions += key + "=" + queryObjects[key];
+		} 
+		var fullPath = base + apiPath + (qNotEmpty ? queryAdditions : "");
+
+		self.log("Requesting get from: ",fullPath )
+		request
+		  .get(fullPath)
+		  // .send(data)
+		  .set('Accept', 'application/json')
+		  .end(resFunction);
+	}
+
+	self.postWIN = function(apiPath, data, resFunction)
+	{
+		var base = baseWIN();
+
+		var fullPath= base + apiPath;
+		self.log("Requesting post to: ",fullPath )
+
+		request
+		  .post(fullPath)
+		  .send(data)
+		  .set('Accept', 'application/json')
+		  .end(resFunction);
+	}
+
+
+	return self;
+}
+
+
+
+});
+
+require.modules["optimuslime-win-data"] = require.modules["optimuslime~win-data@0.0.1-3"];
+require.modules["optimuslime~win-data"] = require.modules["optimuslime~win-data@0.0.1-3"];
+require.modules["win-data"] = require.modules["optimuslime~win-data@0.0.1-3"];
+
+
 require.register("optimuslime~win-phylogeny@0.0.1-1", function (exports, module) {
 //this will help us navigate complicated json tree objects
-var traverse = require('optimuslime~traverse@master');
+var traverse = require("optimuslime~traverse@master");
 
 module.exports = winphylogeny;
 
@@ -11726,23 +11565,23 @@ var cppnjs = {};
 module.exports = cppnjs;
 
 //CPPNs
-cppnjs.cppn = require('optimuslime~cppnjs@master/networks/cppn.js');
+cppnjs.cppn = require("optimuslime~cppnjs@master/networks/cppn.js");
 
 cppnjs.addAdaptable = function()
 {
-    require('optimuslime~cppnjs@master/extras/adaptableAdditions.js');
+    require("optimuslime~cppnjs@master/extras/adaptableAdditions.js");
 };
 
 cppnjs.addPureCPPN = function()
 {
-    require('optimuslime~cppnjs@master/extras/pureCPPNAdditions.js');
+    require("optimuslime~cppnjs@master/extras/pureCPPNAdditions.js");
 };
 
 cppnjs.addGPUExtras = function()
 {
     //requires pureCPPN activations
     cppnjs.addPureCPPN();
-    require('optimuslime~cppnjs@master/extras/gpuAdditions.js');
+    require("optimuslime~cppnjs@master/extras/gpuAdditions.js");
 };
 
 //add GPU extras by default
@@ -11753,26 +11592,26 @@ cppnjs.addGPUExtras();
 
 
 //nodes and connections!
-cppnjs.cppnNode = require('optimuslime~cppnjs@master/networks/cppnNode.js');
-cppnjs.cppnConnection = require('optimuslime~cppnjs@master/networks/cppnConnection.js');
+cppnjs.cppnNode = require("optimuslime~cppnjs@master/networks/cppnNode.js");
+cppnjs.cppnConnection = require("optimuslime~cppnjs@master/networks/cppnConnection.js");
 
 //all the activations your heart could ever hope for
-cppnjs.cppnActivationFunctions = require('optimuslime~cppnjs@master/activationFunctions/cppnActivationFunctions.js');
-cppnjs.cppnActivationFactory = require('optimuslime~cppnjs@master/activationFunctions/cppnActivationFactory.js');
+cppnjs.cppnActivationFunctions = require("optimuslime~cppnjs@master/activationFunctions/cppnactivationfunctions.js");
+cppnjs.cppnActivationFactory = require("optimuslime~cppnjs@master/activationFunctions/cppnActivationFactory.js");
 
 //and the utilities to round it out!
-cppnjs.utilities = require('optimuslime~cppnjs@master/utility/utilities.js');
+cppnjs.utilities = require("optimuslime~cppnjs@master/utility/utilities.js");
 
 //exporting the node type
-cppnjs.NodeType = require('optimuslime~cppnjs@master/types/nodeType.js');
+cppnjs.NodeType = require("optimuslime~cppnjs@master/types/nodeType.js");
 
 
 
 });
 
 require.register("optimuslime~cppnjs@master/activationFunctions/cppnActivationFactory.js", function (exports, module) {
-var utils = require('optimuslime~cppnjs@master/utility/utilities.js');
-var cppnActivationFunctions = require('optimuslime~cppnjs@master/activationFunctions/cppnActivationFunctions.js');
+var utils = require("optimuslime~cppnjs@master/utility/utilities.js");
+var cppnActivationFunctions = require("optimuslime~cppnjs@master/activationFunctions/cppnactivationfunctions.js");
 
 var Factory = {};
 
@@ -11838,7 +11677,7 @@ Factory.getRandomActivationFunction = function()
 
 });
 
-require.register("optimuslime~cppnjs@master/activationFunctions/cppnActivationFunctions.js", function (exports, module) {
+require.register("optimuslime~cppnjs@master/activationFunctions/cppnactivationfunctions.js", function (exports, module) {
 var cppnActivationFunctions = {};
 
 module.exports = cppnActivationFunctions;
@@ -12085,7 +11924,7 @@ require.register("optimuslime~cppnjs@master/networks/cppn.js", function (exports
  * Module dependencies.
  */
 
-var utilities = require('optimuslime~cppnjs@master/utility/utilities.js');
+var utilities = require("optimuslime~cppnjs@master/utility/utilities.js");
 
 /**
  * Expose `CPPN`.
@@ -13405,25 +13244,25 @@ var neatjs = {};
 module.exports = neatjs;
 
 //nodes and connections!
-neatjs.neatNode = require('optimuslime~neatjs@master/genome/neatNode.js');
-neatjs.neatConnection = require('optimuslime~neatjs@master/genome/neatConnection.js');
-neatjs.neatGenome = require('optimuslime~neatjs@master/genome/neatGenome.js');
+neatjs.neatNode = require("optimuslime~neatjs@master/genome/neatNode.js");
+neatjs.neatConnection = require("optimuslime~neatjs@master/genome/neatConnection.js");
+neatjs.neatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
 
 //all the activations your heart could ever hope for
-neatjs.iec = require('optimuslime~neatjs@master/evolution/iec.js');
-neatjs.multiobjective = require('optimuslime~neatjs@master/evolution/multiobjective.js');
-neatjs.novelty = require('optimuslime~neatjs@master/evolution/novelty.js');
+neatjs.iec = require("optimuslime~neatjs@master/evolution/iec.js");
+neatjs.multiobjective = require("optimuslime~neatjs@master/evolution/multiobjective.js");
+neatjs.novelty = require("optimuslime~neatjs@master/evolution/novelty.js");
 
 //neatHelp
-neatjs.neatDecoder = require('optimuslime~neatjs@master/neatHelp/neatDecoder.js');
-neatjs.neatHelp = require('optimuslime~neatjs@master/neatHelp/neatHelp.js');
-neatjs.neatParameters = require('optimuslime~neatjs@master/neatHelp/neatParameters.js');
+neatjs.neatDecoder = require("optimuslime~neatjs@master/neatHelp/neatDecoder.js");
+neatjs.neatHelp = require("optimuslime~neatjs@master/neatHelp/neatHelp.js");
+neatjs.neatParameters = require("optimuslime~neatjs@master/neatHelp/neatParameters.js");
 
 //and the utilities to round it out!
-neatjs.genomeSharpToJS = require('optimuslime~neatjs@master/utility/genomeSharpToJS.js');
+neatjs.genomeSharpToJS = require("optimuslime~neatjs@master/utility/genomeSharpToJS.js");
 
 //exporting the node type
-neatjs.NodeType = require('optimuslime~neatjs@master/types/nodeType.js');
+neatjs.NodeType = require("optimuslime~neatjs@master/types/nodeType.js");
 
 
 
@@ -13434,10 +13273,10 @@ require.register("optimuslime~neatjs@master/evolution/iec.js", function (exports
  * Module dependencies.
  */
 
-var NeatGenome = require('optimuslime~neatjs@master/genome/neatGenome.js');
+var NeatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
 
 //pull in variables from cppnjs
-var cppnjs = require('optimuslime~cppnjs@master');
+var cppnjs = require("optimuslime~cppnjs@master");
 var utilities =  cppnjs.utilities;
 
 /**
@@ -13596,12 +13435,12 @@ require.register("optimuslime~neatjs@master/evolution/multiobjective.js", functi
  * Module dependencies.
  */
 
-var NeatGenome = require('optimuslime~neatjs@master/genome/neatGenome.js');
-var Novelty = require('optimuslime~neatjs@master/evolution/novelty.js');
+var NeatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
+var Novelty = require("optimuslime~neatjs@master/evolution/novelty.js");
 
 
 //pull in variables from cppnjs
-var cppnjs = require('optimuslime~cppnjs@master');
+var cppnjs = require("optimuslime~cppnjs@master");
 var utilities =  cppnjs.utilities;
 
 
@@ -14376,8 +14215,8 @@ require.register("optimuslime~neatjs@master/evolution/novelty.js", function (exp
  * Module dependencies.
  */
 
-var NeatGenome = require('optimuslime~neatjs@master/genome/neatGenome.js');
-var utilities =  require('optimuslime~cppnjs@master').utilities;
+var NeatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
+var utilities =  require("optimuslime~cppnjs@master").utilities;
 
 /**
  * Expose `NeatNode`.
@@ -14815,27 +14654,27 @@ require.register("optimuslime~neatjs@master/genome/neatGenome.js", function (exp
  */
 
 //pull in our cppn lib
-var cppnjs = require('optimuslime~cppnjs@master');
+var cppnjs = require("optimuslime~cppnjs@master");
 
 //grab our activation factory, cppn object and connections
 var CPPNactivationFactory = cppnjs.cppnActivationFactory;
 var utilities = cppnjs.utilities;
 
 //neatjs imports
-var novelty = require('optimuslime~neatjs@master/evolution/novelty.js');
-var NeatConnection = require('optimuslime~neatjs@master/genome/neatConnection.js');
-var NeatNode = require('optimuslime~neatjs@master/genome/neatNode.js');
+var novelty = require("optimuslime~neatjs@master/evolution/novelty.js");
+var NeatConnection = require("optimuslime~neatjs@master/genome/neatConnection.js");
+var NeatNode = require("optimuslime~neatjs@master/genome/neatNode.js");
 
 //help and params
-var neatHelp =  require('optimuslime~neatjs@master/neatHelp/neatHelp.js');
-var neatParameters =  require('optimuslime~neatjs@master/neatHelp/neatParameters.js');
-var neatDecoder =  require('optimuslime~neatjs@master/neatHelp/neatDecoder.js');
+var neatHelp =  require("optimuslime~neatjs@master/neatHelp/neatHelp.js");
+var neatParameters =  require("optimuslime~neatjs@master/neatHelp/neatParameters.js");
+var neatDecoder =  require("optimuslime~neatjs@master/neatHelp/neatDecoder.js");
 
-var wUtils = require('optimuslime~win-utils@master');
+var wUtils = require("optimuslime~win-utils@master");
 var uuid = wUtils.cuid;
 
 //going to need to read node types appropriately
-var NodeType = require('optimuslime~neatjs@master/types/nodeType.js');
+var NodeType = require("optimuslime~neatjs@master/types/nodeType.js");
 
 /**
  * Expose `NeatGenome`.
@@ -16454,7 +16293,7 @@ require.register("optimuslime~neatjs@master/neatHelp/neatDecoder.js", function (
  */
 
 //pull in our cppn lib
-var cppnjs = require('optimuslime~cppnjs@master');
+var cppnjs = require("optimuslime~cppnjs@master");
 
 //grab our activation factory, cppn object and connections
 var CPPNactivationFactory = cppnjs.cppnActivationFactory;
@@ -16462,7 +16301,7 @@ var CPPN = cppnjs.cppn;
 var CPPNConnection = cppnjs.cppnConnection;
 
 //going to need to read node types appropriately
-var NodeType = require('optimuslime~neatjs@master/types/nodeType.js');
+var NodeType = require("optimuslime~neatjs@master/types/nodeType.js");
 
 /**
  * Expose `NeatDecoder`.
@@ -16570,7 +16409,7 @@ require.register("optimuslime~neatjs@master/neatHelp/neatHelp.js", function (exp
 /**
 * Module dependencies.
 */
-var uuid = require('optimuslime~win-utils@master').cuid;
+var uuid = require("optimuslime~win-utils@master").cuid;
 /**
 * Expose `neatHelp`.
 */
@@ -16981,10 +16820,10 @@ require.register("optimuslime~neatjs@master/utility/genomeSharpToJS.js", functio
  * Module dependencies.
  */
 
-var NeatGenome = require('optimuslime~neatjs@master/genome/neatGenome.js');
-var NeatNode = require('optimuslime~neatjs@master/genome/neatNode.js');
-var NeatConnection = require('optimuslime~neatjs@master/genome/neatConnection.js');
-var NodeType = require('optimuslime~neatjs@master/types/nodeType.js');
+var NeatGenome = require("optimuslime~neatjs@master/genome/neatGenome.js");
+var NeatNode = require("optimuslime~neatjs@master/genome/neatNode.js");
+var NeatConnection = require("optimuslime~neatjs@master/genome/neatConnection.js");
+var NodeType = require("optimuslime~neatjs@master/types/nodeType.js");
 
 
 /**
@@ -17083,7 +16922,7 @@ require.register("component~classes@master", function (exports, module) {
  * Module dependencies.
  */
 
-var index = require('component~indexof@0.0.1');
+var index = require("component~indexof@0.0.1");
 
 /**
  * Whitespace regexp.
@@ -17117,9 +16956,7 @@ module.exports = function(el){
  */
 
 function ClassList(el) {
-  if (!el || !el.nodeType) {
-    throw new Error('A DOM element reference is required');
-  }
+  if (!el) throw new Error('A DOM element reference is required');
   this.el = el;
   this.list = el.classList;
 }
@@ -17273,32 +17110,47 @@ require.modules["component~classes"] = require.modules["component~classes@master
 require.modules["classes"] = require.modules["component~classes@master"];
 
 
-require.register("ramitos~resize@master", function (exports, module) {
-var binds = {};
+require.register("component~event@0.1.4", function (exports, module) {
+var bind = window.addEventListener ? 'addEventListener' : 'attachEvent',
+    unbind = window.removeEventListener ? 'removeEventListener' : 'detachEvent',
+    prefix = bind !== 'addEventListener' ? 'on' : '';
 
-module.exports.bind = function (element, cb, ms) {
-  if(!binds[element]) binds[element] = {};
-  var height = element.offsetHeight;
-  var width = element.offsetWidth;
-  if(!ms) ms = 250;
-  
-  binds[element][cb] = setInterval(function () {
-    if((width === element.offsetWidth) && (height === element.offsetHeight)) return;
-    height = element.offsetHeight;
-    width = element.offsetWidth;
-    cb(element);
-  }, ms);
+/**
+ * Bind `el` event `type` to `fn`.
+ *
+ * @param {Element} el
+ * @param {String} type
+ * @param {Function} fn
+ * @param {Boolean} capture
+ * @return {Function}
+ * @api public
+ */
+
+exports.bind = function(el, type, fn, capture){
+  el[bind](prefix + type, fn, capture || false);
+  return fn;
 };
 
-module.exports.unbind = function (element, cb) {
-  if(!binds[element][cb]) return;
-  clearInterval(binds[element][cb]);
+/**
+ * Unbind `el` event `type`'s callback `fn`.
+ *
+ * @param {Element} el
+ * @param {String} type
+ * @param {Function} fn
+ * @param {Boolean} capture
+ * @return {Function}
+ * @api public
+ */
+
+exports.unbind = function(el, type, fn, capture){
+  el[unbind](prefix + type, fn, capture || false);
+  return fn;
 };
 });
 
-require.modules["ramitos-resize"] = require.modules["ramitos~resize@master"];
-require.modules["ramitos~resize"] = require.modules["ramitos~resize@master"];
-require.modules["resize"] = require.modules["ramitos~resize@master"];
+require.modules["component-event"] = require.modules["component~event@0.1.4"];
+require.modules["component~event"] = require.modules["component~event@0.1.4"];
+require.modules["event"] = require.modules["component~event@0.1.4"];
 
 
 require.register("component~query@0.0.3", function (exports, module) {
@@ -17331,12 +17183,12 @@ require.modules["component~query"] = require.modules["component~query@0.0.3"];
 require.modules["query"] = require.modules["component~query@0.0.3"];
 
 
-require.register("component~matches-selector@0.1.5", function (exports, module) {
+require.register("component~matches-selector@master", function (exports, module) {
 /**
  * Module dependencies.
  */
 
-var query = require('component~query@0.0.3');
+var query = require("component~query@0.0.3");
 
 /**
  * Element prototype.
@@ -17381,13 +17233,13 @@ function match(el, selector) {
 
 });
 
-require.modules["component-matches-selector"] = require.modules["component~matches-selector@0.1.5"];
-require.modules["component~matches-selector"] = require.modules["component~matches-selector@0.1.5"];
-require.modules["matches-selector"] = require.modules["component~matches-selector@0.1.5"];
+require.modules["component-matches-selector"] = require.modules["component~matches-selector@master"];
+require.modules["component~matches-selector"] = require.modules["component~matches-selector@master"];
+require.modules["matches-selector"] = require.modules["component~matches-selector@master"];
 
 
-require.register("component~closest@0.1.4", function (exports, module) {
-var matches = require('component~matches-selector@0.1.5')
+require.register("discore~closest@0.1.3", function (exports, module) {
+var matches = require("component~matches-selector@master")
 
 module.exports = function (element, selector, checkYoSelf, root) {
   element = checkYoSelf ? {parentNode: element} : element
@@ -17403,67 +17255,23 @@ module.exports = function (element, selector, checkYoSelf, root) {
     // the selector matches the root
     // (when the root is not the document)
     if (element === root)
-      return
+      return  
   }
 }
-
 });
 
-require.modules["component-closest"] = require.modules["component~closest@0.1.4"];
-require.modules["component~closest"] = require.modules["component~closest@0.1.4"];
-require.modules["closest"] = require.modules["component~closest@0.1.4"];
+require.modules["discore-closest"] = require.modules["discore~closest@0.1.3"];
+require.modules["discore~closest"] = require.modules["discore~closest@0.1.3"];
+require.modules["closest"] = require.modules["discore~closest@0.1.3"];
 
 
-require.register("component~event@0.1.4", function (exports, module) {
-var bind = window.addEventListener ? 'addEventListener' : 'attachEvent',
-    unbind = window.removeEventListener ? 'removeEventListener' : 'detachEvent',
-    prefix = bind !== 'addEventListener' ? 'on' : '';
-
-/**
- * Bind `el` event `type` to `fn`.
- *
- * @param {Element} el
- * @param {String} type
- * @param {Function} fn
- * @param {Boolean} capture
- * @return {Function}
- * @api public
- */
-
-exports.bind = function(el, type, fn, capture){
-  el[bind](prefix + type, fn, capture || false);
-  return fn;
-};
-
-/**
- * Unbind `el` event `type`'s callback `fn`.
- *
- * @param {Element} el
- * @param {String} type
- * @param {Function} fn
- * @param {Boolean} capture
- * @return {Function}
- * @api public
- */
-
-exports.unbind = function(el, type, fn, capture){
-  el[unbind](prefix + type, fn, capture || false);
-  return fn;
-};
-});
-
-require.modules["component-event"] = require.modules["component~event@0.1.4"];
-require.modules["component~event"] = require.modules["component~event@0.1.4"];
-require.modules["event"] = require.modules["component~event@0.1.4"];
-
-
-require.register("component~delegate@0.2.3", function (exports, module) {
+require.register("component~delegate@0.2.2", function (exports, module) {
 /**
  * Module dependencies.
  */
 
-var closest = require('component~closest@0.1.4')
-  , event = require('component~event@0.1.4');
+var closest = require("discore~closest@0.1.3")
+  , event = require("component~event@0.1.4");
 
 /**
  * Delegate event `type` to `selector`
@@ -17503,9 +17311,9 @@ exports.unbind = function(el, type, fn, capture){
 
 });
 
-require.modules["component-delegate"] = require.modules["component~delegate@0.2.3"];
-require.modules["component~delegate"] = require.modules["component~delegate@0.2.3"];
-require.modules["delegate"] = require.modules["component~delegate@0.2.3"];
+require.modules["component-delegate"] = require.modules["component~delegate@0.2.2"];
+require.modules["component~delegate"] = require.modules["component~delegate@0.2.2"];
+require.modules["delegate"] = require.modules["component~delegate@0.2.2"];
 
 
 require.register("component~events@master", function (exports, module) {
@@ -17514,8 +17322,8 @@ require.register("component~events@master", function (exports, module) {
  * Module dependencies.
  */
 
-var events = require('component~event@0.1.4');
-var delegate = require('component~delegate@0.2.3');
+var events = require("component~event@0.1.4");
+var delegate = require("component~delegate@0.2.2");
 
 /**
  * Expose `Events`.
@@ -17691,6 +17499,34 @@ function parse(event) {
 require.modules["component-events"] = require.modules["component~events@master"];
 require.modules["component~events"] = require.modules["component~events@master"];
 require.modules["events"] = require.modules["component~events@master"];
+
+
+require.register("ramitos~resize@master", function (exports, module) {
+var binds = {};
+
+module.exports.bind = function (element, cb, ms) {
+  if(!binds[element]) binds[element] = {};
+  var height = element.offsetHeight;
+  var width = element.offsetWidth;
+  if(!ms) ms = 250;
+  
+  binds[element][cb] = setInterval(function () {
+    if((width === element.offsetWidth) && (height === element.offsetHeight)) return;
+    height = element.offsetHeight;
+    width = element.offsetWidth;
+    cb(element);
+  }, ms);
+};
+
+module.exports.unbind = function (element, cb) {
+  if(!binds[element][cb]) return;
+  clearInterval(binds[element][cb]);
+};
+});
+
+require.modules["ramitos-resize"] = require.modules["ramitos~resize@master"];
+require.modules["ramitos~resize"] = require.modules["ramitos~resize@master"];
+require.modules["resize"] = require.modules["ramitos~resize@master"];
 
 
 require.register("component~bind@1.0.0", function (exports, module) {
@@ -17943,9 +17779,9 @@ require.register("component~to-function@2.0.5", function (exports, module) {
 
 var expr;
 try {
-  expr = require('component~props@1.1.2');
+  expr = require("component~props@1.1.2");
 } catch(e) {
-  expr = require('component~props@1.1.2');
+  expr = require("component~props@1.1.2");
 }
 
 /**
@@ -18103,12 +17939,12 @@ require.register("component~each@0.2.5", function (exports, module) {
  */
 
 try {
-  var type = require('component~type@1.0.0');
+  var type = require("component~type@1.0.0");
 } catch (err) {
-  var type = require('component~type@1.0.0');
+  var type = require("component~type@1.0.0");
 }
 
-var toFunction = require('component~to-function@2.0.5');
+var toFunction = require("component~to-function@2.0.5");
 
 /**
  * HOP reference.
@@ -18450,14 +18286,14 @@ require.register("component~pillbox@master", function (exports, module) {
  * Module dependencies.
  */
 
-var Emitter = require('component~emitter@master')
-  , keyname = require('component~keyname@0.0.1')
-  , events = require('component~events@master')
-  , each = require('component~each@0.2.5')
-  , Set = require('component~set@1.0.0')
-  , bind = require('component~bind@1.0.0')
-  , trim = require('component~trim@0.0.1')
-  , normalize = require('stephenmathieson~normalize@0.0.1');
+var Emitter = require("component~emitter@master")
+  , keyname = require("component~keyname@0.0.1")
+  , events = require("component~events@master")
+  , each = require("component~each@0.2.5")
+  , Set = require("component~set@1.0.0")
+  , bind = require("component~bind@1.0.0")
+  , trim = require("component~trim@0.0.1")
+  , normalize = require("stephenmathieson~normalize@0.0.1");
 
 /**
  * Expose `Pillbox`.
@@ -18672,451 +18508,6 @@ require.modules["component~pillbox"] = require.modules["component~pillbox@master
 require.modules["pillbox"] = require.modules["component~pillbox@master"];
 
 
-require.register("timoxley~next-tick@0.0.2", function (exports, module) {
-"use strict"
-
-if (typeof setImmediate == 'function') {
-  module.exports = function(f){ setImmediate(f) }
-}
-// legacy node.js
-else if (typeof process != 'undefined' && typeof process.nextTick == 'function') {
-  module.exports = process.nextTick
-}
-// fallback for other environments / postMessage behaves badly on IE8
-else if (typeof window == 'undefined' || window.ActiveXObject || !window.postMessage) {
-  module.exports = function(f){ setTimeout(f) };
-} else {
-  var q = [];
-
-  window.addEventListener('message', function(){
-    var i = 0;
-    while (i < q.length) {
-      try { q[i++](); }
-      catch (e) {
-        q = q.slice(i);
-        window.postMessage('tic!', '*');
-        throw e;
-      }
-    }
-    q.length = 0;
-  }, true);
-
-  module.exports = function(fn){
-    if (!q.length) window.postMessage('tic!', '*');
-    q.push(fn);
-  }
-}
-
-});
-
-require.modules["timoxley-next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
-require.modules["timoxley~next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
-require.modules["next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
-
-
-require.register("ecarter~css-emitter@0.0.1", function (exports, module) {
-/**
- * Module Dependencies
- */
-
-var events = require('component~event@0.1.4');
-
-// CSS events
-
-var watch = [
-  'transitionend'
-, 'webkitTransitionEnd'
-, 'oTransitionEnd'
-, 'MSTransitionEnd'
-, 'animationend'
-, 'webkitAnimationEnd'
-, 'oAnimationEnd'
-, 'MSAnimationEnd'
-];
-
-/**
- * Expose `CSSnext`
- */
-
-module.exports = CssEmitter;
-
-/**
- * Initialize a new `CssEmitter`
- *
- */
-
-function CssEmitter(element){
-  if (!(this instanceof CssEmitter)) return new CssEmitter(element);
-  this.el = element;
-}
-
-/**
- * Bind CSS events.
- *
- * @api public
- */
-
-CssEmitter.prototype.bind = function(fn){
-  for (var i=0; i < watch.length; i++) {
-    events.bind(this.el, watch[i], fn);
-  }
-  return this;
-};
-
-/**
- * Unbind CSS events
- * 
- * @api public
- */
-
-CssEmitter.prototype.unbind = function(fn){
-  for (var i=0; i < watch.length; i++) {
-    events.unbind(this.el, watch[i], fn);
-  }
-  return this;
-};
-
-/**
- * Fire callback only once
- * 
- * @api public
- */
-
-CssEmitter.prototype.once = function(fn){
-  var self = this;
-  function on(){
-    self.unbind(on);
-    fn.apply(self.el, arguments);
-  }
-  self.bind(on);
-  return this;
-};
-
-
-});
-
-require.modules["ecarter-css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
-require.modules["ecarter~css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
-require.modules["css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
-
-
-require.register("yields~has-transitions@0.0.1", function (exports, module) {
-
-/**
- * Check if `el` or browser supports transitions.
- *
- * @param {Element} el
- * @return {Boolean}
- * @api public
- */
-
-exports = module.exports = function(el){
-  switch (arguments.length) {
-    case 0: return bool;
-    case 1: return bool
-      ? transitions(el)
-      : bool;
-  }
-};
-
-/**
- * Check if the given `el` has transitions.
- *
- * @param {Element} el
- * @return {Boolean}
- * @api private
- */
-
-function transitions(el, styl){
-  if (el.transition) return true;
-  styl = window.getComputedStyle(el);
-  return !! styl.transition;
-}
-
-/**
- * Style.
- */
-
-var styl = document.body.style;
-
-/**
- * Export support.
- */
-
-var bool = 'transition' in styl
-  || 'webkitTransition' in styl
-  || 'MozTransition' in styl
-  || 'msTransition' in styl;
-
-});
-
-require.modules["yields-has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
-require.modules["yields~has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
-require.modules["has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
-
-
-require.register("component~once@0.0.1", function (exports, module) {
-
-/**
- * Identifier.
- */
-
-var n = 0;
-
-/**
- * Global.
- */
-
-var global = (function(){ return this })();
-
-/**
- * Make `fn` callable only once.
- *
- * @param {Function} fn
- * @return {Function}
- * @api public
- */
-
-module.exports = function(fn) {
-  var id = n++;
-
-  function once(){
-    // no receiver
-    if (this == global) {
-      if (once.called) return;
-      once.called = true;
-      return fn.apply(this, arguments);
-    }
-
-    // receiver
-    var key = '__called_' + id + '__';
-    if (this[key]) return;
-    this[key] = true;
-    return fn.apply(this, arguments);
-  }
-
-  return once;
-};
-
-});
-
-require.modules["component-once"] = require.modules["component~once@0.0.1"];
-require.modules["component~once"] = require.modules["component~once@0.0.1"];
-require.modules["once"] = require.modules["component~once@0.0.1"];
-
-
-require.register("yields~after-transition@0.0.1", function (exports, module) {
-
-/**
- * dependencies
- */
-
-var has = require('yields~has-transitions@0.0.1')
-  , emitter = require('ecarter~css-emitter@0.0.1')
-  , once = require('component~once@0.0.1');
-
-/**
- * Transition support.
- */
-
-var supported = has();
-
-/**
- * Export `after`
- */
-
-module.exports = after;
-
-/**
- * Invoke the given `fn` after transitions
- *
- * It will be invoked only if the browser
- * supports transitions __and__
- * the element has transitions
- * set in `.style` or css.
- *
- * @param {Element} el
- * @param {Function} fn
- * @return {Function} fn
- * @api public
- */
-
-function after(el, fn){
-  if (!supported || !has(el)) return fn();
-  emitter(el).bind(fn);
-  return fn;
-};
-
-/**
- * Same as `after()` only the function is invoked once.
- *
- * @param {Element} el
- * @param {Function} fn
- * @return {Function}
- * @api public
- */
-
-after.once = function(el, fn){
-  var callback = once(fn);
-  after(el, fn = function(){
-    emitter(el).unbind(fn);
-    callback();
-  });
-};
-
-});
-
-require.modules["yields-after-transition"] = require.modules["yields~after-transition@0.0.1"];
-require.modules["yields~after-transition"] = require.modules["yields~after-transition@0.0.1"];
-require.modules["after-transition"] = require.modules["yields~after-transition@0.0.1"];
-
-
-require.register("segmentio~on-escape@master", function (exports, module) {
-
-var bind = require('component~event@0.1.4').bind
-  , indexOf = require('component~indexof@0.0.1');
-
-
-/**
- * Expose `onEscape`.
- */
-
-module.exports = exports = onEscape;
-
-
-/**
- * Handlers.
- */
-
-var fns = [];
-
-
-/**
- * Escape binder.
- *
- * @param {Function} fn
- */
-
-function onEscape (fn) {
-  fns.push(fn);
-}
-
-
-/**
- * Bind a handler, for symmetry.
- */
-
-exports.bind = onEscape;
-
-
-/**
- * Unbind a handler.
- *
- * @param {Function} fn
- */
-
-exports.unbind = function (fn) {
-  var index = indexOf(fns, fn);
-  if (index !== -1) fns.splice(index, 1);
-};
-
-
-/**
- * Bind to `document` once.
- */
-
-bind(document, 'keydown', function (e) {
-  if (27 !== e.keyCode) return;
-  for (var i = 0, fn; fn = fns[i]; i++) fn(e);
-});
-});
-
-require.modules["segmentio-on-escape"] = require.modules["segmentio~on-escape@master"];
-require.modules["segmentio~on-escape"] = require.modules["segmentio~on-escape@master"];
-require.modules["on-escape"] = require.modules["segmentio~on-escape@master"];
-
-
-require.register("segmentio~showable@0.1.1", function (exports, module) {
-var after = require('yields~after-transition@0.0.1').once;
-var nextTick = require('timoxley~next-tick@0.0.2');
-
-/**
- * Hide the view
- */
-function hide(fn){
-  var self = this;
-
-  if(this.hidden == null) {
-    this.hidden = this.el.classList.contains('hidden');
-  }
-
-  if(this.hidden || this.animating) return;
-
-  this.hidden = true;
-  this.animating = true;
-
-  after(self.el, function(){
-    self.animating = false;
-    self.emit('hide');
-    if(fn) fn();
-  });
-
-  self.el.classList.add('hidden');
-  this.emit('hiding');
-  return this;
-}
-
-/**
- * Show the view. This waits until after any transitions
- * are finished. It also removed the hide class on the next
- * tick so that the transition actually paints.
- */
-function show(fn){
-  var self = this;
-
-  if(this.hidden == null) {
-    this.hidden = this.el.classList.contains('hidden');
-  }
-
-  if(this.hidden === false || this.animating) return;
-
-  this.hidden = false;
-  this.animating = true;
-
-  this.emit('showing');
-
-  after(self.el, function(){
-    self.animating = false;
-    self.emit('show');
-    if(fn) fn();
-  });
-
-  this.el.offsetHeight;
-
-  nextTick(function(){
-    self.el.classList.remove('hidden');
-  });
-
-  return this;
-}
-
-/**
- * Mixin methods into the view
- *
- * @param {Emitter} obj
- */
-module.exports = function(obj) {
-  obj.hide = hide;
-  obj.show = show;
-  return obj;
-};
-});
-
-require.modules["segmentio-showable"] = require.modules["segmentio~showable@0.1.1"];
-require.modules["segmentio~showable"] = require.modules["segmentio~showable@0.1.1"];
-require.modules["showable"] = require.modules["segmentio~showable@0.1.1"];
-
-
 require.register("component~domify@master", function (exports, module) {
 
 /**
@@ -19233,16 +18624,461 @@ require.modules["component~domify"] = require.modules["component~domify@master"]
 require.modules["domify"] = require.modules["component~domify@master"];
 
 
+require.register("timoxley~next-tick@0.0.2", function (exports, module) {
+"use strict"
+
+if (typeof setImmediate == 'function') {
+  module.exports = function(f){ setImmediate(f) }
+}
+// legacy node.js
+else if (typeof process != 'undefined' && typeof process.nextTick == 'function') {
+  module.exports = process.nextTick
+}
+// fallback for other environments / postMessage behaves badly on IE8
+else if (typeof window == 'undefined' || window.ActiveXObject || !window.postMessage) {
+  module.exports = function(f){ setTimeout(f) };
+} else {
+  var q = [];
+
+  window.addEventListener('message', function(){
+    var i = 0;
+    while (i < q.length) {
+      try { q[i++](); }
+      catch (e) {
+        q = q.slice(i);
+        window.postMessage('tic!', '*');
+        throw e;
+      }
+    }
+    q.length = 0;
+  }, true);
+
+  module.exports = function(fn){
+    if (!q.length) window.postMessage('tic!', '*');
+    q.push(fn);
+  }
+}
+
+});
+
+require.modules["timoxley-next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
+require.modules["timoxley~next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
+require.modules["next-tick"] = require.modules["timoxley~next-tick@0.0.2"];
+
+
+require.register("ecarter~css-emitter@0.0.1", function (exports, module) {
+/**
+ * Module Dependencies
+ */
+
+var events = require("component~event@0.1.4");
+
+// CSS events
+
+var watch = [
+  'transitionend'
+, 'webkitTransitionEnd'
+, 'oTransitionEnd'
+, 'MSTransitionEnd'
+, 'animationend'
+, 'webkitAnimationEnd'
+, 'oAnimationEnd'
+, 'MSAnimationEnd'
+];
+
+/**
+ * Expose `CSSnext`
+ */
+
+module.exports = CssEmitter;
+
+/**
+ * Initialize a new `CssEmitter`
+ *
+ */
+
+function CssEmitter(element){
+  if (!(this instanceof CssEmitter)) return new CssEmitter(element);
+  this.el = element;
+}
+
+/**
+ * Bind CSS events.
+ *
+ * @api public
+ */
+
+CssEmitter.prototype.bind = function(fn){
+  for (var i=0; i < watch.length; i++) {
+    events.bind(this.el, watch[i], fn);
+  }
+  return this;
+};
+
+/**
+ * Unbind CSS events
+ * 
+ * @api public
+ */
+
+CssEmitter.prototype.unbind = function(fn){
+  for (var i=0; i < watch.length; i++) {
+    events.unbind(this.el, watch[i], fn);
+  }
+  return this;
+};
+
+/**
+ * Fire callback only once
+ * 
+ * @api public
+ */
+
+CssEmitter.prototype.once = function(fn){
+  var self = this;
+  function on(){
+    self.unbind(on);
+    fn.apply(self.el, arguments);
+  }
+  self.bind(on);
+  return this;
+};
+
+
+});
+
+require.modules["ecarter-css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
+require.modules["ecarter~css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
+require.modules["css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
+
+
+require.register("component~once@0.0.1", function (exports, module) {
+
+/**
+ * Identifier.
+ */
+
+var n = 0;
+
+/**
+ * Global.
+ */
+
+var global = (function(){ return this })();
+
+/**
+ * Make `fn` callable only once.
+ *
+ * @param {Function} fn
+ * @return {Function}
+ * @api public
+ */
+
+module.exports = function(fn) {
+  var id = n++;
+
+  function once(){
+    // no receiver
+    if (this == global) {
+      if (once.called) return;
+      once.called = true;
+      return fn.apply(this, arguments);
+    }
+
+    // receiver
+    var key = '__called_' + id + '__';
+    if (this[key]) return;
+    this[key] = true;
+    return fn.apply(this, arguments);
+  }
+
+  return once;
+};
+
+});
+
+require.modules["component-once"] = require.modules["component~once@0.0.1"];
+require.modules["component~once"] = require.modules["component~once@0.0.1"];
+require.modules["once"] = require.modules["component~once@0.0.1"];
+
+
+require.register("yields~has-transitions@0.0.1", function (exports, module) {
+
+/**
+ * Check if `el` or browser supports transitions.
+ *
+ * @param {Element} el
+ * @return {Boolean}
+ * @api public
+ */
+
+exports = module.exports = function(el){
+  switch (arguments.length) {
+    case 0: return bool;
+    case 1: return bool
+      ? transitions(el)
+      : bool;
+  }
+};
+
+/**
+ * Check if the given `el` has transitions.
+ *
+ * @param {Element} el
+ * @return {Boolean}
+ * @api private
+ */
+
+function transitions(el, styl){
+  if (el.transition) return true;
+  styl = window.getComputedStyle(el);
+  return !! styl.transition;
+}
+
+/**
+ * Style.
+ */
+
+var styl = document.body.style;
+
+/**
+ * Export support.
+ */
+
+var bool = 'transition' in styl
+  || 'webkitTransition' in styl
+  || 'MozTransition' in styl
+  || 'msTransition' in styl;
+
+});
+
+require.modules["yields-has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
+require.modules["yields~has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
+require.modules["has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
+
+
+require.register("yields~after-transition@0.0.1", function (exports, module) {
+
+/**
+ * dependencies
+ */
+
+var has = require("yields~has-transitions@0.0.1")
+  , emitter = require("ecarter~css-emitter@0.0.1")
+  , once = require("component~once@0.0.1");
+
+/**
+ * Transition support.
+ */
+
+var supported = has();
+
+/**
+ * Export `after`
+ */
+
+module.exports = after;
+
+/**
+ * Invoke the given `fn` after transitions
+ *
+ * It will be invoked only if the browser
+ * supports transitions __and__
+ * the element has transitions
+ * set in `.style` or css.
+ *
+ * @param {Element} el
+ * @param {Function} fn
+ * @return {Function} fn
+ * @api public
+ */
+
+function after(el, fn){
+  if (!supported || !has(el)) return fn();
+  emitter(el).bind(fn);
+  return fn;
+};
+
+/**
+ * Same as `after()` only the function is invoked once.
+ *
+ * @param {Element} el
+ * @param {Function} fn
+ * @return {Function}
+ * @api public
+ */
+
+after.once = function(el, fn){
+  var callback = once(fn);
+  after(el, fn = function(){
+    emitter(el).unbind(fn);
+    callback();
+  });
+};
+
+});
+
+require.modules["yields-after-transition"] = require.modules["yields~after-transition@0.0.1"];
+require.modules["yields~after-transition"] = require.modules["yields~after-transition@0.0.1"];
+require.modules["after-transition"] = require.modules["yields~after-transition@0.0.1"];
+
+
+require.register("segmentio~on-escape@master", function (exports, module) {
+
+var bind = require("component~event@0.1.4").bind
+  , indexOf = require("component~indexof@0.0.1");
+
+
+/**
+ * Expose `onEscape`.
+ */
+
+module.exports = exports = onEscape;
+
+
+/**
+ * Handlers.
+ */
+
+var fns = [];
+
+
+/**
+ * Escape binder.
+ *
+ * @param {Function} fn
+ */
+
+function onEscape (fn) {
+  fns.push(fn);
+}
+
+
+/**
+ * Bind a handler, for symmetry.
+ */
+
+exports.bind = onEscape;
+
+
+/**
+ * Unbind a handler.
+ *
+ * @param {Function} fn
+ */
+
+exports.unbind = function (fn) {
+  var index = indexOf(fns, fn);
+  if (index !== -1) fns.splice(index, 1);
+};
+
+
+/**
+ * Bind to `document` once.
+ */
+
+bind(document, 'keydown', function (e) {
+  if (27 !== e.keyCode) return;
+  for (var i = 0, fn; fn = fns[i]; i++) fn(e);
+});
+});
+
+require.modules["segmentio-on-escape"] = require.modules["segmentio~on-escape@master"];
+require.modules["segmentio~on-escape"] = require.modules["segmentio~on-escape@master"];
+require.modules["on-escape"] = require.modules["segmentio~on-escape@master"];
+
+
+require.register("segmentio~showable@0.1.1", function (exports, module) {
+var after = require("yields~after-transition@0.0.1").once;
+var nextTick = require("timoxley~next-tick@0.0.2");
+
+/**
+ * Hide the view
+ */
+function hide(fn){
+  var self = this;
+
+  if(this.hidden == null) {
+    this.hidden = this.el.classList.contains('hidden');
+  }
+
+  if(this.hidden || this.animating) return;
+
+  this.hidden = true;
+  this.animating = true;
+
+  after(self.el, function(){
+    self.animating = false;
+    self.emit('hide');
+    if(fn) fn();
+  });
+
+  self.el.classList.add('hidden');
+  this.emit('hiding');
+  return this;
+}
+
+/**
+ * Show the view. This waits until after any transitions
+ * are finished. It also removed the hide class on the next
+ * tick so that the transition actually paints.
+ */
+function show(fn){
+  var self = this;
+
+  if(this.hidden == null) {
+    this.hidden = this.el.classList.contains('hidden');
+  }
+
+  if(this.hidden === false || this.animating) return;
+
+  this.hidden = false;
+  this.animating = true;
+
+  this.emit('showing');
+
+  after(self.el, function(){
+    self.animating = false;
+    self.emit('show');
+    if(fn) fn();
+  });
+
+  this.el.offsetHeight;
+
+  nextTick(function(){
+    self.el.classList.remove('hidden');
+  });
+
+  return this;
+}
+
+/**
+ * Mixin methods into the view
+ *
+ * @param {Emitter} obj
+ */
+module.exports = function(obj) {
+  obj.hide = hide;
+  obj.show = show;
+  return obj;
+};
+});
+
+require.modules["segmentio-showable"] = require.modules["segmentio~showable@0.1.1"];
+require.modules["segmentio~showable"] = require.modules["segmentio~showable@0.1.1"];
+require.modules["showable"] = require.modules["segmentio~showable@0.1.1"];
+
+
 require.register("jkroso~classes@1.1.0", function (exports, module) {
 
 module.exports = document.createElement('div').classList
-  ? require('jkroso~classes@1.1.0/modern.js')
-  : require('jkroso~classes@1.1.0/fallback.js')
+  ? require("jkroso~classes@1.1.0/modern.js")
+  : require("jkroso~classes@1.1.0/fallback.js")
 });
 
 require.register("jkroso~classes@1.1.0/fallback.js", function (exports, module) {
 
-var index = require('component~indexof@0.0.1')
+var index = require("component~indexof@0.0.1")
 
 exports.add = function(name, el){
 	var arr = exports.array(el)
@@ -19380,7 +19216,7 @@ require.modules["classes"] = require.modules["jkroso~classes@1.1.0"];
 
 require.register("ianstormtaylor~classes@0.1.0", function (exports, module) {
 
-var classes = require('jkroso~classes@1.1.0');
+var classes = require("jkroso~classes@1.1.0");
 
 
 /**
@@ -19461,11 +19297,11 @@ require.modules["classes"] = require.modules["ianstormtaylor~classes@0.1.0"];
 
 
 require.register("optimuslime~overlay@master", function (exports, module) {
-var template = require('optimuslime~overlay@master/lib/index.html');
-var domify = require('component~domify@master');
-var emitter = require('component~emitter@master');
-var showable = require('segmentio~showable@0.1.1');
-var classes = require('ianstormtaylor~classes@0.1.0');
+var template = require("optimuslime~overlay@master/lib/index.html");
+var domify = require("component~domify@master");
+var emitter = require("component~emitter@master");
+var showable = require("segmentio~showable@0.1.1");
+var classes = require("ianstormtaylor~classes@0.1.0");
 
 /**
  * Export `Overlay`
@@ -19528,13 +19364,13 @@ require.modules["overlay"] = require.modules["optimuslime~overlay@master"];
 
 
 require.register("optimuslime~modal@master", function (exports, module) {
-var domify = require('component~domify@master');
-var Emitter = require('component~emitter@master');
-var overlay = require('optimuslime~overlay@master');
-var onEscape = require('segmentio~on-escape@master');
-var template = require('optimuslime~modal@master/lib/index.html');
-var Showable = require('segmentio~showable@0.1.1');
-var Classes = require('ianstormtaylor~classes@0.1.0');
+var domify = require("component~domify@master");
+var Emitter = require("component~emitter@master");
+var overlay = require("optimuslime~overlay@master");
+var onEscape = require("segmentio~on-escape@master");
+var template = require("optimuslime~modal@master/lib/index.html");
+var Showable = require("segmentio~showable@0.1.1");
+var Classes = require("ianstormtaylor~classes@0.1.0");
 
 /**
  * Expose `Modal`.
@@ -19663,6 +19499,356 @@ require.modules["optimuslime~modal"] = require.modules["optimuslime~modal@master
 require.modules["modal"] = require.modules["optimuslime~modal@master"];
 
 
+require.register("./libs/initialization/win-setup", function (exports, module) {
+//here we test the insert functions
+//making sure the database is filled with objects of the schema type
+// var wMath = require('win-utils').math;
+
+module.exports = winsetup;
+
+function winsetup(requiredEvents, moduleJSON, moduleConfigs, finished)
+{ 
+    var winback = require("optimuslime~win-backbone@0.0.4-5");
+
+    var Q = require("techjacker~q@master");
+
+    var backbone, generator, backEmit, backLog;
+
+    var emptyModule = 
+    {
+        winFunction : "experiment",
+        eventCallbacks : function(){ return {}; },
+        requiredEvents : function() {
+            return requiredEvents;
+        }
+    };
+
+    //add our own empty module onto this object
+    moduleJSON["setupExperiment"] = emptyModule;
+    
+    var qBackboneResponse = function()
+    {
+        var defer = Q.defer();
+        // self.log('qBBRes: Original: ', arguments);
+
+        //first add our own function type
+        var augmentArgs = arguments;
+        // [].splice.call(augmentArgs, 0, 0, self.winFunction);
+        //make some assumptions about the returning call
+        var callback = function(err)
+        {
+            if(err)
+            {
+              backLog("QCall fail: ", err);
+                defer.reject(err);
+            }
+            else
+            {
+                //remove the error object, send the info onwards
+                [].shift.call(arguments);
+                if(arguments.length > 1)
+                    defer.resolve(arguments);
+                else
+                    defer.resolve.apply(defer, arguments);
+            }
+        };
+
+        //then we add our callback to the end of our function -- which will get resolved here with whatever arguments are passed back
+        [].push.call(augmentArgs, callback);
+
+        // self.log('qBBRes: Augmented: ', augmentArgs);
+        //make the call, we'll catch it inside the callback!
+        backEmit.apply(backEmit, augmentArgs);
+
+        return defer.promise;
+    }
+
+    //do this up front yo
+    backbone = new winback();
+
+    backbone.logLevel = backbone.testing;
+
+    backEmit = backbone.getEmitter(emptyModule);
+    backLog = backbone.getLogger({winFunction:"experiment"});
+    backLog.logLevel = backbone.testing;
+
+    //loading modules is synchronous
+    backbone.loadModules(moduleJSON, moduleConfigs);
+
+    var registeredEvents = backbone.registeredEvents();
+    var requiredEvents = backbone.moduleRequirements();
+      
+    backLog('Backbone Events registered: ', registeredEvents);
+    backLog('Required: ', requiredEvents);
+
+    backbone.initializeModules(function(err)
+    {
+      backLog("Finished Module Init");
+      finished(err, {logger: backLog, emitter: backEmit, backbone: backbone, qCall: qBackboneResponse});
+    });
+}
+});
+
+require.modules["win-setup"] = require.modules["./libs/initialization/win-setup"];
+
+
+require.register("./libs/encoding/cppn-additions", function (exports, module) {
+//here we test the insert functions
+//making sure the database is filled with objects of the schema type
+// var wMath = require('win-utils').math;
+
+module.exports = cppnAdditions;
+
+var cppnjs = require("optimuslime~cppnjs@master");
+
+function cppnAdditions()
+{ 
+   var self = this;
+
+
+   self.winFunction = "cppnAdditions";
+   
+   self.requiredEvents = function(){return [];};
+   self.eventCallbacks = function(){return {};};
+
+   self.initialize = function(done)
+   {
+        //we do our damage here!
+         self.addCPPNFunctionsToLibrary();
+         done();
+   };
+
+   //these are the names of our cppn objects
+   var pbActivationFunctions = {sigmoid: 'PBBipolarSigmoid', gaussian: 'PBGaussian', sine: 'Sine', cos: "PBCos", identity: 'pbLinear'};
+
+    //in order to use certain activation functions
+    self.addCPPNFunctionsToLibrary = function()
+    {
+        var actFunctions = cppnjs.cppnActivationFunctions;
+        var actFactory = cppnjs.cppnActivationFactory;
+
+         actFunctions[pbActivationFunctions.sigmoid] = function(){
+                return new actFunctions.ActivationFunction({
+                    functionID: pbActivationFunctions.sigmoid ,
+                    functionString: "2.0/(1.0+(exp(-inputSignal))) - 1.0",
+                    functionDescription: "Plain sigmoid [xrange -5.0,5.0][yrange, 0.0,1.0]",
+                    functionCalculate: function(inputSignal)
+                    {
+                        return 2.0/(1.0+(Math.exp(-inputSignal))) - 1.0;
+                    },
+                    functionEnclose: function(stringToEnclose)
+                    {
+                        return "(2.0/(1.0+(Math.exp(-1.0*" + stringToEnclose + "))) - 1.0)";
+                    }
+                });
+            };
+
+        actFunctions[pbActivationFunctions.gaussian] = function(){
+            return new actFunctions.ActivationFunction({
+                    functionID: pbActivationFunctions.gaussian,
+                    functionString: "2*e^(-(input)^2) - 1",
+                    functionDescription:"bimodal gaussian",
+                    functionCalculate :function(inputSignal)
+                    {
+                        return 2 * Math.exp(-Math.pow(inputSignal, 2)) - 1;
+                    },
+                    functionEnclose: function(stringToEnclose)
+                    {
+                        return "(2.0 * Math.exp(-Math.pow(" + stringToEnclose + ", 2.0)) - 1.0)";
+                    }
+                });
+            };
+
+        actFunctions[pbActivationFunctions.identity] = function(){
+            return new actFunctions.ActivationFunction({
+                functionID: pbActivationFunctions.identity,
+                functionString: "x",
+                functionDescription:"Linear",
+                functionCalculate: function(inputSignal)
+                {
+                    return inputSignal;
+                },
+                functionEnclose: function(stringToEnclose)
+                {
+                    return "(" + stringToEnclose + ")";
+                }
+            });
+        };
+
+        actFunctions[pbActivationFunctions.cos] = function(){
+           return new actFunctions.ActivationFunction({
+                functionID: pbActivationFunctions.cos,
+                functionString: "Cos(inputSignal)",
+                functionDescription: "Cos function with normal period",
+                functionCalculate: function(inputSignal)
+                {
+                    return Math.cos(inputSignal);
+                },
+                functionEnclose: function(stringToEnclose)
+                {
+                    return "(Math.cos(" + stringToEnclose + "))";
+                }
+            });
+        };
+
+        //makes these the only activation functions being generated by picbreeder genotypes
+        var probs = {};
+        probs[pbActivationFunctions.sigmoid] = .22;
+        probs[pbActivationFunctions.gaussian] = .22;
+        probs[pbActivationFunctions.sine] = .22;
+        probs[pbActivationFunctions.cos] = .22;
+        probs[pbActivationFunctions.identity] = .12;
+        actFactory.setProbabilities(probs);
+    };
+
+
+
+    return self;
+}
+});
+
+require.modules["cppn-additions"] = require.modules["./libs/encoding/cppn-additions"];
+
+
+require.register("./libs/encoding/pbEncoding", function (exports, module) {
+//here we test the insert functions
+//making sure the database is filled with objects of the schema type
+// var wMath = require('win-utils').math;
+
+var picbreederSchema = require("./libs/encoding/pbEncoding/picbreederSchema.js");
+
+module.exports = pbEncoding;
+
+function pbEncoding(backbone, globalConfig, localConfig)
+{
+	var self = this;
+
+	//boom, let's get right into the business of encoding
+	self.winFunction = "encoding";
+
+    //for convenience, this is our artifact type
+	self.encodingName = "picArtifact";
+
+	self.log = backbone.getLogger(self);
+	//only vital stuff goes out for normal logs
+	self.log.logLevel = localConfig.logLevel || self.log.normal;
+
+	self.eventCallbacks = function()
+	{ 
+		return {
+			// //easy to handle neat geno full offspring
+			// "encoding:iesor-createNonReferenceOffspring" : function(genProps, parentProps, sessionObject, done) { 
+				
+   //              //session might be undefined -- depending on win-gen behavior
+   //              //make sure session exists
+   //              sessionObject = sessionObject || {};
+
+			// 	//need to engage parent creation here -- could be complicated
+			// 	var parents = parentProps.parents;
+
+   //              //how many to make
+			// 	var count = genProps.count;
+
+   //              //these will be the final objects to return
+			// 	var allParents = [];
+			// 	var children = [];
+
+			// 	//pull potential forced parents
+			// 	var forced = sessionObject.forceParents;
+
+   //              //go through all the children -- using parents or force parents to create the new offspring
+   //              for(var c=0; c < count; c++)
+   //              {
+   //                  //we simply randomly pull environment from a parent
+   //                  var randomParentIx = wMath.next(parents.length);
+
+   //                  //if we have parents that are forced upon us
+   //                  if(forced){
+   //                      //pull random ix
+   //                      var rIx = wMath.next(forced[c].length);
+   //                      //use random index of forced parent as the actual ix
+   //                      randomParentIx = forced[c][rIx];
+   //                  }
+
+   //                  //our child together!
+   //                  var rOffspring = {};
+
+   //                  //all we need to do (for the current schema)
+   //                  //is to copy the environment
+   //                  rOffspring.meta = JSON.parse(JSON.stringify(parents[randomParentIx].meta));
+
+   //                  //just return our simple object with a randomly chosen environment
+   //                  children.push(rOffspring);
+
+   //                  //random parent was involved, make sure to mark who!
+   //                  allParents.push([randomParentIx]);
+   //              }
+
+			// 	//done, send er back
+			// 	done(undefined, children, allParents);
+
+			//  	return; 
+			//  }
+		};
+	};
+
+	//need to be able to add our schema
+	self.requiredEvents = function() {
+		return [
+			"schema:addSchema"
+		];
+	};
+
+	self.initialize = function(done)
+    {
+    	self.log("Init win-iesor encoding: ", picbreederSchema);
+
+		//how we talk to the backbone by emitting events
+    	var emitter = backbone.getEmitter(self);
+
+		//add our neat genotype schema -- loaded neatschema from another file -- 
+		//this is just the standard neat schema type -- others can make neatjs changes that require a different schema
+        emitter.emit("schema:addSchema", self.encodingName, picbreederSchema, function(err)
+        {
+        	if(err){
+        		done(new Error(err));
+        		return;
+        	}
+        	done();
+        });
+    }
+
+
+	return self;
+}
+});
+
+require.register("./libs/encoding/pbEncoding/picbreederSchema.js", function (exports, module) {
+//contains the neat schema setup -- default for neatjs stuff.
+
+//Need a way to override schema inside WIN -- for now, neat comes with its own schema. Will be able to add variations later
+//(for things looking to add extra neat features while still having all the custom code). 
+
+//Alternatively, they could just copy this module, and add their own stuff. Module is small. 
+ 
+module.exports = {
+    "genome": { 
+        "$ref" : "NEATGenotype"
+    }
+    //some meta info about this object being stored
+    ,"meta": {
+        "imageTitle": "string",
+        "imageTags": {type: "array", items: {type: "string"}}
+    }
+};
+
+
+
+});
+
+require.modules["pbEncoding"] = require.modules["./libs/encoding/pbEncoding"];
+
+
 require.register("./libs/evolution/win-neat/lib/neatSchema.js", function (exports, module) {
 //contains the neat schema setup -- default for neatjs stuff.
 
@@ -19699,14 +19885,14 @@ module.exports = {
 require.register("./libs/evolution/win-neat", function (exports, module) {
 //here we test the insert functions
 //making sure the database is filled with objects of the schema type
-var neat = require('optimuslime~neatjs@master');
-var neatSchema = require('./libs/evolution/win-neat/lib/neatSchema.js');
+var neat = require("optimuslime~neatjs@master");
+var neatSchema = require("./libs/evolution/win-neat/lib/neatSchema.js");
 var NodeType = neat.NodeType;
 var neatNode = neat.neatNode;
 var neatConnection = neat.neatConnection;
 var neatGenome = neat.neatGenome;
 
-var wMath = require('optimuslime~win-utils@master').math;
+var wMath = require("optimuslime~win-utils@master").math;
 
 module.exports = winneat;
 
@@ -20198,7 +20384,7 @@ require.modules["win-neat"] = require.modules["./libs/evolution/win-neat"];
 
 require.register("./libs/evolution/win-iec", function (exports, module) {
 //generating session info
-var uuid = require('optimuslime~win-utils@master').cuid;
+var uuid = require("optimuslime~win-utils@master").cuid;
 
 module.exports = winiec;
 
@@ -20685,8 +20871,8 @@ require.modules["win-iec"] = require.modules["./libs/evolution/win-iec"];
 
 require.register("./libs/ui/home/win-home-ui", function (exports, module) {
 
-var emitter = require('component~emitter@master');
-var element = require('optimuslime~el.js@master');
+var emitter = require("component~emitter@master");
+var element = require("optimuslime~el.js@master");
 // var dimensions = require('dimensions');
 
 module.exports = winhome; 
@@ -20935,7 +21121,7 @@ require.modules["win-home-ui"] = require.modules["./libs/ui/home/win-home-ui"];
 
 require.register("./libs/ui/iec/flexstatic", function (exports, module) {
 
-var Emitter = require('component~emitter@master');
+var Emitter = require("component~emitter@master");
 // var dimensions = require('dimensions');
 
 module.exports = flexstatic; 
@@ -21202,8 +21388,8 @@ require.modules["flexstatic"] = require.modules["./libs/ui/iec/flexstatic"];
 
 require.register("./libs/ui/iec/flexparents", function (exports, module) {
 
-var Emitter = require('component~emitter@master');
-var resize = require('ramitos~resize@master');
+var Emitter = require("component~emitter@master");
+var resize = require("ramitos~resize@master");
 // var dimensions = require('dimensions');
 
 module.exports = parentList; 
@@ -21420,11 +21606,11 @@ require.modules["flexparents"] = require.modules["./libs/ui/iec/flexparents"];
 
 require.register("./libs/ui/iec/publishui", function (exports, module) {
 
-var modal = require('optimuslime~modal@master');
-var emitter = require('component~emitter@master');
-var element = require('optimuslime~el.js@master');
-var pillbox = require('component~pillbox@master');
-var classes = require('component~classes@master');
+var modal = require("optimuslime~modal@master");
+var emitter = require("component~emitter@master");
+var element = require("optimuslime~el.js@master");
+var pillbox = require("component~pillbox@master");
+var classes = require("component~classes@master");
 
       
 module.exports = function(options)
@@ -21590,18 +21776,18 @@ require.modules["publishui"] = require.modules["./libs/ui/iec/publishui"];
 
 require.register("./libs/ui/iec/flexiec", function (exports, module) {
 
-var Emitter = require('component~emitter@master');
-var resize = require('ramitos~resize@master');
-var classes = require('component~classes@master');
-var events = require('component~events@master');
+var Emitter = require("component~emitter@master");
+var resize = require("ramitos~resize@master");
+var classes = require("component~classes@master");
+var events = require("component~events@master");
 
-var publish = require('./libs/ui/iec/publishui');
+var publish = require("./libs/ui/iec/publishui");
 
 //
-var element = require('optimuslime~el.js@master');
+var element = require("optimuslime~el.js@master");
 
-var flexstatic = require('./libs/ui/iec/flexstatic');
-var flexparents = require('./libs/ui/iec/flexparents');
+var flexstatic = require("./libs/ui/iec/flexstatic");
+var flexparents = require("./libs/ui/iec/flexparents");
 // var dimensions = require('dimensions');
 
 module.exports = flexIEC; 
@@ -21963,10 +22149,10 @@ require.modules["flexiec"] = require.modules["./libs/ui/iec/flexiec"];
 
 
 require.register("./libs/ui/iec/win-flexIEC", function (exports, module) {
-var flexIEC = require('./libs/ui/iec/flexiec');
-var winIEC = require('./libs/evolution/win-iec');
+var flexIEC = require("./libs/ui/iec/flexiec");
+var winIEC = require("./libs/evolution/win-iec");
 
-var emitter = require('component~emitter@master');
+var emitter = require("component~emitter@master");
 
 //we need to combine the two! Also, we're a win module -- so shape up!
 module.exports = winflex;
@@ -22200,7 +22386,7 @@ require.modules["win-flexIEC"] = require.modules["./libs/ui/iec/win-flexIEC"];
 
 require.register("./libs/webworkers/webworker-queue", function (exports, module) {
 
-var WebWorkerClass = require('component~worker@master');
+var WebWorkerClass = require("component~worker@master");
 
 module.exports = webworkerqueue;
 
@@ -22354,941 +22540,8 @@ function webworkerqueue(scriptName, workerCount)
 require.modules["webworker-queue"] = require.modules["./libs/webworkers/webworker-queue"];
 
 
-require.register("./libs/encoding/geno-to-picture", function (exports, module) {
-//here we test the insert functions
-//making sure the database is filled with objects of the schema type
-// var wMath = require('win-utils').math;
-
-module.exports = genoToPicture;
-
-var cppnjs = require('optimuslime~cppnjs@master');
-//need to add the pure cppn functions -- for enclosure stuff
-cppnjs.addPureCPPN();
-
-var neatjs = require('optimuslime~neatjs@master');
-var winneat = require('./libs/evolution/win-neat');
-
-var generateBitmap = require('./libs/encoding/geno-to-picture/generateBitmap.js');
-
-function genoToPicture(size, ngJSON)
-{ 
-    var ngObject = winneat.genotypeFromJSON(ngJSON);
-
-    //then we are going to do this crazy thing where we grab the function representing the genome
-    //then we run the function a bunch of times looping over our image, compiling the data
-    //that data is then turned into a string which is sent to the dataurl object of a picture
-
-    return createImageFromGenome(size, ngObject);
-}
-
-function createImageFromGenome(size, ng)
-{
-    var cppn = ng.networkDecode();
-
-    // console.log('Decoded now recrusive processing!');
-    // console.log(ng);
-
-    var dt = Date.now();
-
-    console.log(cppn);
-
-    var functionObject = cppn.createPureCPPNFunctions();
-    console.log("Pure cppn: ", functionObject);
-    var activationFunction= functionObject.contained;
-
-
-    var inSqrt2 = Math.sqrt(2);
-
-    var allX = size.width, allY = size.height;
-    var width = size.width, height= size.height;
-
-    var startX = -1, startY = -1;
-    var dx = 2.0/(allX-1), dy = 2.0/(allY-1);
-
-    var currentX = startX, currentY = startY;
-
-    var newRow;
-    var rows = [];
-
-    var clampZeroOne = function(val)
-    {
-        return Math.max(0.0, Math.min(val,1.0));
-    };
-    // 0 to 1
-    var zeroToOne = function(val) {
-        return (val+1)/2;//Math.floor(Math.max(0, Math.min(255, (val + 1)/2*255)));
-    };
-
-    var inRange = function(val) {
-        if(val < 0) return (val+1);
-
-        return val;//Math.floor(Math.max(0, Math.min(255, (val + 1)/2*255)));
-    };
-
-
-    var oCount = 0;
-    var inputs = [];
-
-    //we go by the rows
-    for(var y=allY-1; y >=0; y--){
-
-        //init and push new row
-        var newRow = [];
-        rows.push(newRow);
-        for(var x=0; x < allX; x++){
-
-            //just like in picbreeder!
-            var currentX = ((x << 1) - width + 1) / width;
-            var currentY = ((y << 1) - height + 1) / height;
-
-
-            var output0, output1, output2;
-            var rgb;
-
-            inputs = [currentX, currentY, Math.sqrt(currentX*currentX + currentY*currentY)*inSqrt2];
-
-            var newActivation = true;
-            var outputs;
-
-            outputs = activationFunction(inputs);
-
-            if(outputs.length ==1 || ng.phenotype == 'structure')
-            {
-                var singleOutput = ng.phenotype == 'structure' ? outputs[2] : outputs[0];
-                var byte = Math.floor(Math.min(Math.abs(singleOutput), 1.0)*255.0);
-                //var byte = Math.floor(Math.max(0.0, Math.min(1.0, output0))*255.0);
-
-                rgb= [byte,byte,byte];//generateBitmap.HSVtoRGB(zeroToOne(output0), zeroToOne(output0), zeroToOne(output0));
-
-            }
-            else
-            {
-                rgb = generateBitmap.FloatToByte(generateBitmap.PicHSBtoRGB(outputs[0], clampZeroOne(outputs[1]), Math.abs(outputs[2])));
-            }
-
-            newRow.push(rgb);
-
-        }
-
-    }
-
-
-    //let's get our bitmap from rbg results!
-    var imgSrc = generateBitmap.generateBitmapDataURL(rows);
-
-    console.log("Gen time: ", (Date.now() - dt));
-
-    return imgSrc;
-}
-});
-
-require.register("./libs/encoding/geno-to-picture/generateBitmap.js", function (exports, module) {
-
-var base64 = require('./libs/encoding/geno-to-picture/base64.js');
-
-var generateBitmap = {};
-module.exports = generateBitmap;
-
-/*
-* Code to generate Bitmap images (using data urls) from rows of RGB arrays.
-* Specifically for use with http://mrcoles.com/low-rest-paint/
-*
-* Research:
-*
-* RFC 2397 data URL
-* http://www.xs4all.nl/~wrb/Articles/Article_IMG_RFC2397_P1_01.htm
-*
-* BMP file Format
-* http://en.wikipedia.org/wiki/BMP_file_format#Example_of_a_2.C3.972_Pixel.2C_24-Bit_Bitmap_.28Windows_V3_DIB.29
-*
-* BMP Notes
-*
-* - Integer values are little-endian, including RGB pixels, e.g., (255, 0, 0) -> \x00\x00\xFF
-* - Bitmap data starts at lower left (and reads across rows)
-* - In the BMP data, padding bytes are inserted in order to keep the lines of data in multiples of four,
-*   e.g., a 24-bit bitmap with width 1 would have 3 bytes of data per row (R, G, B) + 1 byte of padding
-*/
-
-function _asLittleEndianHex(value, bytes) {
-    // Convert value into little endian hex bytes
-    // value - the number as a decimal integer (representing bytes)
-    // bytes - the number of bytes that this value takes up in a string
-
-    // Example:
-    // _asLittleEndianHex(2835, 4)
-    // > '\x13\x0b\x00\x00'
-
-    var result = [];
-
-    for (; bytes>0; bytes--) {
-        result.push(String.fromCharCode(value & 255));
-        value >>= 8;
-    }
-
-    return result.join('');
-}
-
-function _collapseData(rows, row_padding) {
-    // Convert rows of RGB arrays into BMP data
-    var i,
-        rows_len = rows.length,
-        j,
-        pixels_len = rows_len ? rows[0].length : 0,
-        pixel,
-        padding = '',
-        result = [];
-
-    for (; row_padding > 0; row_padding--) {
-        padding += '\x00';
-    }
-
-    for (i=0; i<rows_len; i++) {
-        for (j=0; j<pixels_len; j++) {
-            pixel = rows[i][j];
-            result.push(String.fromCharCode(pixel[2]) +
-                String.fromCharCode(pixel[1]) +
-                String.fromCharCode(pixel[0]));
-        }
-        result.push(padding);
-    }
-
-    return result.join('');
-}
-
-function _scaleRows(rows, scale) {
-    // Simplest scaling possible
-    var real_w = rows.length,
-        scaled_w = parseInt(real_w * scale),
-        real_h = real_w ? rows[0].length : 0,
-        scaled_h = parseInt(real_h * scale),
-        new_rows = [],
-        new_row, x, y;
-
-    for (y=0; y<scaled_h; y++) {
-        new_rows.push(new_row = []);
-        for (x=0; x<scaled_w; x++) {
-            new_row.push(rows[parseInt(y/scale)][parseInt(x/scale)]);
-        }
-    }
-    return new_rows;
-}
-
-//generate bitmaps from rows of rgb values
-//from: http://mrcoles.com/low-res-paint/
-//and: http://mrcoles.com/blog/making-images-byte-by-byte-javascript/
-generateBitmap.generateBitmapDataURL = function(rows, scale) {
-    // Expects rows starting in bottom left
-    // formatted like this: [[[255, 0, 0], [255, 255, 0], ...], ...]
-    // which represents: [[red, yellow, ...], ...]
-
-    if (!base64) {
-        alert('Oops, base64 encode fail!!');
-        return false;
-    }
-
-    scale = scale || 1;
-    if (scale != 1) {
-        rows = _scaleRows(rows, scale);
-    }
-
-    var height = rows.length,                                // the number of rows
-        width = height ? rows[0].length : 0,                 // the number of columns per row
-        row_padding = (4 - (width * 3) % 4) % 4,             // pad each row to a multiple of 4 bytes
-        num_data_bytes = (width * 3 + row_padding) * height, // size in bytes of BMP data
-        num_file_bytes = 54 + num_data_bytes,                // full header size (offset) + size of data
-        file;
-
-    height = _asLittleEndianHex(height, 4);
-    width = _asLittleEndianHex(width, 4);
-    num_data_bytes = _asLittleEndianHex(num_data_bytes, 4);
-    num_file_bytes = _asLittleEndianHex(num_file_bytes, 4);
-
-    // these are the actual bytes of the file...
-
-    file = ('BM' +               // "Magic Number"
-        num_file_bytes +     // size of the file (bytes)*
-        '\x00\x00' +         // reserved
-        '\x00\x00' +         // reserved
-        '\x36\x00\x00\x00' + // offset of where BMP data lives (54 bytes)
-        '\x28\x00\x00\x00' + // number of remaining bytes in header from here (40 bytes)
-        width +              // the width of the bitmap in pixels*
-        height +             // the height of the bitmap in pixels*
-        '\x01\x00' +         // the number of color planes (1)
-        '\x18\x00' +         // 24 bits / pixel
-        '\x00\x00\x00\x00' + // No compression (0)
-        num_data_bytes +     // size of the BMP data (bytes)*
-        '\x13\x0B\x00\x00' + // 2835 pixels/meter - horizontal resolution
-        '\x13\x0B\x00\x00' + // 2835 pixels/meter - the vertical resolution
-        '\x00\x00\x00\x00' + // Number of colors in the palette (keep 0 for 24-bit)
-        '\x00\x00\x00\x00' + // 0 important colors (means all colors are important)
-        _collapseData(rows, row_padding)
-        );
-
-    return 'data:image/bmp;base64,' + base64.encode(file);
-};
-
-
-generateBitmap.CMYKtoRGB = function (c,m,y,k)
-{
-    var r = 1 - Math.min( 1, c * ( 1 - k ) + k );
-    var g = 1 - Math.min( 1, m * ( 1 - k ) + k );
-    var b = 1 - Math.min( 1, y * ( 1 - k ) + k );
-
-    r = Math.round( r * 255 );
-    g = Math.round( g * 255 );
-    b = Math.round( b * 255 );
-
-    return [r,g,b];
-};
-
-generateBitmap.HSVtoRGB = function(h,s,v) {
-    //javascript from: http://jsres.blogspot.com/2008/01/convert-hsv-to-rgb-equivalent.html
-    // Adapted from http://www.easyrgb.com/math.html
-    // hsv values = 0 - 1, rgb values = 0 - 255
-    var r, g, b;
-    var RGB = [];
-    if(s==0){
-        var equalRGB = Math.round(v*255);
-        RGB.push(equalRGB); RGB.push(equalRGB); RGB.push(equalRGB);
-    }else{
-
-        var var_r, var_g, var_b;
-        // h must be < 1
-        var var_h = h * 6;
-        if (var_h==6) var_h = 0;
-        //Or ... var_i = floor( var_h )
-        var var_i = Math.floor( var_h );
-        var var_1 = v*(1-s);
-        var var_2 = v*(1-s*(var_h-var_i));
-        var var_3 = v*(1-s*(1-(var_h-var_i)));
-        if(var_i==0){
-            var_r = v;
-            var_g = var_3;
-            var_b = var_1;
-        }else if(var_i==1){
-            var_r = var_2;
-            var_g = v;
-            var_b = var_1;
-        }else if(var_i==2){
-            var_r = var_1;
-            var_g = v;
-            var_b = var_3
-        }else if(var_i==3){
-            var_r = var_1;
-            var_g = var_2;
-            var_b = v;
-        }else if (var_i==4){
-            var_r = var_3;
-            var_g = var_1;
-            var_b = v;
-        }else{
-            var_r = v;
-            var_g = var_1;
-            var_b = var_2
-        }
-        //rgb results = 0 ÷ 255
-        RGB.push(Math.round(var_r * 255));
-        RGB.push(Math.round(var_g * 255));
-        RGB.push(Math.round(var_b * 255));
-    }
-    return RGB;
-};
-
-var count = 0;
-
-generateBitmap.FloatToByte = function(arr)
-{
-    var conv = [];
-
-    arr.forEach(function(col)
-    {
-        conv.push(Math.floor(col*255.0));
-    });
-
-    return conv;
-};
-
-generateBitmap.PicHSBtoRGB = function(h,s,v)
-{
-
-    h = (h*6.0)%6.0;//Math.min(6.0, (h * 6.0));
-
-//        if(++count % 2000 === 0)
-//            console.log(h + ' and mod: ' + (h%6.0));
-
-    var r = 0.0, g = 0.0, b = 0.0;
-
-    if(h < 0.0) h += 6.0;
-    var hi = Math.floor(h);
-    var f = h - hi;
-
-    var vs = v * s;
-    var vsf = vs * f;
-
-    var p = v - vs;
-    var q = v - vsf;
-    var t = v - vs + vsf;
-
-    switch(hi) {
-        case 0: r = v; g = t; b = p; break;
-        case 1: r = q; g = v; b = p; break;
-        case 2: r = p; g = v; b = t; break;
-        case 3: r = p; g = q; b = v; break;
-        case 4: r = t; g = p; b = v; break;
-        case 5: r = v; g = p; b = q; break;
-    }
-
-
-
-    return [r,g,b];
-};
-});
-
-require.register("./libs/encoding/geno-to-picture/base64.js", function (exports, module) {
-
-var base64 = {};
-
-//send out our base64 object!
-module.exports = base64;
-
-//from:
-//https://code.google.com/p/stringencoders/source/browse/trunk/javascript/base64.js?r=230
-
-/*
- * Copyright (c) 2010 Nick Galbreath
- * http://code.google.com/p/stringencoders/source/browse/#svn/trunk/javascript
- *
- * Permission is hereby granted, free of charge, to any person
- * obtaining a copy of this software and associated documentation
- * files (the "Software"), to deal in the Software without
- * restriction, including without limitation the rights to use,
- * copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following
- * conditions:
- *
- * The above copyright notice and this permission notice shall be
- * included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
- * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
- * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
- * OTHER DEALINGS IN THE SOFTWARE.
- */
-
-/* base64 encode/decode compatible with window.btoa/atob
- *
- * window.atob/btoa is a Firefox extension to convert binary data (the "b")
- * to base64 (ascii, the "a").
- *
- * It is also found in Safari and Chrome.  It is not available in IE.
- *
- * if (!window.btoa) window.btoa = base64.encode
- * if (!window.atob) window.atob = base64.decode
- *
- * The original spec's for atob/btoa are a bit lacking
- * https://developer.mozilla.org/en/DOM/window.atob
- * https://developer.mozilla.org/en/DOM/window.btoa
- *
- * window.btoa and base64.encode takes a string where charCodeAt is [0,255]
- * If any character is not [0,255], then an DOMException(5) is thrown.
- *
- * window.atob and base64.decode take a base64-encoded string
- * If the input length is not a multiple of 4, or contains invalid characters
- *   then an DOMException(5) is thrown.
- */
-
-base64.PADCHAR = '=';
-base64.ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-
-base64.makeDOMException = function() {
-    // sadly in FF,Safari,Chrome you can't make a DOMException
-    var e, tmp;
-
-    try {
-        return new DOMException(DOMException.INVALID_CHARACTER_ERR);
-    } catch (tmp) {
-        // not available, just passback a duck-typed equiv
-        // https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Global_Objects/Error
-        // https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Global_Objects/Error/prototype
-        var ex = new Error("DOM Exception 5");
-
-        // ex.number and ex.description is IE-specific.
-        ex.code = ex.number = 5;
-        ex.name = ex.description = "INVALID_CHARACTER_ERR";
-
-        // Safari/Chrome output format
-        ex.toString = function() { return 'Error: ' + ex.name + ': ' + ex.message; };
-        return ex;
-    }
-};
-
-base64.getbyte64 = function(s,i) {
-    // This is oddly fast, except on Chrome/V8.
-    //  Minimal or no improvement in performance by using a
-    //   object with properties mapping chars to value (eg. 'A': 0)
-    var idx = base64.ALPHA.indexOf(s.charAt(i));
-    if (idx === -1) {
-        throw base64.makeDOMException();
-    }
-    return idx;
-};
-
-base64.decode = function(s) {
-    // convert to string
-    s = '' + s;
-    var getbyte64 = base64.getbyte64;
-    var pads, i, b10;
-    var imax = s.length;
-    if (imax === 0) {
-        return s;
-    }
-
-    if (imax % 4 !== 0) {
-        throw base64.makeDOMException();
-    }
-
-    pads = 0
-    if (s.charAt(imax - 1) === base64.PADCHAR) {
-        pads = 1;
-        if (s.charAt(imax - 2) === base64.PADCHAR) {
-            pads = 2;
-        }
-        // either way, we want to ignore this last block
-        imax -= 4;
-    }
-
-    var x = [];
-    for (i = 0; i < imax; i += 4) {
-        b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12) |
-            (getbyte64(s,i+2) << 6) | getbyte64(s,i+3);
-        x.push(String.fromCharCode(b10 >> 16, (b10 >> 8) & 0xff, b10 & 0xff));
-    }
-
-    switch (pads) {
-        case 1:
-            b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12) | (getbyte64(s,i+2) << 6);
-            x.push(String.fromCharCode(b10 >> 16, (b10 >> 8) & 0xff));
-            break;
-        case 2:
-            b10 = (getbyte64(s,i) << 18) | (getbyte64(s,i+1) << 12);
-            x.push(String.fromCharCode(b10 >> 16));
-            break;
-    }
-    return x.join('');
-};
-
-base64.getbyte = function(s,i) {
-    var x = s.charCodeAt(i);
-    if (x > 255) {
-        throw base64.makeDOMException();
-    }
-    return x;
-};
-
-base64.encode = function(s) {
-    if (arguments.length !== 1) {
-        throw new SyntaxError("Not enough arguments");
-    }
-    var padchar = base64.PADCHAR;
-    var alpha   = base64.ALPHA;
-    var getbyte = base64.getbyte;
-
-    var i, b10;
-    var x = [];
-
-    // convert to string
-    s = '' + s;
-
-    var imax = s.length - s.length % 3;
-
-    if (s.length === 0) {
-        return s;
-    }
-    for (i = 0; i < imax; i += 3) {
-        b10 = (getbyte(s,i) << 16) | (getbyte(s,i+1) << 8) | getbyte(s,i+2);
-        x.push(alpha.charAt(b10 >> 18));
-        x.push(alpha.charAt((b10 >> 12) & 0x3F));
-        x.push(alpha.charAt((b10 >> 6) & 0x3f));
-        x.push(alpha.charAt(b10 & 0x3f));
-    }
-    switch (s.length - imax) {
-        case 1:
-            b10 = getbyte(s,i) << 16;
-            x.push(alpha.charAt(b10 >> 18) + alpha.charAt((b10 >> 12) & 0x3F) +
-                padchar + padchar);
-            break;
-        case 2:
-            b10 = (getbyte(s,i) << 16) | (getbyte(s,i+1) << 8);
-            x.push(alpha.charAt(b10 >> 18) + alpha.charAt((b10 >> 12) & 0x3F) +
-                alpha.charAt((b10 >> 6) & 0x3f) + padchar);
-            break;
-    }
-    return x.join('');
-};
-
-
-});
-
-require.modules["geno-to-picture"] = require.modules["./libs/encoding/geno-to-picture"];
-
-
-require.register("./libs/encoding/cppn-additions", function (exports, module) {
-//here we test the insert functions
-//making sure the database is filled with objects of the schema type
-// var wMath = require('win-utils').math;
-
-module.exports = cppnAdditions;
-
-var cppnjs = require('optimuslime~cppnjs@master');
-
-function cppnAdditions()
-{ 
-   var self = this;
-
-
-   self.winFunction = "cppnAdditions";
-   
-   self.requiredEvents = function(){return [];};
-   self.eventCallbacks = function(){return {};};
-
-   self.initialize = function(done)
-   {
-        //we do our damage here!
-         self.addCPPNFunctionsToLibrary();
-         done();
-   };
-
-   //these are the names of our cppn objects
-   var pbActivationFunctions = {sigmoid: 'PBBipolarSigmoid', gaussian: 'PBGaussian', sine: 'Sine', cos: "PBCos", identity: 'pbLinear'};
-
-    //in order to use certain activation functions
-    self.addCPPNFunctionsToLibrary = function()
-    {
-        var actFunctions = cppnjs.cppnActivationFunctions;
-        var actFactory = cppnjs.cppnActivationFactory;
-
-         actFunctions[pbActivationFunctions.sigmoid] = function(){
-                return new actFunctions.ActivationFunction({
-                    functionID: pbActivationFunctions.sigmoid ,
-                    functionString: "2.0/(1.0+(exp(-inputSignal))) - 1.0",
-                    functionDescription: "Plain sigmoid [xrange -5.0,5.0][yrange, 0.0,1.0]",
-                    functionCalculate: function(inputSignal)
-                    {
-                        return 2.0/(1.0+(Math.exp(-inputSignal))) - 1.0;
-                    },
-                    functionEnclose: function(stringToEnclose)
-                    {
-                        return "(2.0/(1.0+(Math.exp(-1.0*" + stringToEnclose + "))) - 1.0)";
-                    }
-                });
-            };
-
-        actFunctions[pbActivationFunctions.gaussian] = function(){
-            return new actFunctions.ActivationFunction({
-                    functionID: pbActivationFunctions.gaussian,
-                    functionString: "2*e^(-(input)^2) - 1",
-                    functionDescription:"bimodal gaussian",
-                    functionCalculate :function(inputSignal)
-                    {
-                        return 2 * Math.exp(-Math.pow(inputSignal, 2)) - 1;
-                    },
-                    functionEnclose: function(stringToEnclose)
-                    {
-                        return "(2.0 * Math.exp(-Math.pow(" + stringToEnclose + ", 2.0)) - 1.0)";
-                    }
-                });
-            };
-
-        actFunctions[pbActivationFunctions.identity] = function(){
-            return new actFunctions.ActivationFunction({
-                functionID: pbActivationFunctions.identity,
-                functionString: "x",
-                functionDescription:"Linear",
-                functionCalculate: function(inputSignal)
-                {
-                    return inputSignal;
-                },
-                functionEnclose: function(stringToEnclose)
-                {
-                    return "(" + stringToEnclose + ")";
-                }
-            });
-        };
-
-        actFunctions[pbActivationFunctions.cos] = function(){
-           return new actFunctions.ActivationFunction({
-                functionID: pbActivationFunctions.cos,
-                functionString: "Cos(inputSignal)",
-                functionDescription: "Cos function with normal period",
-                functionCalculate: function(inputSignal)
-                {
-                    return Math.cos(inputSignal);
-                },
-                functionEnclose: function(stringToEnclose)
-                {
-                    return "(Math.cos(" + stringToEnclose + "))";
-                }
-            });
-        };
-
-        //makes these the only activation functions being generated by picbreeder genotypes
-        var probs = {};
-        probs[pbActivationFunctions.sigmoid] = .22;
-        probs[pbActivationFunctions.gaussian] = .22;
-        probs[pbActivationFunctions.sine] = .22;
-        probs[pbActivationFunctions.cos] = .22;
-        probs[pbActivationFunctions.identity] = .12;
-        actFactory.setProbabilities(probs);
-    };
-
-
-
-    return self;
-}
-});
-
-require.modules["cppn-additions"] = require.modules["./libs/encoding/cppn-additions"];
-
-
-require.register("./libs/encoding/pbEncoding", function (exports, module) {
-//here we test the insert functions
-//making sure the database is filled with objects of the schema type
-// var wMath = require('win-utils').math;
-
-var picbreederSchema = require("./libs/encoding/pbEncoding/picbreederSchema.js");
-
-module.exports = pbEncoding;
-
-function pbEncoding(backbone, globalConfig, localConfig)
-{
-	var self = this;
-
-	//boom, let's get right into the business of encoding
-	self.winFunction = "encoding";
-
-    //for convenience, this is our artifact type
-	self.encodingName = "picArtifact";
-
-	self.log = backbone.getLogger(self);
-	//only vital stuff goes out for normal logs
-	self.log.logLevel = localConfig.logLevel || self.log.normal;
-
-	self.eventCallbacks = function()
-	{ 
-		return {
-			// //easy to handle neat geno full offspring
-			// "encoding:iesor-createNonReferenceOffspring" : function(genProps, parentProps, sessionObject, done) { 
-				
-   //              //session might be undefined -- depending on win-gen behavior
-   //              //make sure session exists
-   //              sessionObject = sessionObject || {};
-
-			// 	//need to engage parent creation here -- could be complicated
-			// 	var parents = parentProps.parents;
-
-   //              //how many to make
-			// 	var count = genProps.count;
-
-   //              //these will be the final objects to return
-			// 	var allParents = [];
-			// 	var children = [];
-
-			// 	//pull potential forced parents
-			// 	var forced = sessionObject.forceParents;
-
-   //              //go through all the children -- using parents or force parents to create the new offspring
-   //              for(var c=0; c < count; c++)
-   //              {
-   //                  //we simply randomly pull environment from a parent
-   //                  var randomParentIx = wMath.next(parents.length);
-
-   //                  //if we have parents that are forced upon us
-   //                  if(forced){
-   //                      //pull random ix
-   //                      var rIx = wMath.next(forced[c].length);
-   //                      //use random index of forced parent as the actual ix
-   //                      randomParentIx = forced[c][rIx];
-   //                  }
-
-   //                  //our child together!
-   //                  var rOffspring = {};
-
-   //                  //all we need to do (for the current schema)
-   //                  //is to copy the environment
-   //                  rOffspring.meta = JSON.parse(JSON.stringify(parents[randomParentIx].meta));
-
-   //                  //just return our simple object with a randomly chosen environment
-   //                  children.push(rOffspring);
-
-   //                  //random parent was involved, make sure to mark who!
-   //                  allParents.push([randomParentIx]);
-   //              }
-
-			// 	//done, send er back
-			// 	done(undefined, children, allParents);
-
-			//  	return; 
-			//  }
-		};
-	};
-
-	//need to be able to add our schema
-	self.requiredEvents = function() {
-		return [
-			"schema:addSchema"
-		];
-	};
-
-	self.initialize = function(done)
-    {
-    	self.log("Init win-iesor encoding: ", picbreederSchema);
-
-		//how we talk to the backbone by emitting events
-    	var emitter = backbone.getEmitter(self);
-
-		//add our neat genotype schema -- loaded neatschema from another file -- 
-		//this is just the standard neat schema type -- others can make neatjs changes that require a different schema
-        emitter.emit("schema:addSchema", self.encodingName, picbreederSchema, function(err)
-        {
-        	if(err){
-        		done(new Error(err));
-        		return;
-        	}
-        	done();
-        });
-    }
-
-
-	return self;
-}
-});
-
-require.register("./libs/encoding/pbEncoding/picbreederSchema.js", function (exports, module) {
-//contains the neat schema setup -- default for neatjs stuff.
-
-//Need a way to override schema inside WIN -- for now, neat comes with its own schema. Will be able to add variations later
-//(for things looking to add extra neat features while still having all the custom code). 
-
-//Alternatively, they could just copy this module, and add their own stuff. Module is small. 
- 
-module.exports = {
-    "genome": { 
-        "$ref" : "NEATGenotype"
-    }
-    //some meta info about this object being stored
-    ,"meta": {
-        "imageTitle": "string",
-        "imageTags": {type: "array", items: {type: "string"}}
-    }
-};
-
-
-
-});
-
-require.modules["pbEncoding"] = require.modules["./libs/encoding/pbEncoding"];
-
-
-require.register("./libs/initialization/win-setup", function (exports, module) {
-//here we test the insert functions
-//making sure the database is filled with objects of the schema type
-// var wMath = require('win-utils').math;
-
-module.exports = winsetup;
-
-function winsetup(requiredEvents, moduleJSON, moduleConfigs, finished)
-{ 
-    var winback = require('optimuslime~win-backbone@0.0.4-5');
-
-    var Q = require('techjacker~q@master');
-
-    var backbone, generator, backEmit, backLog;
-
-    var emptyModule = 
-    {
-        winFunction : "experiment",
-        eventCallbacks : function(){ return {}; },
-        requiredEvents : function() {
-            return requiredEvents;
-        }
-    };
-
-    //add our own empty module onto this object
-    moduleJSON["setupExperiment"] = emptyModule;
-    
-    var qBackboneResponse = function()
-    {
-        var defer = Q.defer();
-        // self.log('qBBRes: Original: ', arguments);
-
-        //first add our own function type
-        var augmentArgs = arguments;
-        // [].splice.call(augmentArgs, 0, 0, self.winFunction);
-        //make some assumptions about the returning call
-        var callback = function(err)
-        {
-            if(err)
-            {
-              backLog("QCall fail: ", err);
-                defer.reject(err);
-            }
-            else
-            {
-                //remove the error object, send the info onwards
-                [].shift.call(arguments);
-                if(arguments.length > 1)
-                    defer.resolve(arguments);
-                else
-                    defer.resolve.apply(defer, arguments);
-            }
-        };
-
-        //then we add our callback to the end of our function -- which will get resolved here with whatever arguments are passed back
-        [].push.call(augmentArgs, callback);
-
-        // self.log('qBBRes: Augmented: ', augmentArgs);
-        //make the call, we'll catch it inside the callback!
-        backEmit.apply(backEmit, augmentArgs);
-
-        return defer.promise;
-    }
-
-    //do this up front yo
-    backbone = new winback();
-
-    backbone.logLevel = backbone.testing;
-
-    backEmit = backbone.getEmitter(emptyModule);
-    backLog = backbone.getLogger({winFunction:"experiment"});
-    backLog.logLevel = backbone.testing;
-
-    //loading modules is synchronous
-    backbone.loadModules(moduleJSON, moduleConfigs);
-
-    var registeredEvents = backbone.registeredEvents();
-    var requiredEvents = backbone.moduleRequirements();
-      
-    backLog('Backbone Events registered: ', registeredEvents);
-    backLog('Required: ', requiredEvents);
-
-    backbone.initializeModules(function(err)
-    {
-      backLog("Finished Module Init");
-      finished(err, {logger: backLog, emitter: backEmit, backbone: backbone, qCall: qBackboneResponse});
-    });
-}
-});
-
-require.modules["win-setup"] = require.modules["./libs/initialization/win-setup"];
-
-
 require.register("win-picbreeder", function (exports, module) {
-var flexStatic = require('./libs/ui/iec/flexstatic');
+var flexStatic = require("./libs/ui/iec/flexstatic");
 
 
 

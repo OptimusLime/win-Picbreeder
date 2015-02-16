@@ -2,11 +2,12 @@
   "name": "win-Picbreeder",
   "version": "0.0.1",
   "dependencies": {
+    "promptly" : "*",
     "colors" : "*",
     "commander" : "*",
     "component-builder" : "*",
     "component-resolver" : "*",
     "express" : "3.x.x",
-    "win-save" : "0.0.1-7"
+    "win-save" : "0.0.1-8"
   }
 }
