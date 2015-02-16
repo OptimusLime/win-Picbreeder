@@ -211,6 +211,7 @@ program
 
                   //now we're launched
                   console.log('Finished cleaning databases');
+                  process.exit();
               });
 
           });

@@ -52,290 +52,131 @@ require.define = function (name, exports) {
     exports: exports
   };
 };
-require.register("component~emitter@master", function (exports, module) {
-
+require.register("optimuslime~el.js@master", function (exports, module) {
 /**
- * Expose `Emitter`.
- */
+* el.js v0.3 - A JavaScript Node Creation Tool
+*
+* https://github.com/markgandolfo/el.js
+*
+* Copyright 2013 Mark Gandolfo and other contributors
+* Released under the MIT license.
+* http://en.wikipedia.org/wiki/MIT_License
+*/
 
-module.exports = Emitter;
+module.exports = el;
 
-/**
- * Initialize a new `Emitter`.
- *
- * @api public
- */
+function el(tagName, attrs, child) {
+  // Pattern to match id & class names
+  var pattern = /([a-z]+|#[\w-\d]+|\.[\w\d-]+)/g
 
-function Emitter(obj) {
-  if (obj) return mixin(obj);
-};
-
-/**
- * Mixin the emitter properties.
- *
- * @param {Object} obj
- * @return {Object}
- * @api private
- */
-
-function mixin(obj) {
-  for (var key in Emitter.prototype) {
-    obj[key] = Emitter.prototype[key];
-  }
-  return obj;
-}
-
-/**
- * Listen on the given `event` with `fn`.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.on =
-Emitter.prototype.addEventListener = function(event, fn){
-  this._callbacks = this._callbacks || {};
-  (this._callbacks[event] = this._callbacks[event] || [])
-    .push(fn);
-  return this;
-};
-
-/**
- * Adds an `event` listener that will be invoked a single
- * time then automatically removed.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.once = function(event, fn){
-  var self = this;
-  this._callbacks = this._callbacks || {};
-
-  function on() {
-    self.off(event, on);
-    fn.apply(this, arguments);
-  }
-
-  on.fn = fn;
-  this.on(event, on);
-  return this;
-};
-
-/**
- * Remove the given callback for `event` or all
- * registered callbacks.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.off =
-Emitter.prototype.removeListener =
-Emitter.prototype.removeAllListeners =
-Emitter.prototype.removeEventListener = function(event, fn){
-  this._callbacks = this._callbacks || {};
-
-  // all
-  if (0 == arguments.length) {
-    this._callbacks = {};
-    return this;
-  }
-
-  // specific event
-  var callbacks = this._callbacks[event];
-  if (!callbacks) return this;
-
-  // remove all handlers
-  if (1 == arguments.length) {
-    delete this._callbacks[event];
-    return this;
-  }
-
-  // remove specific handler
-  var cb;
-  for (var i = 0; i < callbacks.length; i++) {
-    cb = callbacks[i];
-    if (cb === fn || cb.fn === fn) {
-      callbacks.splice(i, 1);
-      break;
+  if(arguments.length === 2) {
+    if(attrs instanceof Array
+    || typeof attrs === 'function'
+    || typeof attrs === 'string'
+    || attrs.constructor !== Object
+    ) {
+      child = attrs;
+      attrs = undefined;
     }
+
   }
-  return this;
-};
+  // does the user pass attributes in, if not set an empty object up
+  attrs = typeof attrs !== 'undefined' ? attrs : {};
+  child = typeof child !== 'undefined' ? child : [];
+  child = child instanceof Array ? child : [child];
 
-/**
- * Emit `event` with the given args.
- *
- * @param {String} event
- * @param {Mixed} ...
- * @return {Emitter}
- */
+  // run the pattern over the tagname an attempt to pull out class & id attributes
+  // shift the first record out as it's the element name
+  matched = tagName.match(pattern);
+  tagName = matched[0];
+  matched.shift();
 
-Emitter.prototype.emit = function(event){
-  this._callbacks = this._callbacks || {};
-  var args = [].slice.call(arguments, 1)
-    , callbacks = this._callbacks[event];
-
-  if (callbacks) {
-    callbacks = callbacks.slice(0);
-    for (var i = 0, len = callbacks.length; i < len; ++i) {
-      callbacks[i].apply(this, args);
+  // Iterate over the matches and concat the attrs to either class or id keys in attrs json object
+  for (var m in matched) {
+    if(matched[m][0] == '.') {
+      if(attrs['class'] == undefined) {
+        attrs['class'] = matched[m].substring(1, matched[m].length);
+      } else {
+        attrs['class'] = attrs['class'] + ' ' + matched[m].substring(1, matched[m].length);
+      }
+    } else if(matched[m][0] == '#') {
+      if(attrs['id'] == undefined) {
+        attrs['id'] = matched[m].substring(1, matched[m].length)
+      } else {
+        // Feels dirty having multiple id's, but it's allowed: http://www.w3.org/TR/selectors/#id-selectors
+        attrs['id'] = attrs['id'] + ' ' + matched[m].substring(1, matched[m].length);
+      }
     }
   }
 
-  return this;
+  // create the element
+  var element = document.createElement(tagName);
+  for(var i = 0; i < child.length; i += 1) {
+    (function(child){
+      switch(typeof child) {
+        case 'object':
+          element.appendChild(child);
+          break;
+        case 'function':
+          var discardDoneCallbackResult = false;
+          var doneCallback = function doneCallback(content) {
+            if (!discardDoneCallbackResult) {
+              element.appendChild(content);
+            }
+          }
+          var result = child.apply(null, [doneCallback])
+          if(typeof result != 'undefined') {
+            discardDoneCallbackResult = true;
+            element.appendChild(result);
+          }
+          break;
+        case 'string':
+          element.appendChild(document.createTextNode(child));
+        default:
+          //???
+      }
+    }(child[i]));
+
+  }
+
+  for (var key in attrs) {
+    if (attrs.hasOwnProperty(key)) {
+      element.setAttribute(key, attrs[key]);
+    }
+  }
+
+  return element;
 };
 
-/**
- * Return array of callbacks for `event`.
- *
- * @param {String} event
- * @return {Array}
- * @api public
- */
+// alias
+el.create = el.c = el;
 
-Emitter.prototype.listeners = function(event){
-  this._callbacks = this._callbacks || {};
-  return this._callbacks[event] || [];
+// vanity methods
+el.img = function(attrs) {
+  return el.create('img', attrs);
 };
 
-/**
- * Check if this emitter has `event` handlers.
- *
- * @param {String} event
- * @return {Boolean}
- * @api public
- */
+el.a = function(attrs, child) {
+  return el.create('a', attrs, child);
+};
 
-Emitter.prototype.hasListeners = function(event){
-  return !! this.listeners(event).length;
+el.div = function(attrs, child) {
+  return el.create('div', attrs, child);
+};
+
+el.p = function(attrs, child) {
+  return el.create('p', attrs, child);
+};
+
+el.input = function(attrs, child) {
+  return el.create('input', attrs);
 };
 
 });
 
-require.modules["component-emitter"] = require.modules["component~emitter@master"];
-require.modules["component~emitter"] = require.modules["component~emitter@master"];
-require.modules["emitter"] = require.modules["component~emitter@master"];
-
-
-require.register("component~worker@master", function (exports, module) {
-
-/**
- * Module dependencies.
- */
-
-var Emitter = require("component~emitter@master");
-var WebWorker = window.Worker;
-
-/**
- * Expose `Worker`.
- */
-
-module.exports = Worker;
-
-/**
- * Initialize a new `Worker` with `script`.
- *
- * @param {String} script
- * @api public
- */
-
-function Worker(script) {
-  var self = this;
-  this.ids = 0;
-  this.script = script;
-  this.worker = new WebWorker(script);
-  this.worker.addEventListener('message', this.onmessage.bind(this));
-  this.worker.addEventListener('error', this.onerror.bind(this));
-}
-
-/**
- * Mixin emitter.
- */
-
-Emitter(Worker.prototype);
-
-/**
- * Handle messages.
- */
-
-Worker.prototype.onmessage = function(e){
-  this.emit('message', e.data, e);
-};
-
-/**
- * Handle errors.
- */
-
-Worker.prototype.onerror = function(e){
-  var err = new Error(e.message);
-  err.event = e;
-  this.emit('error', err);
-};
-
-/**
- * Terminate the worker.
- */
-
-Worker.prototype.close = function(){
-  this.worker.terminate();
-};
-
-/**
- * Send a `msg` with optional callback `fn`.
- *
- * TODO: allow passing of transferrables
- *
- * @param {Mixed} msg
- * @param {Function} [fn]
- * @api public
- */
-
-Worker.prototype.send = function(msg, fn){
-  if (fn) this.request(msg, fn);
-  this.worker.postMessage(msg);
-};
-
-/**
- * Send a `msg` as a request with `fn`.
- *
- * @param {Mixed} msg
- * @param {Function} fn
- * @param {Array} [transferables]
- * @api public
- */
-
-Worker.prototype.request = function(msg, fn, transferables){
-  var self = this;
-  var id = ++this.ids;
-
-  // req
-  msg.id = id;
-  this.worker.postMessage(msg, transferables);
-
-  // rep
-  this.on('message', onmessage);
-
-  function onmessage(msg) {
-    if (id != msg.id) return;
-    self.off('message', onmessage);
-    delete msg.id;
-    fn(msg);
-  }
-};
-
-});
-
-require.modules["component-worker"] = require.modules["component~worker@master"];
-require.modules["component~worker"] = require.modules["component~worker@master"];
-require.modules["worker"] = require.modules["component~worker@master"];
+require.modules["optimuslime-el.js"] = require.modules["optimuslime~el.js@master"];
+require.modules["optimuslime~el.js"] = require.modules["optimuslime~el.js@master"];
+require.modules["el.js"] = require.modules["optimuslime~el.js@master"];
 
 
 require.register("optimuslime~traverse@master", function (exports, module) {
@@ -984,131 +825,290 @@ require.modules["optimuslime~traverse"] = require.modules["optimuslime~traverse@
 require.modules["traverse"] = require.modules["optimuslime~traverse@0.6.6-1"];
 
 
-require.register("optimuslime~el.js@master", function (exports, module) {
+require.register("component~emitter@master", function (exports, module) {
+
 /**
-* el.js v0.3 - A JavaScript Node Creation Tool
-*
-* https://github.com/markgandolfo/el.js
-*
-* Copyright 2013 Mark Gandolfo and other contributors
-* Released under the MIT license.
-* http://en.wikipedia.org/wiki/MIT_License
-*/
+ * Expose `Emitter`.
+ */
 
-module.exports = el;
+module.exports = Emitter;
 
-function el(tagName, attrs, child) {
-  // Pattern to match id & class names
-  var pattern = /([a-z]+|#[\w-\d]+|\.[\w\d-]+)/g
+/**
+ * Initialize a new `Emitter`.
+ *
+ * @api public
+ */
 
-  if(arguments.length === 2) {
-    if(attrs instanceof Array
-    || typeof attrs === 'function'
-    || typeof attrs === 'string'
-    || attrs.constructor !== Object
-    ) {
-      child = attrs;
-      attrs = undefined;
+function Emitter(obj) {
+  if (obj) return mixin(obj);
+};
+
+/**
+ * Mixin the emitter properties.
+ *
+ * @param {Object} obj
+ * @return {Object}
+ * @api private
+ */
+
+function mixin(obj) {
+  for (var key in Emitter.prototype) {
+    obj[key] = Emitter.prototype[key];
+  }
+  return obj;
+}
+
+/**
+ * Listen on the given `event` with `fn`.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.on =
+Emitter.prototype.addEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+  (this._callbacks[event] = this._callbacks[event] || [])
+    .push(fn);
+  return this;
+};
+
+/**
+ * Adds an `event` listener that will be invoked a single
+ * time then automatically removed.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.once = function(event, fn){
+  var self = this;
+  this._callbacks = this._callbacks || {};
+
+  function on() {
+    self.off(event, on);
+    fn.apply(this, arguments);
+  }
+
+  on.fn = fn;
+  this.on(event, on);
+  return this;
+};
+
+/**
+ * Remove the given callback for `event` or all
+ * registered callbacks.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.off =
+Emitter.prototype.removeListener =
+Emitter.prototype.removeAllListeners =
+Emitter.prototype.removeEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+
+  // all
+  if (0 == arguments.length) {
+    this._callbacks = {};
+    return this;
+  }
+
+  // specific event
+  var callbacks = this._callbacks[event];
+  if (!callbacks) return this;
+
+  // remove all handlers
+  if (1 == arguments.length) {
+    delete this._callbacks[event];
+    return this;
+  }
+
+  // remove specific handler
+  var cb;
+  for (var i = 0; i < callbacks.length; i++) {
+    cb = callbacks[i];
+    if (cb === fn || cb.fn === fn) {
+      callbacks.splice(i, 1);
+      break;
     }
-
   }
-  // does the user pass attributes in, if not set an empty object up
-  attrs = typeof attrs !== 'undefined' ? attrs : {};
-  child = typeof child !== 'undefined' ? child : [];
-  child = child instanceof Array ? child : [child];
+  return this;
+};
 
-  // run the pattern over the tagname an attempt to pull out class & id attributes
-  // shift the first record out as it's the element name
-  matched = tagName.match(pattern);
-  tagName = matched[0];
-  matched.shift();
+/**
+ * Emit `event` with the given args.
+ *
+ * @param {String} event
+ * @param {Mixed} ...
+ * @return {Emitter}
+ */
 
-  // Iterate over the matches and concat the attrs to either class or id keys in attrs json object
-  for (var m in matched) {
-    if(matched[m][0] == '.') {
-      if(attrs['class'] == undefined) {
-        attrs['class'] = matched[m].substring(1, matched[m].length);
-      } else {
-        attrs['class'] = attrs['class'] + ' ' + matched[m].substring(1, matched[m].length);
-      }
-    } else if(matched[m][0] == '#') {
-      if(attrs['id'] == undefined) {
-        attrs['id'] = matched[m].substring(1, matched[m].length)
-      } else {
-        // Feels dirty having multiple id's, but it's allowed: http://www.w3.org/TR/selectors/#id-selectors
-        attrs['id'] = attrs['id'] + ' ' + matched[m].substring(1, matched[m].length);
-      }
+Emitter.prototype.emit = function(event){
+  this._callbacks = this._callbacks || {};
+  var args = [].slice.call(arguments, 1)
+    , callbacks = this._callbacks[event];
+
+  if (callbacks) {
+    callbacks = callbacks.slice(0);
+    for (var i = 0, len = callbacks.length; i < len; ++i) {
+      callbacks[i].apply(this, args);
     }
   }
 
-  // create the element
-  var element = document.createElement(tagName);
-  for(var i = 0; i < child.length; i += 1) {
-    (function(child){
-      switch(typeof child) {
-        case 'object':
-          element.appendChild(child);
-          break;
-        case 'function':
-          var discardDoneCallbackResult = false;
-          var doneCallback = function doneCallback(content) {
-            if (!discardDoneCallbackResult) {
-              element.appendChild(content);
-            }
-          }
-          var result = child.apply(null, [doneCallback])
-          if(typeof result != 'undefined') {
-            discardDoneCallbackResult = true;
-            element.appendChild(result);
-          }
-          break;
-        case 'string':
-          element.appendChild(document.createTextNode(child));
-        default:
-          //???
-      }
-    }(child[i]));
-
-  }
-
-  for (var key in attrs) {
-    if (attrs.hasOwnProperty(key)) {
-      element.setAttribute(key, attrs[key]);
-    }
-  }
-
-  return element;
+  return this;
 };
 
-// alias
-el.create = el.c = el;
+/**
+ * Return array of callbacks for `event`.
+ *
+ * @param {String} event
+ * @return {Array}
+ * @api public
+ */
 
-// vanity methods
-el.img = function(attrs) {
-  return el.create('img', attrs);
+Emitter.prototype.listeners = function(event){
+  this._callbacks = this._callbacks || {};
+  return this._callbacks[event] || [];
 };
 
-el.a = function(attrs, child) {
-  return el.create('a', attrs, child);
-};
+/**
+ * Check if this emitter has `event` handlers.
+ *
+ * @param {String} event
+ * @return {Boolean}
+ * @api public
+ */
 
-el.div = function(attrs, child) {
-  return el.create('div', attrs, child);
-};
-
-el.p = function(attrs, child) {
-  return el.create('p', attrs, child);
-};
-
-el.input = function(attrs, child) {
-  return el.create('input', attrs);
+Emitter.prototype.hasListeners = function(event){
+  return !! this.listeners(event).length;
 };
 
 });
 
-require.modules["optimuslime-el.js"] = require.modules["optimuslime~el.js@master"];
-require.modules["optimuslime~el.js"] = require.modules["optimuslime~el.js@master"];
-require.modules["el.js"] = require.modules["optimuslime~el.js@master"];
+require.modules["component-emitter"] = require.modules["component~emitter@master"];
+require.modules["component~emitter"] = require.modules["component~emitter@master"];
+require.modules["emitter"] = require.modules["component~emitter@master"];
+
+
+require.register("component~worker@master", function (exports, module) {
+
+/**
+ * Module dependencies.
+ */
+
+var Emitter = require("component~emitter@master");
+var WebWorker = window.Worker;
+
+/**
+ * Expose `Worker`.
+ */
+
+module.exports = Worker;
+
+/**
+ * Initialize a new `Worker` with `script`.
+ *
+ * @param {String} script
+ * @api public
+ */
+
+function Worker(script) {
+  var self = this;
+  this.ids = 0;
+  this.script = script;
+  this.worker = new WebWorker(script);
+  this.worker.addEventListener('message', this.onmessage.bind(this));
+  this.worker.addEventListener('error', this.onerror.bind(this));
+}
+
+/**
+ * Mixin emitter.
+ */
+
+Emitter(Worker.prototype);
+
+/**
+ * Handle messages.
+ */
+
+Worker.prototype.onmessage = function(e){
+  this.emit('message', e.data, e);
+};
+
+/**
+ * Handle errors.
+ */
+
+Worker.prototype.onerror = function(e){
+  var err = new Error(e.message);
+  err.event = e;
+  this.emit('error', err);
+};
+
+/**
+ * Terminate the worker.
+ */
+
+Worker.prototype.close = function(){
+  this.worker.terminate();
+};
+
+/**
+ * Send a `msg` with optional callback `fn`.
+ *
+ * TODO: allow passing of transferrables
+ *
+ * @param {Mixed} msg
+ * @param {Function} [fn]
+ * @api public
+ */
+
+Worker.prototype.send = function(msg, fn){
+  if (fn) this.request(msg, fn);
+  this.worker.postMessage(msg);
+};
+
+/**
+ * Send a `msg` as a request with `fn`.
+ *
+ * @param {Mixed} msg
+ * @param {Function} fn
+ * @param {Array} [transferables]
+ * @api public
+ */
+
+Worker.prototype.request = function(msg, fn, transferables){
+  var self = this;
+  var id = ++this.ids;
+
+  // req
+  msg.id = id;
+  this.worker.postMessage(msg, transferables);
+
+  // rep
+  this.on('message', onmessage);
+
+  function onmessage(msg) {
+    if (id != msg.id) return;
+    self.off('message', onmessage);
+    delete msg.id;
+    fn(msg);
+  }
+};
+
+});
+
+require.modules["component-worker"] = require.modules["component~worker@master"];
+require.modules["component~worker"] = require.modules["component~worker@master"];
+require.modules["worker"] = require.modules["component~worker@master"];
 
 
 require.register("component~reduce@1.0.1", function (exports, module) {
@@ -16899,217 +16899,6 @@ require.modules["optimuslime~neatjs"] = require.modules["optimuslime~neatjs@mast
 require.modules["neatjs"] = require.modules["optimuslime~neatjs@master"];
 
 
-require.register("component~indexof@0.0.1", function (exports, module) {
-
-var indexOf = [].indexOf;
-
-module.exports = function(arr, obj){
-  if (indexOf) return arr.indexOf(obj);
-  for (var i = 0; i < arr.length; ++i) {
-    if (arr[i] === obj) return i;
-  }
-  return -1;
-};
-});
-
-require.modules["component-indexof"] = require.modules["component~indexof@0.0.1"];
-require.modules["component~indexof"] = require.modules["component~indexof@0.0.1"];
-require.modules["indexof"] = require.modules["component~indexof@0.0.1"];
-
-
-require.register("component~classes@master", function (exports, module) {
-/**
- * Module dependencies.
- */
-
-var index = require("component~indexof@0.0.1");
-
-/**
- * Whitespace regexp.
- */
-
-var re = /\s+/;
-
-/**
- * toString reference.
- */
-
-var toString = Object.prototype.toString;
-
-/**
- * Wrap `el` in a `ClassList`.
- *
- * @param {Element} el
- * @return {ClassList}
- * @api public
- */
-
-module.exports = function(el){
-  return new ClassList(el);
-};
-
-/**
- * Initialize a new ClassList for `el`.
- *
- * @param {Element} el
- * @api private
- */
-
-function ClassList(el) {
-  if (!el) throw new Error('A DOM element reference is required');
-  this.el = el;
-  this.list = el.classList;
-}
-
-/**
- * Add class `name` if not already present.
- *
- * @param {String} name
- * @return {ClassList}
- * @api public
- */
-
-ClassList.prototype.add = function(name){
-  // classList
-  if (this.list) {
-    this.list.add(name);
-    return this;
-  }
-
-  // fallback
-  var arr = this.array();
-  var i = index(arr, name);
-  if (!~i) arr.push(name);
-  this.el.className = arr.join(' ');
-  return this;
-};
-
-/**
- * Remove class `name` when present, or
- * pass a regular expression to remove
- * any which match.
- *
- * @param {String|RegExp} name
- * @return {ClassList}
- * @api public
- */
-
-ClassList.prototype.remove = function(name){
-  if ('[object RegExp]' == toString.call(name)) {
-    return this.removeMatching(name);
-  }
-
-  // classList
-  if (this.list) {
-    this.list.remove(name);
-    return this;
-  }
-
-  // fallback
-  var arr = this.array();
-  var i = index(arr, name);
-  if (~i) arr.splice(i, 1);
-  this.el.className = arr.join(' ');
-  return this;
-};
-
-/**
- * Remove all classes matching `re`.
- *
- * @param {RegExp} re
- * @return {ClassList}
- * @api private
- */
-
-ClassList.prototype.removeMatching = function(re){
-  var arr = this.array();
-  for (var i = 0; i < arr.length; i++) {
-    if (re.test(arr[i])) {
-      this.remove(arr[i]);
-    }
-  }
-  return this;
-};
-
-/**
- * Toggle class `name`, can force state via `force`.
- *
- * For browsers that support classList, but do not support `force` yet,
- * the mistake will be detected and corrected.
- *
- * @param {String} name
- * @param {Boolean} force
- * @return {ClassList}
- * @api public
- */
-
-ClassList.prototype.toggle = function(name, force){
-  // classList
-  if (this.list) {
-    if ("undefined" !== typeof force) {
-      if (force !== this.list.toggle(name, force)) {
-        this.list.toggle(name); // toggle again to correct
-      }
-    } else {
-      this.list.toggle(name);
-    }
-    return this;
-  }
-
-  // fallback
-  if ("undefined" !== typeof force) {
-    if (!force) {
-      this.remove(name);
-    } else {
-      this.add(name);
-    }
-  } else {
-    if (this.has(name)) {
-      this.remove(name);
-    } else {
-      this.add(name);
-    }
-  }
-
-  return this;
-};
-
-/**
- * Return an array of classes.
- *
- * @return {Array}
- * @api public
- */
-
-ClassList.prototype.array = function(){
-  var str = this.el.className.replace(/^\s+|\s+$/g, '');
-  var arr = str.split(re);
-  if ('' === arr[0]) arr.shift();
-  return arr;
-};
-
-/**
- * Check if class `name` is present.
- *
- * @param {String} name
- * @return {ClassList}
- * @api public
- */
-
-ClassList.prototype.has =
-ClassList.prototype.contains = function(name){
-  return this.list
-    ? this.list.contains(name)
-    : !! ~index(this.array(), name);
-};
-
-});
-
-require.modules["component-classes"] = require.modules["component~classes@master"];
-require.modules["component~classes"] = require.modules["component~classes@master"];
-require.modules["classes"] = require.modules["component~classes@master"];
-
-
 require.register("component~event@0.1.4", function (exports, module) {
 var bind = window.addEventListener ? 'addEventListener' : 'attachEvent',
     unbind = window.removeEventListener ? 'removeEventListener' : 'detachEvent',
@@ -17529,6 +17318,217 @@ require.modules["ramitos~resize"] = require.modules["ramitos~resize@master"];
 require.modules["resize"] = require.modules["ramitos~resize@master"];
 
 
+require.register("component~indexof@0.0.1", function (exports, module) {
+
+var indexOf = [].indexOf;
+
+module.exports = function(arr, obj){
+  if (indexOf) return arr.indexOf(obj);
+  for (var i = 0; i < arr.length; ++i) {
+    if (arr[i] === obj) return i;
+  }
+  return -1;
+};
+});
+
+require.modules["component-indexof"] = require.modules["component~indexof@0.0.1"];
+require.modules["component~indexof"] = require.modules["component~indexof@0.0.1"];
+require.modules["indexof"] = require.modules["component~indexof@0.0.1"];
+
+
+require.register("component~classes@master", function (exports, module) {
+/**
+ * Module dependencies.
+ */
+
+var index = require("component~indexof@0.0.1");
+
+/**
+ * Whitespace regexp.
+ */
+
+var re = /\s+/;
+
+/**
+ * toString reference.
+ */
+
+var toString = Object.prototype.toString;
+
+/**
+ * Wrap `el` in a `ClassList`.
+ *
+ * @param {Element} el
+ * @return {ClassList}
+ * @api public
+ */
+
+module.exports = function(el){
+  return new ClassList(el);
+};
+
+/**
+ * Initialize a new ClassList for `el`.
+ *
+ * @param {Element} el
+ * @api private
+ */
+
+function ClassList(el) {
+  if (!el) throw new Error('A DOM element reference is required');
+  this.el = el;
+  this.list = el.classList;
+}
+
+/**
+ * Add class `name` if not already present.
+ *
+ * @param {String} name
+ * @return {ClassList}
+ * @api public
+ */
+
+ClassList.prototype.add = function(name){
+  // classList
+  if (this.list) {
+    this.list.add(name);
+    return this;
+  }
+
+  // fallback
+  var arr = this.array();
+  var i = index(arr, name);
+  if (!~i) arr.push(name);
+  this.el.className = arr.join(' ');
+  return this;
+};
+
+/**
+ * Remove class `name` when present, or
+ * pass a regular expression to remove
+ * any which match.
+ *
+ * @param {String|RegExp} name
+ * @return {ClassList}
+ * @api public
+ */
+
+ClassList.prototype.remove = function(name){
+  if ('[object RegExp]' == toString.call(name)) {
+    return this.removeMatching(name);
+  }
+
+  // classList
+  if (this.list) {
+    this.list.remove(name);
+    return this;
+  }
+
+  // fallback
+  var arr = this.array();
+  var i = index(arr, name);
+  if (~i) arr.splice(i, 1);
+  this.el.className = arr.join(' ');
+  return this;
+};
+
+/**
+ * Remove all classes matching `re`.
+ *
+ * @param {RegExp} re
+ * @return {ClassList}
+ * @api private
+ */
+
+ClassList.prototype.removeMatching = function(re){
+  var arr = this.array();
+  for (var i = 0; i < arr.length; i++) {
+    if (re.test(arr[i])) {
+      this.remove(arr[i]);
+    }
+  }
+  return this;
+};
+
+/**
+ * Toggle class `name`, can force state via `force`.
+ *
+ * For browsers that support classList, but do not support `force` yet,
+ * the mistake will be detected and corrected.
+ *
+ * @param {String} name
+ * @param {Boolean} force
+ * @return {ClassList}
+ * @api public
+ */
+
+ClassList.prototype.toggle = function(name, force){
+  // classList
+  if (this.list) {
+    if ("undefined" !== typeof force) {
+      if (force !== this.list.toggle(name, force)) {
+        this.list.toggle(name); // toggle again to correct
+      }
+    } else {
+      this.list.toggle(name);
+    }
+    return this;
+  }
+
+  // fallback
+  if ("undefined" !== typeof force) {
+    if (!force) {
+      this.remove(name);
+    } else {
+      this.add(name);
+    }
+  } else {
+    if (this.has(name)) {
+      this.remove(name);
+    } else {
+      this.add(name);
+    }
+  }
+
+  return this;
+};
+
+/**
+ * Return an array of classes.
+ *
+ * @return {Array}
+ * @api public
+ */
+
+ClassList.prototype.array = function(){
+  var str = this.el.className.replace(/^\s+|\s+$/g, '');
+  var arr = str.split(re);
+  if ('' === arr[0]) arr.shift();
+  return arr;
+};
+
+/**
+ * Check if class `name` is present.
+ *
+ * @param {String} name
+ * @return {ClassList}
+ * @api public
+ */
+
+ClassList.prototype.has =
+ClassList.prototype.contains = function(name){
+  return this.list
+    ? this.list.contains(name)
+    : !! ~index(this.array(), name);
+};
+
+});
+
+require.modules["component-classes"] = require.modules["component~classes@master"];
+require.modules["component~classes"] = require.modules["component~classes@master"];
+require.modules["classes"] = require.modules["component~classes@master"];
+
+
 require.register("component~bind@1.0.0", function (exports, module) {
 /**
  * Slice reference.
@@ -17634,47 +17634,6 @@ module.exports = function(n){
 require.modules["component-keyname"] = require.modules["component~keyname@0.0.1"];
 require.modules["component~keyname"] = require.modules["component~keyname@0.0.1"];
 require.modules["keyname"] = require.modules["component~keyname@0.0.1"];
-
-
-require.register("component~type@1.0.0", function (exports, module) {
-
-/**
- * toString ref.
- */
-
-var toString = Object.prototype.toString;
-
-/**
- * Return the type of `val`.
- *
- * @param {Mixed} val
- * @return {String}
- * @api public
- */
-
-module.exports = function(val){
-  switch (toString.call(val)) {
-    case '[object Function]': return 'function';
-    case '[object Date]': return 'date';
-    case '[object RegExp]': return 'regexp';
-    case '[object Arguments]': return 'arguments';
-    case '[object Array]': return 'array';
-    case '[object String]': return 'string';
-  }
-
-  if (val === null) return 'null';
-  if (val === undefined) return 'undefined';
-  if (val && val.nodeType === 1) return 'element';
-  if (val === Object(val)) return 'object';
-
-  return typeof val;
-};
-
-});
-
-require.modules["component-type"] = require.modules["component~type@1.0.0"];
-require.modules["component~type"] = require.modules["component~type@1.0.0"];
-require.modules["type"] = require.modules["component~type@1.0.0"];
 
 
 require.register("component~props@1.1.2", function (exports, module) {
@@ -17930,6 +17889,47 @@ function stripNested (prop, str, val) {
 require.modules["component-to-function"] = require.modules["component~to-function@2.0.5"];
 require.modules["component~to-function"] = require.modules["component~to-function@2.0.5"];
 require.modules["to-function"] = require.modules["component~to-function@2.0.5"];
+
+
+require.register("component~type@1.0.0", function (exports, module) {
+
+/**
+ * toString ref.
+ */
+
+var toString = Object.prototype.toString;
+
+/**
+ * Return the type of `val`.
+ *
+ * @param {Mixed} val
+ * @return {String}
+ * @api public
+ */
+
+module.exports = function(val){
+  switch (toString.call(val)) {
+    case '[object Function]': return 'function';
+    case '[object Date]': return 'date';
+    case '[object RegExp]': return 'regexp';
+    case '[object Arguments]': return 'arguments';
+    case '[object Array]': return 'array';
+    case '[object String]': return 'string';
+  }
+
+  if (val === null) return 'null';
+  if (val === undefined) return 'undefined';
+  if (val && val.nodeType === 1) return 'element';
+  if (val === Object(val)) return 'object';
+
+  return typeof val;
+};
+
+});
+
+require.modules["component-type"] = require.modules["component~type@1.0.0"];
+require.modules["component~type"] = require.modules["component~type@1.0.0"];
+require.modules["type"] = require.modules["component~type@1.0.0"];
 
 
 require.register("component~each@0.2.5", function (exports, module) {
@@ -18752,56 +18752,6 @@ require.modules["ecarter~css-emitter"] = require.modules["ecarter~css-emitter@0.
 require.modules["css-emitter"] = require.modules["ecarter~css-emitter@0.0.1"];
 
 
-require.register("component~once@0.0.1", function (exports, module) {
-
-/**
- * Identifier.
- */
-
-var n = 0;
-
-/**
- * Global.
- */
-
-var global = (function(){ return this })();
-
-/**
- * Make `fn` callable only once.
- *
- * @param {Function} fn
- * @return {Function}
- * @api public
- */
-
-module.exports = function(fn) {
-  var id = n++;
-
-  function once(){
-    // no receiver
-    if (this == global) {
-      if (once.called) return;
-      once.called = true;
-      return fn.apply(this, arguments);
-    }
-
-    // receiver
-    var key = '__called_' + id + '__';
-    if (this[key]) return;
-    this[key] = true;
-    return fn.apply(this, arguments);
-  }
-
-  return once;
-};
-
-});
-
-require.modules["component-once"] = require.modules["component~once@0.0.1"];
-require.modules["component~once"] = require.modules["component~once@0.0.1"];
-require.modules["once"] = require.modules["component~once@0.0.1"];
-
-
 require.register("yields~has-transitions@0.0.1", function (exports, module) {
 
 /**
@@ -18855,6 +18805,56 @@ var bool = 'transition' in styl
 require.modules["yields-has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
 require.modules["yields~has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
 require.modules["has-transitions"] = require.modules["yields~has-transitions@0.0.1"];
+
+
+require.register("component~once@0.0.1", function (exports, module) {
+
+/**
+ * Identifier.
+ */
+
+var n = 0;
+
+/**
+ * Global.
+ */
+
+var global = (function(){ return this })();
+
+/**
+ * Make `fn` callable only once.
+ *
+ * @param {Function} fn
+ * @return {Function}
+ * @api public
+ */
+
+module.exports = function(fn) {
+  var id = n++;
+
+  function once(){
+    // no receiver
+    if (this == global) {
+      if (once.called) return;
+      once.called = true;
+      return fn.apply(this, arguments);
+    }
+
+    // receiver
+    var key = '__called_' + id + '__';
+    if (this[key]) return;
+    this[key] = true;
+    return fn.apply(this, arguments);
+  }
+
+  return once;
+};
+
+});
+
+require.modules["component-once"] = require.modules["component~once@0.0.1"];
+require.modules["component~once"] = require.modules["component~once@0.0.1"];
+require.modules["once"] = require.modules["component~once@0.0.1"];
 
 
 require.register("yields~after-transition@0.0.1", function (exports, module) {
