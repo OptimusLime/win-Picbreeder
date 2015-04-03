@@ -4,9 +4,9 @@
   "dependencies": {
     "promptly" : "*",
     "colors" : "*",
-    "commander" : "*",
-    "component-builder" : "*",
-    "component-resolver" : "*",
+    "commander" : "2.7.x",
+    "component-builder" : "1.2.x",
+    "component-resolver" : "1.2.x",
     "express" : "3.x.x",
     "win-save" : "0.0.1-8"
   }
